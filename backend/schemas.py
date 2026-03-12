@@ -6,15 +6,17 @@ class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
+    purpose: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: int
     username: str
     email: str
+    purpose: Optional[str] = None
     created_at: datetime
     
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class Token(BaseModel):
     access_token: str
@@ -33,4 +35,4 @@ class SimulationResponse(BaseModel):
     created_at: datetime
     
     class Config:
-        from_attributes = True
+        orm_mode = True
