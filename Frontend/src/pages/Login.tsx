@@ -19,7 +19,7 @@ export default function Login() {
       localStorage.setItem('token', response.data.access_token);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Login failed. Please try again.');
+      setError(err.response?.data?.detail?.[0]?.msg || "Login failed")
     } finally {
       setLoading(false);
     }
@@ -54,7 +54,7 @@ export default function Login() {
           <p style={styles.subtitle}>Sign in to continue to your dashboard</p>
 
           <form onSubmit={handleSubmit} style={styles.form}>
-            {error && <div style={styles.error}>{error}</div>}
+            {error && <div className="text-red-500">{String(error)}</div>}
 
             <div style={styles.inputGroup}>
               <label style={styles.label}>Username</label>

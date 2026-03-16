@@ -1,6 +1,7 @@
+
 from sqlalchemy import create_engine
 
-DATABASE_URL = "postgresql://postgres:1234@localhost:5432/airflow_db"
+DATABASE_URL = "postgresql://postgres:joe123@localhost:5432/smarttracker"
 
 try:
     engine = create_engine(DATABASE_URL)
