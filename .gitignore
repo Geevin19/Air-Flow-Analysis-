@@ -1,0 +1,12 @@
+node_modules/
+Frontend/node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+.env
+.DS_Store
+.history/
+
