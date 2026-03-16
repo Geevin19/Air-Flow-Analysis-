@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -9,14 +9,13 @@ class UserCreate(BaseModel):
     purpose: Optional[str] = None
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     username: str
     email: str
     purpose: Optional[str] = None
     created_at: datetime
-    
-    class Config:
-        orm_mode = True
 
 class Token(BaseModel):
     access_token: str
@@ -27,14 +26,11 @@ class SimulationCreate(BaseModel):
     parameters: Dict[str, Any]
 
 class SimulationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     user_id: int
     name: str
     parameters: Dict[str, Any]
     results: Optional[Dict[str, Any]] = None
     created_at: datetime
-    
-    
-model_config = {
-    "from_attributes": True
-}
