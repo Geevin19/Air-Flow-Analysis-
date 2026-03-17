@@ -5,11 +5,11 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import List
 
-from database import engine, get_db, Base
-from models import User, Simulation
-from schemas import UserCreate, UserResponse, Token, SimulationCreate, SimulationResponse
-from auth import verify_password, get_password_hash, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from simulation import run_simulation
+from .database import engine, get_db, Base
+from .models import User, Simulation
+from .schemas import UserCreate, UserResponse, Token, SimulationCreate, SimulationResponse
+from .auth import verify_password, get_password_hash, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
+from .simulation import run_simulation
 
 Base.metadata.create_all(bind=engine)
 
