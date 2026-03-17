@@ -29,15 +29,23 @@ def read_root():
 
 @app.post('/register', response_model=UserResponse)
 def register(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter((User.username == user.username) | (User.email == user.email)).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail='Username or email already registered')
-    hashed_password = get_password_hash(user.password)
-    new_user = User(username=user.username, email=user.email, hashed_password=hashed_password)
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user
+    try:
+        db_user = db.query(User).filter((User.username == user.username) | (User.email == user.email)).first()
+        if db_user:
+            raise HTTPException(status_code=400, detail='Username or email already registered')
+        hashed_password = get_password_hash(user.password)
+        new_user = User(username=user.username, email=user.email, hashed_password=hashed_password, purpose=user.purpose)
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        return new_user
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Registration error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
 @app.post('/token', response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
