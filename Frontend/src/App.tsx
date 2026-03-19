@@ -1,19 +1,51 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import Login      from "./pages/Login";
-import Register   from "./pages/Register";
-import Simulation from "./pages/Simulation";
-import Dashboard  from "./pages/Dashboard";
+import { useEffect, useState } from "react";
 
-export default function App() {
+export default function Simulation() {
+  const [message, setMessage] = useState("Loading...");
+  const [data, setData] = useState<any>(null);
+
+  // 🔹 Example: Fetch data from backend
+  useEffect(() => {
+    fetch("http://127.0.0.1:8000/")
+      .then((res) => res.json())
+      .then((resData) => {
+        setMessage("Backend Connected ✅");
+        setData(resData);
+      })
+      .catch(() => {
+        setMessage("Failed to connect ❌");
+      });
+  }, []);
+
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/"           element={<Navigate to="/login" replace />} />
-        <Route path="/login"      element={<Login />}      />
-        <Route path="/register"   element={<Register />}   />
-        <Route path="/simulation" element={<Simulation />} />
-        <Route path="/dashboard"  element={<Dashboard />}  />
-      </Routes>
-    </BrowserRouter>
+    <div style={{ padding: "20px" }}>
+      <h1>Simulation Page 🚀</h1>
+
+      <p>Status: {message}</p>
+
+      {/* Show backend data */}
+      {data && (
+        <div>
+          <h3>Backend Response:</h3>
+          <pre>{JSON.stringify(data, null, 2)}</pre>
+        </div>
+      )}
+
+      {/* Dummy simulation UI */}
+      <div style={{ marginTop: "20px" }}>
+        <h2>Simulation Controls</h2>
+
+        <button onClick={() => alert("Simulation Started")}>
+          ▶ Start Simulation
+        </button>
+
+        <button
+          onClick={() => alert("Simulation Stopped")}
+          style={{ marginLeft: "10px" }}
+        >
+          ⏹ Stop Simulation
+        </button>
+      </div>
+    </div>
   );
 }
