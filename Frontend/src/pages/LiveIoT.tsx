@@ -75,7 +75,8 @@ export default function LiveIoT() {
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     minHeight: '100vh',
-    backgroundColor: '#f8f9fa',
+    background:
+      'radial-gradient(circle at 10% 10%, rgba(102,126,234,0.18) 0%, rgba(102,126,234,0) 35%), radial-gradient(circle at 90% 20%, rgba(118,75,162,0.14) 0%, rgba(118,75,162,0) 40%), #f6f7ff',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
   nav: {
@@ -83,8 +84,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '20px 40px',
-    backgroundColor: 'white',
+    background: 'rgba(255,255,255,0.80)',
     boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+    border: '1px solid rgba(102,126,234,0.12)',
   },
   navLeft: {
     display: 'flex',
@@ -103,8 +105,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '12px',
     padding: '6px 10px',
     borderRadius: '999px',
-    backgroundColor: '#e8f5e9',
-    color: '#2e7d32',
+    background: 'linear-gradient(135deg, rgba(102,126,234,0.18) 0%, rgba(118,75,162,0.14) 100%)',
+    color: '#3949ab',
     fontWeight: 700,
   },
   backButton: {
@@ -126,7 +128,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: 'white',
     padding: '28px',
     borderRadius: '12px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+    boxShadow: '0 16px 50px rgba(15,23,42,0.08)',
+    border: '1px solid rgba(102,126,234,0.12)',
     marginBottom: '20px',
   },
   title: {
@@ -152,8 +155,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '10px',
     padding: '10px 12px',
     borderRadius: '10px',
-    backgroundColor: '#f8f9fa',
-    border: '1px solid #e9ecef',
+    background:
+      'linear-gradient(180deg, rgba(102,126,234,0.10) 0%, rgba(255,255,255,1) 70%)',
+    border: '1px solid rgba(102,126,234,0.14)',
     marginBottom: '18px',
   },
   statusDot: {
@@ -181,7 +185,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '100%',
     minHeight: '220px',
     padding: '12px 14px',
-    border: '1px solid #dee2e6',
+    border: '1px solid rgba(148,163,184,0.9)',
     borderRadius: '10px',
     fontSize: '13px',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',

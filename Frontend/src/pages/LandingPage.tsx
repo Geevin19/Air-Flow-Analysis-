@@ -68,6 +68,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     minHeight: '100vh',
     display: 'flex',
     flexDirection: 'column',
+    background:
+      'radial-gradient(circle at 10% 10%, rgba(102,126,234,0.18) 0%, rgba(102,126,234,0) 35%), radial-gradient(circle at 90% 20%, rgba(118,75,162,0.16) 0%, rgba(118,75,162,0) 38%), #f6f7ff',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
   nav: {
@@ -75,8 +77,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '20px 60px',
-    backgroundColor: 'white',
+    background: 'rgba(255,255,255,0.78)',
     boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+    border: '1px solid rgba(102,126,234,0.12)',
   },
   logo: {
     fontSize: '28px',
@@ -105,6 +108,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '8px',
     fontSize: '16px',
     fontWeight: '600',
+    boxShadow: '0 10px 22px rgba(102,126,234,0.25)',
   },
   hero: {
     flex: 1,
@@ -162,11 +166,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: '0 auto',
   },
   featureCard: {
-    backgroundColor: 'white',
+    background:
+      'linear-gradient(180deg, rgba(102,126,234,0.10) 0%, rgba(255,255,255,1) 58%, rgba(255,255,255,1) 100%)',
     padding: '40px',
     borderRadius: '16px',
     textAlign: 'center',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.06)',
+    border: '1px solid rgba(102,126,234,0.14)',
   },
   featureIcon: {
     fontSize: '48px',
@@ -187,7 +193,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   footer: {
     padding: '30px',
     textAlign: 'center',
-    backgroundColor: '#1a1a1a',
+    background:
+      'linear-gradient(135deg, rgba(102,126,234,1) 0%, rgba(118,75,162,1) 100%)',
     color: 'white',
+    boxShadow: '0 -10px 28px rgba(102,126,234,0.15)',
   },
 };

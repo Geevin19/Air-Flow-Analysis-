@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI, simulationAPI } from '../services/api';
 
@@ -6,6 +6,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [simulations, setSimulations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAllRecent, setShowAllRecent] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -48,6 +49,12 @@ export default function Dashboard() {
       </div>
     );
   }
+
+  const recentCount = showAllRecent ? simulations.length : Math.min(4, simulations.length);
+  const simulationsToShow = useMemo(() => {
+    if (showAllRecent) return simulations;
+    return simulations.slice(0, recentCount);
+  }, [recentCount, simulations, showAllRecent]);
 
   return (
     <div style={styles.container}>
@@ -96,15 +103,34 @@ export default function Dashboard() {
         </div>
 
         <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Recent Simulations</h3>
+          <div style={styles.sectionHeaderRow}>
+            <h3 style={styles.sectionTitle}>Recent Simulations</h3>
+            {simulations.length > 0 ? (
+              <button
+                style={styles.toggleButton}
+                onClick={() => setShowAllRecent((v) => !v)}
+                aria-label="Toggle recent simulations list"
+              >
+                {showAllRecent ? 'Show less' : `Show all (${simulations.length})`}
+              </button>
+            ) : null}
+          </div>
+
           {simulations.length === 0 ? (
             <div style={styles.emptyState}>
               <p style={styles.emptyText}>No simulations yet</p>
               <p style={styles.emptySubtext}>Create your first simulation to get started</p>
             </div>
           ) : (
-            <div style={styles.simulationGrid}>
-              {simulations.map((sim) => (
+            <div
+              style={{
+                ...styles.simulationGrid,
+                maxHeight: showAllRecent ? 'none' : 380,
+                overflowY: showAllRecent ? 'visible' : 'auto',
+                paddingRight: showAllRecent ? 0 : 6,
+              }}
+            >
+              {simulationsToShow.map((sim) => (
                 <div key={sim.id} style={styles.simulationCard}>
                   <h4 style={styles.simulationName}>{sim.name}</h4>
                   <p style={styles.simulationDate}>
@@ -212,6 +238,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '1400px',
     margin: '0 auto',
     width: '100%',
+    paddingBottom: '120px',
   },
   header: {
     display: 'flex',
@@ -264,7 +291,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginTop: '4px',
   },
   section: {
-    backgroundColor: 'white',
+    background: 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(246,247,255,1) 100%)',
     padding: '30px',
     borderRadius: '12px',
     boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
@@ -274,6 +301,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 'bold',
     color: '#1a1a1a',
     marginBottom: '20px',
+  },
+  sectionHeaderRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    gap: 12,
+    marginBottom: '12px',
+  },
+  toggleButton: {
+    padding: '8px 12px',
+    background: 'linear-gradient(135deg, rgba(102,126,234,0.15) 0%, rgba(118,75,162,0.15) 100%)',
+    color: '#3949ab',
+    border: '1px solid rgba(102,126,234,0.25)',
+    borderRadius: '999px',
+    fontSize: '12px',
+    fontWeight: 800,
+    cursor: 'pointer',
   },
   emptyState: {
     textAlign: 'center',
@@ -296,10 +340,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   simulationCard: {
     padding: '20px',
-    border: '2px solid #e0e0e0',
+    border: '1px solid #e6e9f2',
     borderRadius: '10px',
-    transition: 'border-color 0.3s',
-    cursor: 'pointer',
+    transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
+    boxShadow: '0 8px 22px rgba(0,0,0,0.03)',
   },
   simulationName: {
     fontSize: '18px',

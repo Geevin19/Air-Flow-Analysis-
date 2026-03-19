@@ -149,7 +149,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '40px',
-    backgroundColor: '#f8f9fa',
+    background:
+      'radial-gradient(circle at 15% 10%, rgba(102,126,234,0.18) 0%, rgba(102,126,234,0) 38%), radial-gradient(circle at 85% 25%, rgba(118,75,162,0.14) 0%, rgba(118,75,162,0) 45%), #f6f7ff',
   },
   formContainer: {
     width: '100%',
@@ -157,7 +158,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: 'white',
     padding: '48px',
     borderRadius: '16px',
-    boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
+    boxShadow: '0 16px 50px rgba(15,23,42,0.10)',
+    border: '1px solid rgba(102,126,234,0.14)',
   },
   title: {
     fontSize: '32px',
@@ -188,7 +190,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   input: {
     padding: '12px 16px',
     fontSize: '16px',
-    border: '2px solid #e0e0e0',
+    border: '1px solid rgba(148,163,184,0.9)',
     borderRadius: '8px',
     outline: 'none',
     transition: 'border-color 0.3s',
@@ -204,6 +206,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: 'pointer',
     marginTop: '8px',
     transition: 'transform 0.2s',
+    boxShadow: '0 12px 25px rgba(102,126,234,0.25)',
   },
   buttonDisabled: {
     opacity: 0.7,
