@@ -1,230 +1,214 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { authAPI } from '../services/api';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import styles from "./Login.module.css";
+
+interface LoginForm {
+  username: string;
+  password: string;
+}
 
 export default function Login() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [form, setForm]       = useState<LoginForm>({ username: "", password: "" });
+  const [errors, setErrors]   = useState<Partial<LoginForm>>({});
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
+  const [success, setSuccess] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+  const validate = (): boolean => {
+    const e: Partial<LoginForm> = {};
+    if (!form.username.trim()) e.username = "Username is required";
+    if (!form.password || form.password.length < 6)
+      e.password = "Password must be at least 6 characters";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleLogin = async () => {
+    if (!validate()) return;
     setLoading(true);
+    setApiError("");
 
     try {
-      const response = await authAPI.login(username, password);
-      localStorage.setItem('token', response.data.access_token);
-      navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.detail?.[0]?.msg || "Login failed")
-    } finally {
+      const formData = new URLSearchParams();
+      formData.append("username", form.username);
+      formData.append("password", form.password);
+
+      const response = await fetch("http://localhost:8000/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        setApiError(err.detail || "Invalid username or password");
+        setLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      localStorage.setItem("token", data.access_token);
+      setSuccess(true);
+      setLoading(false);
+      setTimeout(() => navigate("/simulation"), 1500);
+
+    } catch {
+      setApiError("Cannot connect to server. Make sure backend is running.");
       setLoading(false);
     }
   };
 
+  const set = (field: keyof LoginForm) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((p) => ({ ...p, [field]: e.target.value }));
+      setErrors((p) => ({ ...p, [field]: undefined }));
+      setApiError("");
+    };
+
   return (
-    <div style={styles.container}>
-      <div style={styles.leftPanel}>
-        <div style={styles.brandSection}>
-          <h1 style={styles.brandTitle}>SmartTracker</h1>
-          <p style={styles.brandSubtitle}>Advanced Simulation Platform</p>
+    <div className={styles.root}>
+      {/* Background effects */}
+      <div className={styles.bgGlow1} />
+      <div className={styles.bgGlow2} />
+
+      <div className={styles.card}>
+        {/* Corner accents */}
+        <div className={styles.cornerTL} />
+        <div className={styles.cornerTR} />
+        <div className={styles.cornerBL} />
+        <div className={styles.cornerBR} />
+        <div className={styles.shimmer} />
+
+        {/* Header */}
+        <div className={styles.header}>
+          <div className={styles.logoRow}>
+            <svg width="38" height="38" viewBox="0 0 40 40" fill="none">
+              <rect x="1" y="1" width="38" height="38" rx="2"
+                stroke="#b967ff" strokeWidth="1" strokeOpacity="0.3"/>
+              <circle cx="20" cy="20" r="11"
+                stroke="#b967ff" strokeWidth="1.1" fill="none" strokeOpacity="0.4"/>
+              <circle cx="20" cy="20" r="5"
+                stroke="#e040fb" strokeWidth="1.5" fill="none"/>
+              <circle cx="20" cy="20" r="1.8" fill="#b967ff"/>
+              <line x1="4"  y1="20" x2="14" y2="20"
+                stroke="#b967ff" strokeWidth="1.1" strokeOpacity="0.5"/>
+              <line x1="26" y1="20" x2="36" y2="20"
+                stroke="#b967ff" strokeWidth="1.1" strokeOpacity="0.5"/>
+              <line x1="20" y1="4"  x2="20" y2="14"
+                stroke="#b967ff" strokeWidth="1.1" strokeOpacity="0.5"/>
+              <line x1="20" y1="26" x2="20" y2="36"
+                stroke="#b967ff" strokeWidth="1.1" strokeOpacity="0.5"/>
+            </svg>
+            <div>
+              <div className={styles.logoText}>AirFlow SIM</div>
+              <div className={styles.logoSub}>Vector Differentiation System · v2.0</div>
+            </div>
+          </div>
+          <div className={styles.scanLine} />
         </div>
-        <div style={styles.features}>
-          <div style={styles.feature}>
-            <span style={styles.featureIcon}>📊</span>
-            <p>Real-time Analytics</p>
-          </div>
-          <div style={styles.feature}>
-            <span style={styles.featureIcon}>🚀</span>
-            <p>Fast Simulations</p>
-          </div>
-          <div style={styles.feature}>
-            <span style={styles.featureIcon}>🔒</span>
-            <p>Secure & Private</p>
-          </div>
+
+        {/* Page title */}
+        <div className={styles.pageTitle}>
+          <h2>Welcome Back</h2>
+          <p>Sign in to access your simulation dashboard</p>
         </div>
-      </div>
 
-      <div style={styles.rightPanel}>
-        <div style={styles.formContainer}>
-          <h2 style={styles.title}>Welcome Back</h2>
-          <p style={styles.subtitle}>Sign in to continue to your dashboard</p>
+        {/* Form */}
+        <div className={styles.formBody}>
 
-          <form onSubmit={handleSubmit} style={styles.form}>
-            {error && <div className="text-red-500">{String(error)}</div>}
-
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Username</label>
+          {/* Username */}
+          <div className={styles.field}>
+            <label className={styles.label}>Username</label>
+            <div className={styles.inputWrap}>
+              <span className={styles.inputIcon}>
+                <svg width="13" height="13" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+              </span>
               <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                style={styles.input}
-                placeholder="Enter your username"
-                required
+                className={`${styles.input}${errors.username ? " " + styles.err : ""}`}
+                placeholder="your_username"
+                value={form.username}
+                onChange={set("username")}
+                autoComplete="username"
               />
             </div>
+            {errors.username && (
+              <div className={styles.errorMsg}>⚠ {errors.username}</div>
+            )}
+          </div>
 
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Password</label>
+          {/* Password */}
+          <div className={styles.field}>
+            <label className={styles.label}>Password</label>
+            <div className={styles.inputWrap}>
+              <span className={styles.inputIcon}>
+                <svg width="13" height="13" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </span>
               <input
+                className={`${styles.input}${errors.password ? " " + styles.err : ""}`}
                 type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={styles.input}
-                placeholder="Enter your password"
-                required
+                placeholder="••••••••"
+                value={form.password}
+                onChange={set("password")}
+                autoComplete="current-password"
               />
             </div>
+            {errors.password && (
+              <div className={styles.errorMsg}>⚠ {errors.password}</div>
+            )}
+          </div>
 
+          {/* API Error */}
+          {apiError && (
+            <div className={styles.apiError}>⚠ {apiError}</div>
+          )}
+
+          {/* Submit */}
+          <button
+            className={`${styles.btn}${loading ? " " + styles.loading : ""}`}
+            onClick={handleLogin}
+            disabled={loading}
+          >
+            {loading
+              ? <><span className={styles.spinner} />Authenticating...</>
+              : "▶  Login"}
+          </button>
+
+          {/* Success */}
+          {success && (
+            <div className={styles.successBanner}>
+              <span>✦</span> Login successful! Opening simulation...
+            </div>
+          )}
+
+          {/* Link to Register */}
+          <div className={styles.redirectRow}>
+            <span>Don't have an account?</span>
             <button
-              type="submit"
-              style={loading ? { ...styles.button, ...styles.buttonDisabled } : styles.button}
-              disabled={loading}
+              className={styles.redirectLink}
+              onClick={() => navigate("/register")}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              Register
             </button>
-          </form>
+          </div>
+        </div>
 
-          <p style={styles.footer}>
-            Don't have an account?{' '}
-            <Link to="/register" style={styles.link}>
-              Sign up
-            </Link>
-          </p>
+        {/* Status bar */}
+        <div className={styles.statusBar}>
+          <div className={styles.statusTxt}>
+            <span className={styles.statusDot} /> System Online
+          </div>
+          <div className={styles.statusTxt}>AirFlow SIM © 2026</div>
         </div>
       </div>
     </div>
   );
 }
-
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    display: 'flex',
-    minHeight: '100vh',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  leftPanel: {
-    flex: 1,
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    color: 'white',
-    padding: '60px',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-  },
-  brandSection: {
-    marginBottom: '60px',
-  },
-  brandTitle: {
-    fontSize: '48px',
-    fontWeight: 'bold',
-    margin: '0 0 10px 0',
-  },
-  brandSubtitle: {
-    fontSize: '20px',
-    opacity: 0.9,
-    margin: 0,
-  },
-  features: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '30px',
-  },
-  feature: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '20px',
-    fontSize: '18px',
-  },
-  featureIcon: {
-    fontSize: '32px',
-  },
-  rightPanel: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '40px',
-    backgroundColor: '#f8f9fa',
-  },
-  formContainer: {
-    width: '100%',
-    maxWidth: '420px',
-    backgroundColor: 'white',
-    padding: '48px',
-    borderRadius: '16px',
-    boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
-  },
-  title: {
-    fontSize: '32px',
-    fontWeight: 'bold',
-    margin: '0 0 8px 0',
-    color: '#1a1a1a',
-  },
-  subtitle: {
-    fontSize: '16px',
-    color: '#666',
-    margin: '0 0 32px 0',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  inputGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  label: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#333',
-  },
-  input: {
-    padding: '12px 16px',
-    fontSize: '16px',
-    border: '2px solid #e0e0e0',
-    borderRadius: '8px',
-    outline: 'none',
-    transition: 'border-color 0.3s',
-  },
-  button: {
-    padding: '14px',
-    fontSize: '16px',
-    fontWeight: '600',
-    color: 'white',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    marginTop: '8px',
-    transition: 'transform 0.2s',
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-    cursor: 'not-allowed',
-  },
-  error: {
-    padding: '12px',
-    backgroundColor: '#fee',
-    color: '#c33',
-    borderRadius: '8px',
-    fontSize: '14px',
-  },
-  footer: {
-    textAlign: 'center',
-    marginTop: '24px',
-    color: '#666',
-    fontSize: '14px',
-  },
-  link: {
-    color: '#667eea',
-    textDecoration: 'none',
-    fontWeight: '600',
-  },
-};

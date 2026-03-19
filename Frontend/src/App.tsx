@@ -1,21 +1,19 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import LandingPage from './pages/LandingPage';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Login      from "./pages/Login";
+import Register   from "./pages/Register";
+import Simulation from "./pages/Simulation";
+import Dashboard  from "./pages/Dashboard";
 
-function App() {
+export default function App() {
   return (
-    <Router>
+    <BrowserRouter>
       <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route path="/"           element={<Navigate to="/login" replace />} />
+        <Route path="/login"      element={<Login />}      />
+        <Route path="/register"   element={<Register />}   />
+        <Route path="/simulation" element={<Simulation />} />
+        <Route path="/dashboard"  element={<Dashboard />}  />
       </Routes>
-    </Router>
+    </BrowserRouter>
   );
 }
-
-export default App;

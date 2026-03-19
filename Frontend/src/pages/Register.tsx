@@ -1,349 +1,228 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { authAPI } from '../services/api';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import styles from "./Register.module.css";
+
+interface RegisterForm {
+  fullName:        string;
+  username:        string;
+  email:           string;
+  password:        string;
+  confirmPassword: string;
+}
+
+const PIPES = [
+  { label: "Circular", icon: "◯" },
+  { label: "Square",   icon: "▢" },
+  { label: "Elliptic", icon: "⬭" },
+];
 
 export default function Register() {
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    purpose: '',
-  });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [form, setForm] = useState<RegisterForm>({
+    fullName:"", username:"", email:"", password:"", confirmPassword:"",
+  });
+  const [errors, setErrors]   = useState<Partial<RegisterForm>>({});
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [selectedPipe, setSelectedPipe] = useState("Circular");
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+  const validate = (): boolean => {
+    const e: Partial<RegisterForm> = {};
+    if (!form.fullName.trim())  e.fullName = "Full name is required";
+    if (!form.username.trim())  e.username = "Username is required";
+    if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email))
+      e.email = "Valid email is required";
+    if (!form.password || form.password.length < 6)
+      e.password = "Min 6 characters";
+    if (form.password !== form.confirmPassword)
+      e.confirmPassword = "Passwords do not match";
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
-
+  const handleRegister = async () => {
+    if (!validate()) return;
     setLoading(true);
+    setApiError("");
 
     try {
-      await authAPI.register({
-        username: formData.username,
-        email: formData.email,
-        password: formData.password,
-        purpose: formData.purpose,
+      const response = await fetch("http://localhost:8000/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: form.username,
+          email:    form.email,
+          password: form.password,
+          purpose:  selectedPipe,
+        }),
       });
-      
-      const loginResponse = await authAPI.login(formData.username, formData.password);
-      localStorage.setItem('token', loginResponse.data.access_token);
-      navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
-    } finally {
+
+      if (!response.ok) {
+        const err = await response.json();
+        setApiError(err.detail || "Registration failed. Try a different username.");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(false);
+      setSuccess(true);
+      setTimeout(() => navigate("/login"), 2000);
+
+    } catch {
+      setApiError("Cannot connect to server. Make sure backend is running.");
       setLoading(false);
     }
   };
 
+  const set = (field: keyof RegisterForm) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((p) => ({ ...p, [field]: e.target.value }));
+      setErrors((p) => ({ ...p, [field]: undefined }));
+      setApiError("");
+    };
+
   return (
-    <div style={styles.container}>
-      <div style={styles.leftPanel}>
-        <div style={styles.brandSection}>
-          <h1 style={styles.brandTitle}>SmartTracker</h1>
-          <p style={styles.brandSubtitle}>Join thousands of users running simulations</p>
+    <div className={styles.root}>
+      <div className={styles.bgGlow1} />
+      <div className={styles.bgGlow2} />
+
+      <div className={styles.card}>
+        <div className={styles.cornerTL} /><div className={styles.cornerTR} />
+        <div className={styles.cornerBL} /><div className={styles.cornerBR} />
+        <div className={styles.shimmer} />
+
+        {/* Header */}
+        <div className={styles.header}>
+          <div className={styles.logoRow}>
+            <svg width="38" height="38" viewBox="0 0 40 40" fill="none">
+              <rect x="1" y="1" width="38" height="38" rx="2" stroke="#b967ff" strokeWidth="1" strokeOpacity="0.3"/>
+              <circle cx="20" cy="20" r="11" stroke="#b967ff" strokeWidth="1.1" fill="none" strokeOpacity="0.4"/>
+              <circle cx="20" cy="20" r="5" stroke="#e040fb" strokeWidth="1.5" fill="none"/>
+              <circle cx="20" cy="20" r="1.8" fill="#b967ff"/>
+              <line x1="4" y1="20" x2="14" y2="20" stroke="#b967ff" strokeWidth="1.1" strokeOpacity="0.5"/>
+              <line x1="26" y1="20" x2="36" y2="20" stroke="#b967ff" strokeWidth="1.1" strokeOpacity="0.5"/>
+              <line x1="20" y1="4" x2="20" y2="14" stroke="#b967ff" strokeWidth="1.1" strokeOpacity="0.5"/>
+              <line x1="20" y1="26" x2="20" y2="36" stroke="#b967ff" strokeWidth="1.1" strokeOpacity="0.5"/>
+            </svg>
+            <div>
+              <div className={styles.logoText}>AirFlow SIM</div>
+              <div className={styles.logoSub}>Vector Differentiation System · v2.0</div>
+            </div>
+          </div>
+          <div className={styles.scanLine} />
         </div>
-        <div style={styles.benefits}>
-          <div style={styles.benefit}>
-            <span style={styles.checkmark}>✓</span>
-            <div>
-              <h3 style={styles.benefitTitle}>Powerful Analytics</h3>
-              <p style={styles.benefitText}>Get insights from your simulation data</p>
-            </div>
-          </div>
-          <div style={styles.benefit}>
-            <span style={styles.checkmark}>✓</span>
-            <div>
-              <h3 style={styles.benefitTitle}>Easy to Use</h3>
-              <p style={styles.benefitText}>Intuitive interface for all skill levels</p>
-            </div>
-          </div>
-          <div style={styles.benefit}>
-            <span style={styles.checkmark}>✓</span>
-            <div>
-              <h3 style={styles.benefitTitle}>Secure & Reliable</h3>
-              <p style={styles.benefitText}>Your data is safe with us</p>
-            </div>
-          </div>
+
+        {/* Page title */}
+        <div className={styles.pageTitle}>
+          <h2>Create Account</h2>
+          <p>Register to start your simulation environment</p>
         </div>
-      </div>
 
-      <div style={styles.rightPanel}>
-        <div style={styles.formContainer}>
-          <h2 style={styles.title}>Create Account</h2>
-          <p style={styles.subtitle}>Get started with SmartTracker today</p>
+        {/* Form */}
+        <div className={styles.formBody}>
 
-          <form onSubmit={handleSubmit} style={styles.form}>
-            {error && <div style={styles.error}>{error}</div>}
-
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Username *</label>
-              <input
-                type="text"
-                name="username"
-                value={formData.username}
-                onChange={handleChange}
-                style={styles.input}
-                placeholder="Choose a username"
-                required
-              />
-            </div>
-
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Email Address *</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                style={styles.input}
-                placeholder="your.email@example.com"
-                required
-              />
-            </div>
-
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Purpose *</label>
-              <select
-                name="purpose"
-                value={formData.purpose}
-                onChange={handleChange}
-                style={styles.select}
-                required
-              >
-                <option value="">Select your purpose</option>
-                <option value="research">Research & Development</option>
-                <option value="education">Education & Learning</option>
-                <option value="business">Business Analytics</option>
-                <option value="personal">Personal Projects</option>
-                <option value="testing">Testing & Experimentation</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-
-            <div style={styles.row}>
-              <div style={styles.inputGroup}>
-                <label style={styles.label}>Password *</label>
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  style={styles.input}
-                  placeholder="Min. 6 characters"
-                  required
-                />
+          <div className={styles.row2}>
+            <div className={styles.field}>
+              <label className={styles.label}>Full Name</label>
+              <div className={styles.inputWrap}>
+                <span className={styles.inputIcon}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </span>
+                <input className={`${styles.input}${errors.fullName?" "+styles.err:""}`} placeholder="Dr. Jane Doe" value={form.fullName} onChange={set("fullName")} autoComplete="name"/>
               </div>
-
-              <div style={styles.inputGroup}>
-                <label style={styles.label}>Confirm Password *</label>
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  style={styles.input}
-                  placeholder="Re-enter password"
-                  required
-                />
-              </div>
+              {errors.fullName && <div className={styles.errorMsg}>⚠ {errors.fullName}</div>}
             </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Username</label>
+              <div className={styles.inputWrap}>
+                <span className={styles.inputIcon}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </span>
+                <input className={`${styles.input}${errors.username?" "+styles.err:""}`} placeholder="jane_doe" value={form.username} onChange={set("username")} autoComplete="username"/>
+              </div>
+              {errors.username && <div className={styles.errorMsg}>⚠ {errors.username}</div>}
+            </div>
+          </div>
 
-            <button
-              type="submit"
-              style={loading ? { ...styles.button, ...styles.buttonDisabled } : styles.button}
-              disabled={loading}
-            >
-              {loading ? 'Creating Account...' : 'Create Account'}
+          <div className={styles.field}>
+            <label className={styles.label}>Email Address</label>
+            <div className={styles.inputWrap}>
+              <span className={styles.inputIcon}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              </span>
+              <input className={`${styles.input}${errors.email?" "+styles.err:""}`} type="email" placeholder="researcher@institute.edu" value={form.email} onChange={set("email")} autoComplete="email"/>
+            </div>
+            {errors.email && <div className={styles.errorMsg}>⚠ {errors.email}</div>}
+          </div>
+
+          <div className={styles.row2}>
+            <div className={styles.field}>
+              <label className={styles.label}>Password</label>
+              <div className={styles.inputWrap}>
+                <span className={styles.inputIcon}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </span>
+                <input className={`${styles.input}${errors.password?" "+styles.err:""}`} type="password" placeholder="••••••••" value={form.password} onChange={set("password")} autoComplete="new-password"/>
+              </div>
+              {errors.password && <div className={styles.errorMsg}>⚠ {errors.password}</div>}
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Confirm Password</label>
+              <div className={styles.inputWrap}>
+                <span className={styles.inputIcon}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </span>
+                <input className={`${styles.input}${errors.confirmPassword?" "+styles.err:""}`} type="password" placeholder="••••••••" value={form.confirmPassword} onChange={set("confirmPassword")} autoComplete="new-password"/>
+              </div>
+              {errors.confirmPassword && <div className={styles.errorMsg}>⚠ {errors.confirmPassword}</div>}
+            </div>
+          </div>
+
+          {/* Pipe selector */}
+          <label className={styles.pipeLabel}>Select Pipe Type for Simulation</label>
+          <div className={styles.pipeOptions}>
+            {PIPES.map((p) => (
+              <div key={p.label}
+                className={`${styles.pipeOpt}${selectedPipe===p.label?" "+styles.sel:""}`}
+                onClick={() => setSelectedPipe(p.label)}>
+                <span className={styles.pipeIcon}>{p.icon}</span>
+                {p.label}
+              </div>
+            ))}
+          </div>
+
+          {apiError && <div className={styles.apiError}>⚠ {apiError}</div>}
+
+          <button
+            className={`${styles.btn}${loading?" "+styles.loading:""}`}
+            onClick={handleRegister}
+            disabled={loading}
+          >
+            {loading
+              ? <><span className={styles.spinner}/>Creating Account...</>
+              : "▶  Create Account"}
+          </button>
+
+          {success && (
+            <div className={styles.successBanner}>
+              <span>✦</span> Account created! Redirecting to login...
+            </div>
+          )}
+
+          <div className={styles.redirectRow}>
+            <span>Already have an account?</span>
+            <button className={styles.redirectLink} onClick={() => navigate("/login")}>
+              Login
             </button>
-          </form>
+          </div>
+        </div>
 
-          <p style={styles.footer}>
-            Already have an account?{' '}
-            <Link to="/login" style={styles.link}>
-              Sign in
-            </Link>
-          </p>
+        <div className={styles.statusBar}>
+          <div className={styles.statusTxt}><span className={styles.statusDot}/>System Online</div>
+          <div className={styles.statusTxt}>AirFlow SIM © 2026</div>
         </div>
       </div>
     </div>
   );
 }
-
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    display: 'flex',
-    minHeight: '100vh',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  leftPanel: {
-    flex: 1,
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    color: 'white',
-    padding: '60px',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-  },
-  brandSection: {
-    marginBottom: '60px',
-  },
-  brandTitle: {
-    fontSize: '48px',
-    fontWeight: 'bold',
-    margin: '0 0 10px 0',
-  },
-  brandSubtitle: {
-    fontSize: '20px',
-    opacity: 0.9,
-    margin: 0,
-  },
-  benefits: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '30px',
-  },
-  benefit: {
-    display: 'flex',
-    gap: '20px',
-    alignItems: 'flex-start',
-  },
-  checkmark: {
-    fontSize: '24px',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  benefitTitle: {
-    fontSize: '18px',
-    fontWeight: '600',
-    margin: '0 0 4px 0',
-  },
-  benefitText: {
-    fontSize: '14px',
-    opacity: 0.9,
-    margin: 0,
-  },
-  rightPanel: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '40px',
-    backgroundColor: '#f8f9fa',
-  },
-  formContainer: {
-    width: '100%',
-    maxWidth: '500px',
-    backgroundColor: 'white',
-    padding: '48px',
-    borderRadius: '16px',
-    boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
-  },
-  title: {
-    fontSize: '32px',
-    fontWeight: 'bold',
-    margin: '0 0 8px 0',
-    color: '#1a1a1a',
-  },
-  subtitle: {
-    fontSize: '16px',
-    color: '#666',
-    margin: '0 0 32px 0',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  row: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '16px',
-  },
-  inputGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  label: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#333',
-  },
-  input: {
-    padding: '12px 16px',
-    fontSize: '16px',
-    border: '2px solid #e0e0e0',
-    borderRadius: '8px',
-    outline: 'none',
-    transition: 'border-color 0.3s',
-  },
-  select: {
-    padding: '12px 16px',
-    fontSize: '16px',
-    border: '2px solid #e0e0e0',
-    borderRadius: '8px',
-    outline: 'none',
-    backgroundColor: 'white',
-    cursor: 'pointer',
-  },
-  button: {
-    padding: '14px',
-    fontSize: '16px',
-    fontWeight: '600',
-    color: 'white',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    marginTop: '8px',
-    transition: 'transform 0.2s',
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-    cursor: 'not-allowed',
-  },
-  error: {
-    padding: '12px',
-    backgroundColor: '#fee',
-    color: '#c33',
-    borderRadius: '8px',
-    fontSize: '14px',
-  },
-  footer: {
-    textAlign: 'center',
-    marginTop: '24px',
-    color: '#666',
-    fontSize: '14px',
-  },
-  link: {
-    color: '#667eea',
-    textDecoration: 'none',
-    fontWeight: '600',
-  },
-};
