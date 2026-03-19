@@ -36,4 +36,6 @@ export const simulationAPI = {
   getAll: () => api.get('/simulations'),
   
   getById: (id: number) => api.get(`/simulations/${id}`),
+  
+  delete: (id: number) => api.delete(`/simulations/${id}`),
 };

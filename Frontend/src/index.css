@@ -433,3 +433,36 @@ a:hover {
 .rounded-lg { border-radius: 12px; }
 .rounded-xl { border-radius: 16px; }
 .rounded-full { border-radius: 9999px; }
+
+/* Delete button hover */
+button[aria-label="Delete simulation"]:hover {
+  background-color: #ffcdd2 !important;
+  transform: scale(1.1) !important;
+}
+
+[data-theme="dark"] button[aria-label="Delete simulation"]:hover {
+  background-color: #7f1d1d40 !important;
+}
+
+/* Theme toggle hover */
+button[aria-label="Toggle theme"]:hover {
+  transform: scale(1.1) rotate(15deg) !important;
+}
+
+/* Simulation card animations */
+[role="button"] {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[role="button"]:hover {
+  transform: translateY(-6px) !important;
+}
+
+/* Smooth transitions for theme changes */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+button, [role="button"] {
+  transition: all 0.2s ease !important;
+}

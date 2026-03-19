@@ -1,14 +1,85 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { simulationAPI } from '../services/api';
+
+type Theme = 'light' | 'dark';
 
 export default function Simulation() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const simulationId = searchParams.get('id');
+  
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
+  const [loadingExisting, setLoadingExisting] = useState(false);
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('theme');
+    return (saved as Theme) || 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    if (simulationId) {
+      loadExistingSimulation(parseInt(simulationId));
+    }
+  }, [simulationId]);
+
+  const loadExistingSimulation = async (id: number) => {
+    setLoadingExisting(true);
+    try {
+      const response = await simulationAPI.getById(id);
+      const sim = response.data;
+      setName(sim.name);
+      
+      // Load parameters if they exist
+      if (sim.parameters) {
+        // Set parameters from the loaded simulation
+        if (sim.parameters.pipe) {
+          setPipeLengthM(sim.parameters.pipe.length_m || 10);
+          setPipeInnerDiameterM(sim.parameters.pipe.inner_diameter_m || 0.5);
+          setPipeMaterial(sim.parameters.pipe.material || 'Steel');
+          setPipeAbsoluteRoughnessM(sim.parameters.pipe.absolute_roughness_m || 0.000045);
+        }
+        if (sim.parameters.air) {
+          setAirPropertyMode(sim.parameters.air.property_mode || 'assume_tp');
+          setAirTemperatureC(sim.parameters.air.temperature_C || 20);
+          setAirPressurePa(sim.parameters.air.pressure_Pa || 101325);
+          setAirDensityKgM3(sim.parameters.air.density_kg_m3 || 1.204);
+          setAirDynamicViscosityPaS(sim.parameters.air.dynamic_viscosity_Pa_s || 1.81e-5);
+        }
+        if (sim.parameters.flow) {
+          setVolumetricFlowRateM3S(sim.parameters.flow.volumetric_flow_rate_m3_s || 0.25);
+        }
+        if (sim.parameters.losses) {
+          setIncludeMinorLosses(sim.parameters.losses.include_minor_losses ?? true);
+          setMinorLossKTotal(sim.parameters.losses.minor_loss_K_total || 0.5);
+        }
+      }
+      
+      // Set result if it exists
+      if (sim.results) {
+        setResult({
+          backend_response: sim,
+          local_preview: null
+        });
+      }
+    } catch (err: any) {
+      setError('Failed to load simulation: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setLoadingExisting(false);
+    }
+  };
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
 
   // -------- Structured raw inputs (for cylindrical air flow through a pipe) --------
   const materialRoughnessM: Record<string, number> = useMemo(
@@ -260,10 +331,15 @@ export default function Simulation() {
 
   const submit = async () => {
     setError(null);
-    setResult(null);
 
     if (!name.trim()) {
       setError('Please enter a simulation name.');
+      return;
+    }
+
+    // If we're viewing an existing simulation, don't create a new one
+    if (simulationId) {
+      setError('You are viewing an existing simulation. To create a new one, go back to dashboard and click "New Simulation".');
       return;
     }
 
@@ -306,6 +382,9 @@ export default function Simulation() {
   const localPreview = result?.local_preview;
   const backendResponse = result?.backend_response;
 
+  const isDark = theme === 'dark';
+  const styles = getSimulationStyles(isDark);
+
   return (
     <div style={styles.container}>
       <nav style={styles.nav}>
@@ -313,17 +392,32 @@ export default function Simulation() {
           <h1 style={styles.logo}>SmartTracker</h1>
           <span style={styles.badge}>Simulation • Pipe Inputs</span>
         </div>
-        <button onClick={() => navigate('/dashboard')} style={styles.backButton}>
-          Back to Dashboard
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button onClick={toggleTheme} style={styles.themeToggle} aria-label="Toggle theme">
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
+          <button onClick={() => navigate('/dashboard')} style={styles.backButton}>
+            Back to Dashboard
+          </button>
+        </div>
       </nav>
+
+      {loadingExisting && (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#667eea' }}>
+          Loading simulation...
+        </div>
+      )}
 
       <main style={styles.main}>
         <div style={styles.hero}>
-          <div style={styles.heroTitle}>Cylindrical Air Flow Simulator</div>
+          <div style={styles.heroTitle}>
+            Cylindrical Air Flow Simulator
+            {simulationId && <span style={{ marginLeft: '12px', fontSize: '16px', color: '#667eea' }}>(Viewing Existing)</span>}
+          </div>
           <div style={styles.heroSubtitle}>
-            Enter pipe + air + flow conditions, then review a live (client-side) realistic preview.
-            Your JSON is still sent to the backend `POST /simulations`.
+            {simulationId 
+              ? 'You are viewing an existing simulation. To create a new one, go back to the dashboard.'
+              : 'Enter pipe + air + flow conditions, then review a live (client-side) realistic preview. Your JSON is still sent to the backend `POST /simulations`.'}
           </div>
         </div>
 
@@ -341,6 +435,8 @@ export default function Simulation() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Ventilation - Baseline"
                 style={styles.input}
+                readOnly={!!simulationId}
+                disabled={!!simulationId}
               />
             </div>
 
@@ -356,6 +452,7 @@ export default function Simulation() {
                     step={0.1}
                     formatValue={(v) => v.toFixed(1)}
                     onChange={(v) => setPipeLengthM(v)}
+                    styles={styles}
                   />
                   <RangeField
                     label="Inner diameter (m)"
@@ -365,6 +462,7 @@ export default function Simulation() {
                     step={0.001}
                     formatValue={(v) => v.toFixed(3)}
                     onChange={(v) => setPipeInnerDiameterM(v)}
+                    styles={styles}
                   />
               </div>
 
@@ -430,6 +528,7 @@ export default function Simulation() {
                   disabled={airPropertyMode !== 'explicit'}
                   formatValue={(v) => v.toExponential(2)}
                   onChange={(v) => setAirDynamicViscosityPaS(v)}
+                  styles={styles}
                 />
               </div>
 
@@ -443,6 +542,7 @@ export default function Simulation() {
                   disabled={airPropertyMode !== 'assume_tp'}
                   formatValue={(v) => v.toFixed(1)}
                   onChange={(v) => setAirTemperatureC(v)}
+                  styles={styles}
                 />
                 <RangeField
                   label="Pressure (Pa)"
@@ -453,6 +553,7 @@ export default function Simulation() {
                   disabled={airPropertyMode !== 'assume_tp'}
                   formatValue={(v) => Math.round(v).toLocaleString()}
                   onChange={(v) => setAirPressurePa(v)}
+                  styles={styles}
                 />
               </div>
 
@@ -465,6 +566,7 @@ export default function Simulation() {
                 disabled={airPropertyMode !== 'explicit'}
                 formatValue={(v) => v.toFixed(3)}
                 onChange={(v) => setAirDensityKgM3(v)}
+                styles={styles}
               />
             </div>
 
@@ -480,6 +582,7 @@ export default function Simulation() {
                   step={0.001}
                   formatValue={(v) => v.toFixed(3)}
                   onChange={(v) => setVolumetricFlowRateM3S(v)}
+                  styles={styles}
                 />
                 <div style={styles.formRowSmall}>
                   <label style={styles.labelSm}>Velocity profile model</label>
@@ -501,6 +604,7 @@ export default function Simulation() {
                   disabled={!includeMinorLosses}
                   formatValue={(v) => v.toFixed(2)}
                   onChange={(v) => setMinorLossKTotal(v)}
+                  styles={styles}
                 />
                 <div style={styles.formRowSmall}>
                   <label style={styles.labelSm}>Include minor losses</label>
@@ -528,6 +632,7 @@ export default function Simulation() {
                   step={1}
                   formatValue={(v) => String(Math.round(v))}
                   onChange={(v) => setCrossSectionSamples(Math.round(v))}
+                  styles={styles}
                 />
               </div>
             </div>
@@ -535,8 +640,8 @@ export default function Simulation() {
             {error ? <div style={styles.error}>{error}</div> : null}
 
             <div style={styles.actions}>
-              <button onClick={submit} style={styles.primaryButton} disabled={submitting}>
-                {submitting ? 'Running...' : 'Run'}
+              <button onClick={submit} style={styles.primaryButton} disabled={submitting || !!simulationId}>
+                {simulationId ? 'Viewing Existing Simulation' : submitting ? 'Running...' : 'Run'}
               </button>
             </div>
           </div>
@@ -717,6 +822,376 @@ export default function Simulation() {
   );
 }
 
+function getSimulationStyles(isDark: boolean): { [key: string]: React.CSSProperties } {
+  return {
+    container: {
+      minHeight: '100vh',
+      backgroundColor: isDark ? '#0f1419' : '#f8f9fa',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    },
+    nav: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '20px 40px',
+      backgroundColor: isDark ? '#1a1f2e' : 'white',
+      boxShadow: isDark ? '0 2px 20px rgba(0,0,0,0.3)' : '0 2px 10px rgba(0,0,0,0.05)',
+      borderBottom: isDark ? '1px solid #2d3748' : 'none',
+    },
+    navLeft: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+    },
+    logo: {
+      fontSize: '24px',
+      fontWeight: 'bold',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      margin: 0,
+    },
+    badge: {
+      fontSize: '12px',
+      padding: '6px 10px',
+      borderRadius: '999px',
+      backgroundColor: isDark ? '#667eea20' : '#eef2ff',
+      color: isDark ? '#a5b4fc' : '#3949ab',
+      fontWeight: 700,
+      border: isDark ? '1px solid #667eea40' : 'none',
+    },
+    themeToggle: {
+      width: '40px',
+      height: '40px',
+      borderRadius: '50%',
+      border: 'none',
+      backgroundColor: isDark ? '#2d3748' : '#f3f4f6',
+      cursor: 'pointer',
+      fontSize: '18px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'all 0.2s ease',
+      boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+    } as React.CSSProperties,
+    backButton: {
+      padding: '10px 14px',
+      backgroundColor: isDark ? '#2d3748' : '#1a1a1a',
+      color: 'white',
+      border: 'none',
+      borderRadius: '10px',
+      cursor: 'pointer',
+      fontSize: '14px',
+      fontWeight: 700,
+    },
+    main: {
+      padding: '40px',
+      maxWidth: '1000px',
+      margin: '0 auto',
+    },
+    card: {
+      backgroundColor: isDark ? '#1a1f2e' : 'white',
+      padding: '28px',
+      borderRadius: '12px',
+      boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 2px 10px rgba(0,0,0,0.05)',
+      marginBottom: '20px',
+      border: isDark ? '1px solid #2d3748' : 'none',
+    },
+    title: {
+      fontSize: '26px',
+      margin: '0 0 8px 0',
+      color: isDark ? '#f7fafc' : '#1a1a1a',
+    },
+    subtitle: {
+      fontSize: '14px',
+      margin: '0 0 22px 0',
+      color: isDark ? '#a0aec0' : '#6c757d',
+      lineHeight: 1.6,
+    },
+    sectionTitle: {
+      fontSize: '18px',
+      fontWeight: 800,
+      margin: '0 0 12px 0',
+      color: isDark ? '#f7fafc' : '#1a1a1a',
+    },
+    formRow: {
+      marginBottom: '18px',
+    },
+    label: {
+      display: 'block',
+      fontSize: '13px',
+      fontWeight: 700,
+      color: isDark ? '#f7fafc' : '#1a1a1a',
+      marginBottom: '8px',
+    },
+    input: {
+      width: '100%',
+      padding: '12px 14px',
+      border: isDark ? '1px solid #4a5568' : '1px solid #dee2e6',
+      borderRadius: '10px',
+      fontSize: '14px',
+      outline: 'none',
+      backgroundColor: isDark ? '#2d3748' : 'white',
+      color: isDark ? '#f7fafc' : '#1a1a1a',
+    },
+    textarea: {
+      minHeight: '240px',
+      padding: '12px 14px',
+      border: isDark ? '1px solid #4a5568' : '1px solid #dee2e6',
+      borderRadius: '10px',
+      fontSize: '13px',
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      outline: 'none',
+      resize: 'vertical' as const,
+      backgroundColor: isDark ? '#2d3748' : 'white',
+      color: isDark ? '#f7fafc' : '#1a1a1a',
+    },
+    hint: {
+      marginTop: '8px',
+      fontSize: '12px',
+      color: isDark ? '#a0aec0' : '#6c757d',
+    },
+    actions: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      marginTop: '10px',
+    },
+    primaryButton: {
+      padding: '12px 18px',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      color: 'white',
+      border: 'none',
+      borderRadius: '10px',
+      cursor: 'pointer',
+      fontSize: '14px',
+      fontWeight: 800,
+    },
+    error: {
+      padding: '12px 14px',
+      borderRadius: '10px',
+      backgroundColor: isDark ? '#7f1d1d20' : '#ffebee',
+      color: isDark ? '#fca5a5' : '#c62828',
+      border: isDark ? '1px solid #7f1d1d40' : '1px solid #ffcdd2',
+      fontSize: '13px',
+      fontWeight: 600,
+      marginBottom: '10px',
+    },
+    pre: {
+      margin: 0,
+      padding: '14px',
+      backgroundColor: '#0b1020',
+      color: '#e6edf3',
+      borderRadius: '12px',
+      overflowX: 'auto' as const,
+      fontSize: '12px',
+      lineHeight: 1.5,
+    },
+    hero: {
+      padding: '26px 28px',
+      borderRadius: '16px',
+      background: isDark 
+        ? 'linear-gradient(135deg, rgba(102,126,234,0.15) 0%, rgba(118,75,162,0.15) 100%)'
+        : 'linear-gradient(135deg, rgba(102,126,234,0.12) 0%, rgba(118,75,162,0.12) 100%)',
+      border: isDark ? '1px solid #2d3748' : '1px solid rgba(102,126,234,0.18)',
+      boxShadow: isDark ? '0 2px 10px rgba(0,0,0,0.2)' : '0 2px 10px rgba(0,0,0,0.04)',
+      marginBottom: '18px',
+    },
+    heroTitle: {
+      fontSize: '22px',
+      fontWeight: 900,
+      color: isDark ? '#f7fafc' : '#1a1a1a',
+      marginBottom: '6px',
+    },
+    heroSubtitle: {
+      fontSize: '13px',
+      color: isDark ? '#a0aec0' : '#5e6a7a',
+      lineHeight: 1.6,
+      maxWidth: 840,
+    },
+    grid: {
+      display: 'grid',
+      gridTemplateColumns: '520px 1fr',
+      gap: '18px',
+    },
+    section: {
+      marginTop: '18px',
+      backgroundColor: isDark ? '#151a27' : '#fcfcff',
+      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
+      borderRadius: '12px',
+      padding: '14px',
+    },
+    sectionHeader: {
+      fontSize: '13px',
+      fontWeight: 900,
+      color: isDark ? '#f7fafc' : '#1f2a44',
+      marginBottom: '12px',
+    },
+    twoCols: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: '12px',
+    },
+    formRowSmall: {
+      marginBottom: '10px',
+    },
+    labelSm: {
+      display: 'block',
+      fontSize: '12px',
+      fontWeight: 800,
+      color: isDark ? '#f7fafc' : '#2a3553',
+      marginBottom: '6px',
+    },
+    note: {
+      fontSize: '12px',
+      color: isDark ? '#a0aec0' : '#6c757d',
+      marginTop: '4px',
+      lineHeight: 1.5,
+    },
+    labelRow: {
+      display: 'flex',
+      alignItems: 'baseline' as const,
+      justifyContent: 'space-between',
+      gap: '12px',
+      marginBottom: '6px',
+    },
+    smallHint: {
+      fontSize: '12px',
+      color: isDark ? '#a0aec0' : '#6c757d',
+      fontWeight: 700,
+    },
+    checkboxRow: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      paddingTop: '8px',
+    },
+    checkboxText: {
+      fontSize: '13px',
+      color: isDark ? '#f7fafc' : '#2a3553',
+      fontWeight: 700,
+    },
+    previewPlaceholder: {
+      padding: '14px 0',
+      color: isDark ? '#a0aec0' : '#6c757d',
+      fontSize: '13px',
+      lineHeight: 1.6,
+    },
+    metricsGrid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+      gap: '10px',
+      marginTop: '10px',
+      marginBottom: '12px',
+    },
+    metric: {
+      backgroundColor: isDark ? '#151a27' : '#f8f9ff',
+      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
+      borderRadius: '12px',
+      padding: '12px',
+    },
+    metricLabel: {
+      fontSize: '12px',
+      color: isDark ? '#a0aec0' : '#6c757d',
+      fontWeight: 800,
+      marginBottom: '6px',
+    },
+    metricValue: {
+      fontSize: '15px',
+      color: isDark ? '#f7fafc' : '#1a1a1a',
+      fontWeight: 900,
+      lineHeight: 1.2,
+      wordBreak: 'break-word' as const,
+    },
+    chartWrap: {
+      backgroundColor: isDark ? '#151a27' : '#fcfcff',
+      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
+      borderRadius: '12px',
+      padding: '14px',
+      marginTop: '12px',
+    },
+    chartTitle: {
+      fontSize: '13px',
+      fontWeight: 900,
+      color: isDark ? '#f7fafc' : '#1f2a44',
+      marginBottom: '8px',
+    },
+    chartFoot: {
+      fontSize: '12px',
+      color: isDark ? '#a0aec0' : '#6c757d',
+      marginTop: '8px',
+      lineHeight: 1.5,
+    },
+    pipeVizWrap: {
+      backgroundColor: isDark ? '#151a27' : '#fcfcff',
+      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
+      borderRadius: '12px',
+      padding: '14px',
+      marginTop: '8px',
+    },
+    pipeVizHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      gap: 12,
+      marginBottom: '10px',
+      alignItems: 'baseline' as const,
+    },
+    pipeVizTitle: {
+      fontSize: '13px',
+      fontWeight: 900,
+      color: isDark ? '#f7fafc' : '#1f2a44',
+    },
+    pipeVizMeta: {
+      fontSize: '12px',
+      color: isDark ? '#a0aec0' : '#6c757d',
+      fontWeight: 800,
+      textAlign: 'right' as const,
+    },
+    pipeVizSvg: {
+      width: '100%',
+      height: 'auto',
+      display: 'block',
+    },
+    realtimeCanvasWrap: {
+      background: isDark 
+        ? 'linear-gradient(180deg, rgba(11,16,32,0.85) 0%, rgba(11,16,32,0.35) 100%)'
+        : 'linear-gradient(180deg, rgba(11,16,32,0.75) 0%, rgba(11,16,32,0.25) 100%)',
+      borderRadius: '14px',
+      border: isDark ? '1px solid rgba(102,126,234,0.3)' : '1px solid rgba(102,126,234,0.22)',
+      overflow: 'hidden' as const,
+      height: '360px',
+      position: 'relative' as const,
+      marginTop: '8px',
+    },
+    sliderBlock: {
+      padding: '12px 12px',
+      borderRadius: '12px',
+      backgroundColor: isDark ? '#151a27' : '#fcfcff',
+      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
+      marginBottom: '12px',
+    },
+    sliderTop: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'baseline' as const,
+      gap: 12,
+      marginBottom: 8,
+    },
+    sliderLabel: {
+      fontSize: '12px',
+      fontWeight: 900,
+      color: isDark ? '#f7fafc' : '#1f2a44',
+    },
+    sliderValue: {
+      fontSize: '12px',
+      fontWeight: 900,
+      color: isDark ? '#a0aec0' : '#6c757d',
+    },
+    sliderRange: {
+      width: '100%',
+    },
+  };
+}
+
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     minHeight: '100vh',
@@ -752,6 +1227,20 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#3949ab',
     fontWeight: 700,
   },
+  themeToggle: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    border: 'none',
+    backgroundColor: '#f3f4f6',
+    cursor: 'pointer',
+    fontSize: '18px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+  } as React.CSSProperties,
   backButton: {
     padding: '10px 14px',
     backgroundColor: '#1a1a1a',
@@ -1071,6 +1560,7 @@ function RangeField({
   onChange,
   disabled,
   formatValue,
+  styles,
 }: {
   label: string;
   value: number;
@@ -1080,6 +1570,7 @@ function RangeField({
   onChange: (next: number) => void;
   disabled?: boolean;
   formatValue?: (v: number) => string;
+  styles: { [key: string]: React.CSSProperties };
 }) {
   const valueText = formatValue ? formatValue(value) : String(value);
 

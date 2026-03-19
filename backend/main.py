@@ -79,3 +79,12 @@ def get_simulation(simulation_id: int, current_user: User = Depends(get_current_
     if not simulation:
         raise HTTPException(status_code=404, detail='Simulation not found')
     return simulation
+
+@app.delete('/simulations/{simulation_id}')
+def delete_simulation(simulation_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    simulation = db.query(Simulation).filter(Simulation.id == simulation_id, Simulation.user_id == current_user.id).first()
+    if not simulation:
+        raise HTTPException(status_code=404, detail='Simulation not found')
+    db.delete(simulation)
+    db.commit()
+    return {'message': 'Simulation deleted successfully'}
