@@ -1,2105 +1,1050 @@
-
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useState, useEffect, useRef, useMemo, } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { simulationAPI } from '../services/api';
 
-type Theme = 'light' | 'dark';
+/* ─────────────────────────────────────────────────────────────────────────────
+   THREE.JS loaded from CDN via script tag injection
+   We use window.THREE after it loads. TubeGeometry + OrbitControls come from
+   the same CDN build which includes them.
+───────────────────────────────────────────────────────────────────────────── */
+
+declare global {
+  interface Window {
+    THREE: any;
+    OrbitControls: any;
+  }
+}
+
+// ─── Physics ──────────────────────────────────────────────────────────────────
+
+function computeAirDensity(T: number, P: number) { return P / (287.05 * (T + 273.15)); }
+function computeDynamicViscosity(T: number) {
+  const t = T + 273.15, mu0 = 1.716e-5, T0 = 273.15, S = 110.4;
+  return mu0 * Math.pow(t / T0, 1.5) * ((T0 + S) / (t + S));
+}
+function computeRe(rho: number, v: number, D: number, mu: number) {
+  return mu === 0 || D === 0 ? 0 : (rho * v * D) / mu;
+}
+function computeFF(Re: number, eps: number, D: number) {
+  if (Re <= 0) return 0;
+  if (Re < 2300) return 64 / Re;
+  const rel = eps / D; let f = 0.02;
+  for (let i = 0; i < 50; i++) { const r = -2 * Math.log10(rel / 3.7 + 2.51 / (Re * Math.sqrt(f))); f = 1 / (r * r); }
+  return f;
+}
+function computeDP(f: number, L: number, D: number, rho: number, v: number) {
+  return D === 0 ? 0 : f * (L / D) * 0.5 * rho * v * v;
+}
+function getRegime(Re: number): 'laminar' | 'transition' | 'turbulent' {
+  return Re < 2300 ? 'laminar' : Re < 4000 ? 'transition' : 'turbulent';
+}
+
+// ─── Materials ────────────────────────────────────────────────────────────────
+
+const MATERIALS: Record<string, { label: string; roughness: number; hex: number; metalness: number; roughnessVal: number }> = {
+  'Steel':            { label: 'Steel',            roughness: 0.000045,  hex: 0x8899aa, metalness: 0.9, roughnessVal: 0.3 },
+  'Galvanized Steel': { label: 'Galvanized Steel',  roughness: 0.00015,   hex: 0x9aabb8, metalness: 0.8, roughnessVal: 0.4 },
+  'Copper':           { label: 'Copper',            roughness: 0.0000015, hex: 0xc87533, metalness: 0.95, roughnessVal: 0.2 },
+  'PVC':              { label: 'PVC / Plastic',     roughness: 0.0000015, hex: 0xd4c9b8, metalness: 0.0, roughnessVal: 0.7 },
+  'Ductile Iron':     { label: 'Ductile Iron',      roughness: 0.00026,   hex: 0x6b6b7a, metalness: 0.7, roughnessVal: 0.5 },
+  'Concrete':         { label: 'Concrete',          roughness: 0.001,     hex: 0xb0a090, metalness: 0.0, roughnessVal: 0.9 },
+  'Aluminium':        { label: 'Aluminium',         roughness: 0.000045,  hex: 0xaab5c0, metalness: 0.9, roughnessVal: 0.25 },
+};
+
+// ─── Pipe shapes ──────────────────────────────────────────────────────────────
+
+type PipeShape = 'straight' | 'l-shaped' | 's-curve' | 'u-bend' | 'helix';
+
+const PIPE_SHAPES: Record<PipeShape, { label: string; icon: string; description: string }> = {
+  'straight': { label: 'Straight',  icon: '━', description: 'Linear pipe run' },
+  'l-shaped': { label: 'L-Shaped',  icon: '┗', description: '90° elbow bend' },
+  's-curve':  { label: 'S-Curve',   icon: '∫', description: 'Double bend' },
+  'u-bend':   { label: 'U-Bend',    icon: '∪', description: '180° return bend' },
+  'helix':    { label: 'Helix',     icon: '⌀', description: 'Spiral coil' },
+};
+
+// ─── CFD heatmap colour (blue→cyan→green→yellow→red) ─────────────────────────
+
+function heatmapColor(t: number): [number, number, number] {
+  // t in [0,1]: 0=blue(low), 1=red(high)
+  const stops: [number, [number,number,number]][] = [
+    [0.00, [0,0,255]],
+    [0.25, [0,200,255]],
+    [0.50, [0,255,100]],
+    [0.75, [255,220,0]],
+    [1.00, [255,30,0]],
+  ];
+  let lo = stops[0], hi = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (t >= stops[i][0] && t <= stops[i+1][0]) { lo = stops[i]; hi = stops[i+1]; break; }
+  }
+  const f = (t - lo[0]) / (hi[0] - lo[0] + 1e-9);
+  return [
+    lo[1][0] + (hi[1][0] - lo[1][0]) * f,
+    lo[1][1] + (hi[1][1] - lo[1][1]) * f,
+    lo[1][2] + (hi[1][2] - lo[1][2]) * f,
+  ];
+}
+
+// ─── Particle color schemes ───────────────────────────────────────────────────
+
+function getParticleColor(t: number, scheme: 'rainbow' | 'blue' | 'fire' | 'cyan' | 'purple'): [number, number, number] {
+  switch (scheme) {
+    case 'rainbow':
+      return heatmapColor(t);
+    case 'blue':
+      return [
+        30 + t * 100,
+        150 + t * 105,
+        255,
+      ];
+    case 'fire':
+      return [
+        255,
+        50 + t * 150,
+        t * 100,
+      ];
+    case 'cyan':
+      return [
+        t * 100,
+        200 + t * 55,
+        255,
+      ];
+    case 'purple':
+      return [
+        150 + t * 105,
+        50 + t * 100,
+        255,
+      ];
+  }
+}
+
+// ─── Three.js Scene Component ─────────────────────────────────────────────────
+
+interface SceneProps {
+  pipeShape: PipeShape;
+  pipeRadius: number;       // inner radius in metres (scaled for display)
+  pipeLength: number;       // pipe length in metres
+  material: string;
+  velocity: number;
+  pressureDrop: number;
+  reynolds: number;
+  flowRegime: string;
+  colorMode: 'pressure' | 'friction' | 'velocity' | 'material';
+  particleColorScheme: 'rainbow' | 'blue' | 'fire' | 'cyan' | 'purple';
+  particleSize: 'small' | 'medium' | 'large';
+}
+
+function ThreePipeScene(props: SceneProps) {
+  const mountRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<any>(null);
+
+  // Load Three.js + OrbitControls from CDN once
+  const [threeReady, setThreeReady] = useState(!!window.THREE);
+
+  useEffect(() => {
+    if (window.THREE) { setThreeReady(true); return; }
+    const s1 = document.createElement('script');
+    s1.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+    s1.onload = () => {
+      const s2 = document.createElement('script');
+      s2.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+      s2.onload = () => setThreeReady(true);
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s1);
+  }, []);
+
+  // Build / rebuild scene when Three is ready or props change
+  useEffect(() => {
+    if (!threeReady || !mountRef.current) return;
+    const THREE = window.THREE;
+    const container = mountRef.current;
+
+    // Cleanup previous scene
+    if (sceneRef.current) {
+      sceneRef.current.dispose();
+    }
+
+    /* ── Renderer ── */
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.innerHTML = ''; // Clear previous content
+    container.appendChild(renderer.domElement);
+
+    /* ── Scene ── */
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x040a18); // Match the dark theme background
+
+    /* ── Camera ── */
+    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(0, 0.5, 5); // Centered in viewport
+    camera.lookAt(0, 0, 0);
+
+    /* ── Orbit Controls ── */
+    let controls: any = null;
+    if (window.THREE && THREE.OrbitControls) {
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.minDistance = 3;
+      controls.maxDistance = 20;
+      controls.target.set(0, 0, 0);
+      controls.enablePan = true;
+      controls.enableRotate = true;
+      controls.enableZoom = true;
+      controls.rotateSpeed = 1.0;
+      controls.panSpeed = 1.0;
+      controls.zoomSpeed = 1.0;
+      controls.maxPolarAngle = Math.PI;
+      controls.minPolarAngle = 0;
+      controls.update();
+    }
+
+    /* ── Lights ── */
+    const ambient = new THREE.AmbientLight(0x445566, 1.2);
+    scene.add(ambient);
+
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    mainLight.position.set(8, 10, 8);
+    mainLight.castShadow = true;
+    mainLight.shadow.mapSize.set(2048, 2048);
+    scene.add(mainLight);
+
+    const fillLight = new THREE.DirectionalLight(0x6688ff, 0.8);
+    fillLight.position.set(-5, 3, -5);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.DirectionalLight(0xff8844, 0.5);
+    rimLight.position.set(0, -3, 5);
+    scene.add(rimLight);
+
+    /* ── Build pipe path ── */
+    const { pipeShape, pipeRadius, pipeLength, material, colorMode, particleColorScheme, particleSize } = props;
+    const displayR = Math.max(0.08, Math.min(0.25, pipeRadius * 1.5)); // Smaller pipe
+    const mat = MATERIALS[material] || MATERIALS['Steel'];
+
+    // Generate path points - SCALED DOWN and CENTERED
+    // Use pipeLength to scale the path
+    let pathPoints: any[] = [];
+    const lengthScale = Math.max(0.2, Math.min(1.5, pipeLength / 20)); // Scale based on length (10m = 0.5x, 20m = 1x, 40m = 2x)
+    const scale = 0.35 * lengthScale; // Adjust scale based on length
+    
+    switch (pipeShape) {
+      case 'straight':
+        pathPoints = [
+          new THREE.Vector3(-2.5*scale, 0, 0),
+          new THREE.Vector3(-1.2*scale, 0, 0),
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(1.2*scale, 0, 0),
+          new THREE.Vector3(2.5*scale, 0, 0),
+        ];
+        break;
+      case 'l-shaped':
+        pathPoints = [
+          new THREE.Vector3(-1.5*scale, -0.3*scale, 0),
+          new THREE.Vector3(-0.8*scale, -0.3*scale, 0),
+          new THREE.Vector3(0, -0.3*scale, 0),
+          new THREE.Vector3(0, 0.2*scale, 0),
+          new THREE.Vector3(0, 0.8*scale, 0),
+          new THREE.Vector3(0, 1.2*scale, 0),
+        ];
+        break;
+      case 's-curve':
+        pathPoints = [
+          new THREE.Vector3(-2*scale, 0, 0),
+          new THREE.Vector3(-1.2*scale, 0, 0),
+          new THREE.Vector3(-0.4*scale, 0, 0.6*scale),
+          new THREE.Vector3(0.4*scale, 0, -0.6*scale),
+          new THREE.Vector3(1.2*scale, 0, 0),
+          new THREE.Vector3(2*scale, 0, 0),
+        ];
+        break;
+      case 'u-bend':
+        // Centered U-bend
+        pathPoints = [
+          new THREE.Vector3(-1.5*scale, 0.2*scale, 0),
+          new THREE.Vector3(-1*scale, 0.2*scale, 0),
+          new THREE.Vector3(-0.6*scale, 0.2*scale, 0),
+          new THREE.Vector3(-0.3*scale, 0, 0),
+          new THREE.Vector3(0, -0.15*scale, 0),
+          new THREE.Vector3(0.3*scale, 0, 0),
+          new THREE.Vector3(0.6*scale, 0.2*scale, 0),
+          new THREE.Vector3(1*scale, 0.2*scale, 0),
+          new THREE.Vector3(1.5*scale, 0.2*scale, 0),
+        ];
+        break;
+      case 'helix':
+        for (let i = 0; i <= 20; i++) {
+          const a = (i / 20) * Math.PI * 3;
+          pathPoints.push(new THREE.Vector3(
+            Math.cos(a) * 1*scale, 
+            i * 0.1*scale - 1*scale, 
+            Math.sin(a) * 1*scale
+          ));
+        }
+        break;
+    }
+
+    const curve = new THREE.CatmullRomCurve3(pathPoints, false, 'catmullrom', 0.3);
+    const tubeSegments = 100;
+    const radSegments = 32; // More segments for smoother appearance
+    const tubeGeom = new THREE.TubeGeometry(curve, tubeSegments, displayR, radSegments, false);
+
+    /* ── Vertex color based on colorMode ── */
+    const posArr = tubeGeom.attributes.position.array as Float32Array;
+    const colors = new Float32Array(posArr.length);
+    const vCount = posArr.length / 3;
+
+    // Assign colors based on position along the tube
+    for (let vi = 0; vi < vCount; vi++) {
+      const ringIdx = Math.floor(vi / (radSegments + 1));
+      const t = ringIdx / tubeSegments;
+
+      let heat = 0;
+      if (colorMode === 'pressure') {
+        // Pressure gradient: high (red) at inlet, low (green) at outlet
+        heat = 1 - t;
+      } else if (colorMode === 'velocity') {
+        // Velocity: varies through the bend
+        heat = 0.3 + 0.7 * (1 - Math.abs(t - 0.5) * 2);
+      } else if (colorMode === 'friction') {
+        // Friction: highest at the bend
+        heat = Math.pow(Math.sin(t * Math.PI), 1.5);
+      } else {
+        // Material: uniform color
+        heat = 0.5;
+      }
+
+      const [r, g, b] = heatmapColor(heat);
+      colors[vi * 3] = r / 255;
+      colors[vi * 3 + 1] = g / 255;
+      colors[vi * 3 + 2] = b / 255;
+    }
+
+    tubeGeom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const useHeatmap = colorMode !== 'material';
+    const pipeMat = new THREE.MeshStandardMaterial({
+      vertexColors: useHeatmap,
+      color: useHeatmap ? undefined : new THREE.Color(mat.hex),
+      metalness: 0.3,
+      roughness: 0.4,
+      envMapIntensity: 0.8,
+      side: THREE.DoubleSide,
+    });
+
+    const pipeMesh = new THREE.Mesh(tubeGeom, pipeMat);
+    pipeMesh.castShadow = true;
+    pipeMesh.receiveShadow = true;
+    scene.add(pipeMesh);
+
+    /* ── End caps ── */
+    const capGeom = new THREE.CircleGeometry(displayR, radSegments);
+    const capMat = new THREE.MeshStandardMaterial({ 
+      color: useHeatmap ? 0xff4444 : mat.hex, 
+      metalness: 0.3, 
+      roughness: 0.4 
+    });
+    const cap1 = new THREE.Mesh(capGeom, capMat);
+    const cap2 = new THREE.Mesh(capGeom, capMat.clone());
+    cap2.material.color.setHex(useHeatmap ? 0x44ff44 : mat.hex);
+    
+    const p0 = curve.getPoint(0), p1 = curve.getPoint(0.01);
+    const pe = curve.getPoint(1), pm = curve.getPoint(0.99);
+    cap1.position.copy(p0); cap1.lookAt(p1); scene.add(cap1);
+    cap2.position.copy(pe); cap2.lookAt(pm); scene.add(cap2);
+
+    /* ── Flow particles - Modern glowing effect with external streams ── */
+    const pCount = 1000; // More particles for entrance/exit streams
+    const pPositions = new Float32Array(pCount * 3);
+    const pColors = new Float32Array(pCount * 3);
+    const pSizes = new Float32Array(pCount);
+    const pT = new Float32Array(pCount);
+    const pR = new Float32Array(pCount);
+    const pTheta = new Float32Array(pCount);
+    const pSpeed = new Float32Array(pCount); // Individual speeds
+    const pExternal = new Float32Array(pCount); // Track if particle is in external stream
+
+    for (let i = 0; i < pCount; i++) {
+      // 70% inside pipe, 15% entrance stream, 15% exit stream
+      const rand = Math.random();
+      if (rand < 0.15) {
+        // Entrance stream (before pipe)
+        pT[i] = -0.15 + Math.random() * 0.15; // -0.15 to 0
+        pExternal[i] = 1;
+      } else if (rand < 0.30) {
+        // Exit stream (after pipe)
+        pT[i] = 1 + Math.random() * 0.15; // 1 to 1.15
+        pExternal[i] = 2;
+      } else {
+        // Inside pipe
+        pT[i] = Math.random();
+        pExternal[i] = 0;
+      }
+      
+      pR[i] = Math.pow(Math.random(), 0.7) * 0.75;
+      pTheta[i] = Math.random() * Math.PI * 2;
+      pSpeed[i] = 0.8 + Math.random() * 0.4;
+      
+      // Vibrant gradient colors
+      const heat = Math.abs(pT[i]);
+      const [r, g, b] = getParticleColor(heat > 1 ? 1 : heat, particleColorScheme);
+      pColors[i*3] = r/255; 
+      pColors[i*3+1] = g/255; 
+      pColors[i*3+2] = b/255;
+      
+      // Varied sizes
+      pSizes[i] = 3 + Math.random() * 6;
+    }
+
+    const pGeom = new THREE.BufferGeometry();
+    pGeom.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
+    pGeom.setAttribute('color', new THREE.BufferAttribute(pColors, 3));
+    pGeom.setAttribute('size', new THREE.BufferAttribute(pSizes, 1));
+
+    // Create glowing particle material with custom shader
+    const particleSizeMap = { small: 0.12, medium: 0.2, large: 0.3 };
+    const pMat = new THREE.PointsMaterial({
+      vertexColors: true,
+      sizeAttenuation: true,
+      size: particleSizeMap[particleSize],
+      transparent: true,
+      opacity: 1.0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      map: createGlowTexture(THREE),
+    });
+    
+    const particles = new THREE.Points(pGeom, pMat);
+    scene.add(particles);
+
+    // Helper function to create glow texture
+    function createGlowTexture(THREE: any) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d')!;
+      
+      // Create radial gradient for glow effect
+      const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gradient.addColorStop(0, 'rgba(255,255,255,1)');
+      gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
+      gradient.addColorStop(0.4, 'rgba(255,255,255,0.4)');
+      gradient.addColorStop(0.7, 'rgba(255,255,255,0.1)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 64, 64);
+      
+      const texture = new THREE.Texture(canvas);
+      texture.needsUpdate = true;
+      return texture;
+    }
+
+    /* ── Animation loop ── */
+    let rafId = 0;
+
+    const animate = () => {
+      rafId = requestAnimationFrame(animate);
+      
+      // Get current velocity (updates in real-time)
+      const currentVelocity = props.velocity || 1;
+      const speedFactor = 0.003 + (currentVelocity / 10) * 0.02;
+      
+      // Animate particles along the curve with varied speeds
+      const posAttr = pGeom.attributes.position as any;
+      const colorAttr = pGeom.attributes.color as any;
+      
+      for (let i = 0; i < pCount; i++) {
+        // Velocity profile: faster in center, slower near walls
+        const velocityMultiplier = (1 - pR[i] * 0.5) * pSpeed[i];
+        
+        // Move particle along curve
+        pT[i] += speedFactor * velocityMultiplier;
+        
+        // Reset particle at entrance when it exits
+        if (pT[i] > 1.15) {
+          pT[i] = -0.15;
+          pR[i] = Math.pow(Math.random(), 0.7) * 0.75;
+          pTheta[i] = Math.random() * Math.PI * 2;
+          pSpeed[i] = 0.8 + Math.random() * 0.4;
+        }
+
+        // Handle particles in different zones
+        let pt, tan, normal, binormal, rOff, theta;
+        let brightness = 1.0;
+        
+        if (pT[i] < 0) {
+          // Entrance stream (before pipe starts)
+          const streamT = (pT[i] + 0.15) / 0.15; // 0 to 1 in entrance zone
+          const p0 = curve.getPoint(0);
+          const tan0 = curve.getTangent(0);
+          
+          // Extend backwards along tangent
+          pt = new THREE.Vector3(
+            p0.x - tan0.x * (1 - streamT) * displayR * 3,
+            p0.y - tan0.y * (1 - streamT) * displayR * 3,
+            p0.z - tan0.z * (1 - streamT) * displayR * 3
+          );
+          
+          tan = tan0;
+          const up = new THREE.Vector3(0, 1, 0);
+          normal = new THREE.Vector3().crossVectors(tan, up).normalize();
+          binormal = new THREE.Vector3().crossVectors(tan, normal).normalize();
+          
+          // Expanding cone at entrance
+          rOff = pR[i] * displayR * (0.3 + streamT * 0.7);
+          theta = pTheta[i];
+          brightness = streamT * 0.8; // Fade in
+          
+        } else if (pT[i] > 1) {
+          // Exit stream (after pipe ends)
+          const streamT = (pT[i] - 1) / 0.15; // 0 to 1 in exit zone
+          const p1 = curve.getPoint(1);
+          const tan1 = curve.getTangent(1);
+          
+          // Extend forward along tangent
+          pt = new THREE.Vector3(
+            p1.x + tan1.x * streamT * displayR * 3,
+            p1.y + tan1.y * streamT * displayR * 3,
+            p1.z + tan1.z * streamT * displayR * 3
+          );
+          
+          tan = tan1;
+          const up = new THREE.Vector3(0, 1, 0);
+          normal = new THREE.Vector3().crossVectors(tan, up).normalize();
+          binormal = new THREE.Vector3().crossVectors(tan, normal).normalize();
+          
+          // Expanding cone at exit
+          rOff = pR[i] * displayR * (1 + streamT * 0.5);
+          theta = pTheta[i] + streamT * 0.3;
+          brightness = (1 - streamT) * 0.8; // Fade out
+          
+        } else {
+          // Inside pipe
+          pt = curve.getPoint(pT[i]);
+          tan = curve.getTangent(pT[i]);
+          
+          const up = new THREE.Vector3(0, 1, 0);
+          normal = new THREE.Vector3().crossVectors(tan, up).normalize();
+          binormal = new THREE.Vector3().crossVectors(tan, normal).normalize();
+          
+          rOff = pR[i] * displayR * 0.8;
+          theta = pTheta[i] + pT[i] * 0.5;
+          brightness = 1.0;
+        }
+        
+        // Set position
+        posAttr.array[i*3] = pt.x + normal.x * rOff * Math.cos(theta) + binormal.x * rOff * Math.sin(theta);
+        posAttr.array[i*3+1] = pt.y + normal.y * rOff * Math.cos(theta) + binormal.y * rOff * Math.sin(theta);
+        posAttr.array[i*3+2] = pt.z + normal.z * rOff * Math.cos(theta) + binormal.z * rOff * Math.sin(theta);
+        
+        // Keep colors bright and visible
+        const heat = Math.abs(pT[i] > 1 ? 1 : (pT[i] < 0 ? 0 : pT[i]));
+        const [r, g, b] = getParticleColor(heat, particleColorScheme);
+        colorAttr.array[i*3] = (r/255) * brightness;
+        colorAttr.array[i*3+1] = (g/255) * brightness;
+        colorAttr.array[i*3+2] = (b/255) * brightness;
+      }
+      
+      posAttr.needsUpdate = true;
+      colorAttr.needsUpdate = true;
+      
+      if (controls) controls.update();
+      renderer.render(scene, camera);
+    };
+    rafId = requestAnimationFrame(animate);
+
+    /* ── Resize handler ── */
+    const onResize = () => {
+      if (!container) return;
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    };
+    
+    // Call onResize immediately to set correct dimensions
+    onResize();
+    
+    window.addEventListener('resize', onResize);
+
+    // Store cleanup
+    sceneRef.current = {
+      dispose: () => {
+        cancelAnimationFrame(rafId);
+        window.removeEventListener('resize', onResize);
+        if (controls) controls.dispose();
+        renderer.dispose();
+        tubeGeom.dispose(); pipeMat.dispose();
+        capGeom.dispose(); capMat.dispose();
+        pGeom.dispose(); pMat.dispose();
+        if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
+      },
+    };
+
+    return () => { sceneRef.current?.dispose(); sceneRef.current = null; };
+  }, [threeReady, props.pipeShape, props.pipeRadius, props.pipeLength, props.material,
+      props.velocity, props.pressureDrop, props.reynolds,
+      props.flowRegime, props.colorMode, props.particleColorScheme, props.particleSize]);
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {!threeReady && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(160,200,255,0.5)', fontFamily: '"IBM Plex Mono",monospace', fontSize: '13px', gap: '10px' }}>
+          <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
+          Loading 3D engine…
+        </div>
+      )}
+      <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+      {/* Heatmap legend - vertical on right side */}
+      <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', pointerEvents: 'none' }}>
+        <span style={{ ...overlayTag, fontSize: '7px', padding: '2px 4px' }}>HIGH</span>
+        <div style={{ width: '8px', height: '100px', borderRadius: '4px', background: 'linear-gradient(to bottom, #ff1e00, #ffdc00, #00ff64, #00c8ff, #0000ff)', border: '1px solid rgba(255,255,255,0.15)' }} />
+        <span style={{ ...overlayTag, fontSize: '7px', padding: '2px 4px' }}>LOW</span>
+      </div>
+    </div>
+  );
+}
+
+const overlayTag: React.CSSProperties = {
+  background: 'rgba(2,8,20,0.75)', backdropFilter: 'blur(8px)',
+  border: '1px solid rgba(80,120,200,0.2)', borderRadius: '3px',
+  color: 'rgba(160,200,255,0.6)', fontSize: '7px',
+  fontFamily: '"IBM Plex Mono",monospace', padding: '2px 4px',
+};
+
+// ─── Shared UI primitives ─────────────────────────────────────────────────────
+
+function Field({ label, value, unit, onChange, min, max, step, description, readOnly }: {
+  label: string; value: number | string; unit?: string; onChange: (v: string) => void;
+  min?: number; max?: number; step?: number; description?: string; readOnly?: boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={fld.label}>{label}</span>
+        {unit && <span style={fld.unit}>{unit}</span>}
+      </div>
+      {description && <div style={fld.desc}>{description}</div>}
+      <input type="number" value={value} min={min} max={max} step={step}
+        onChange={e => onChange(e.target.value)} readOnly={readOnly} disabled={readOnly}
+        style={{ ...fld.input, ...(readOnly ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }} />
+    </div>
+  );
+}
+
+const fld: Record<string, React.CSSProperties> = {
+  label: { fontSize: '10px', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(200,210,230,0.7)', fontFamily: '"IBM Plex Mono",monospace' },
+  unit:  { fontSize: '9px', color: 'rgba(150,180,220,0.5)', fontFamily: '"IBM Plex Mono",monospace', background: 'rgba(100,140,200,0.12)', padding: '1px 5px', borderRadius: '4px', border: '1px solid rgba(100,140,200,0.2)' },
+  desc:  { fontSize: '9px', color: 'rgba(150,170,200,0.45)', fontFamily: '"IBM Plex Mono",monospace', marginBottom: '2px' },
+  input: { width: '100%', padding: '7px 10px', background: 'rgba(10,20,40,0.6)', border: '1px solid rgba(80,120,200,0.2)', borderRadius: '8px', color: '#e8f0ff', fontSize: '13px', fontFamily: '"IBM Plex Mono",monospace', fontWeight: '600', outline: 'none', transition: 'border-color 0.2s', boxSizing: 'border-box' },
+};
+
+function Metric({ label, value, unit, hi }: { label: string; value: string; unit?: string; hi?: string }) {
+  return (
+    <div style={{ background: 'rgba(8,18,40,0.7)', border: `1px solid ${hi ? hi + '40' : 'rgba(80,120,200,0.15)'}`, borderRadius: '8px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '2px', backdropFilter: 'blur(8px)' }}>
+      <div style={{ fontSize: '9px', fontFamily: '"IBM Plex Mono",monospace', fontWeight: '700', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(170,190,230,0.5)' }}>{label}</div>
+      <div style={{ fontSize: '16px', fontFamily: '"Space Grotesk","IBM Plex Mono",sans-serif', fontWeight: '700', color: hi || '#e8f0ff', lineHeight: 1.1 }}>{value}</div>
+      {unit && <div style={{ fontSize: '10px', fontFamily: '"IBM Plex Mono",monospace', color: 'rgba(150,180,230,0.4)' }}>{unit}</div>}
+    </div>
+  );
+}
+
+function SecHdr({ icon, title }: { icon: string; title: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+      <div style={{ width: '26px', height: '26px', background: 'linear-gradient(135deg,rgba(80,140,255,0.2),rgba(120,80,220,0.2))', border: '1px solid rgba(100,160,255,0.25)', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px' }}>{icon}</div>
+      <span style={{ fontSize: '10px', fontFamily: '"IBM Plex Mono",monospace', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(160,200,255,0.7)' }}>{title}</span>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Simulation() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const simulationId = searchParams.get('id');
-  
-  const [name, setName] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<any>(null);
+
+  // ── form state (names match old Simulation.tsx) ──
+  const [name,                   setName]                   = useState('');
+  const [pipeLengthM,            setPipeLengthM]            = useState(20);
+  const [pipeInnerDiameterM,     setPipeInnerDiameterM]     = useState(0.5);
+  const [pipeOuterDiameterM,     setPipeOuterDiameterM]     = useState(0.55);
+  const [pipeMaterial,           setPipeMaterial]           = useState('Steel');
+  const [pipeAbsoluteRoughnessM, setPipeAbsoluteRoughnessM] = useState(MATERIALS['Steel'].roughness);
+  const [airTemperatureC,        setAirTemperatureC]        = useState(20);
+  const [airPressurePa,          setAirPressurePa]          = useState(101325);
+  const [volumetricFlowRateM3S,  setVolumetricFlowRateM3S]  = useState(0.25);
+  const [minorLossKTotal,        setMinorLossKTotal]        = useState(0.5);
+  const [includeMinorLosses,     setIncludeMinorLosses]     = useState(true);
+  const [velocityProfileMode,    setVelocityProfileMode]    = useState<'auto_by_re'|'laminar'|'turbulent'>('auto_by_re');
+  const [crossSectionSamples,    setCrossSectionSamples]    = useState(50);
+
+  // ── new 3D UI state ──
+  const [pipeShape,   setPipeShape]   = useState<PipeShape>('straight');
+  const [colorMode,   setColorMode]   = useState<'pressure'|'friction'|'velocity'|'material'>('pressure');
+  const [particleColorScheme, setParticleColorScheme] = useState<'rainbow'|'blue'|'fire'|'cyan'|'purple'>('rainbow');
+  const [particleSize, setParticleSize] = useState<'small'|'medium'|'large'>('medium');
+
+  // ── app state ──
+  const [submitting,      setSubmitting]      = useState(false);
+  const [saving,          setSaving]          = useState(false);
+  const [saved,           setSaved]           = useState(false);
+  const [error,           setError]           = useState<string | null>(null);
   const [loadingExisting, setLoadingExisting] = useState(false);
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('theme');
-    return (saved as Theme) || 'light';
-  });
+  const [backendResult,   setBackendResult]   = useState<any>(null);
 
   useEffect(() => {
-    localStorage.setItem('theme', theme);
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
+    setPipeAbsoluteRoughnessM(MATERIALS[pipeMaterial]?.roughness ?? 0.000045);
+  }, [pipeMaterial]);
 
   useEffect(() => {
-    if (simulationId) {
-      loadExistingSimulation(parseInt(simulationId));
-    }
+    if (simulationId) loadExistingSimulation(parseInt(simulationId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [simulationId]);
 
   const loadExistingSimulation = async (id: number) => {
     setLoadingExisting(true);
     try {
-      const response = await simulationAPI.getById(id);
-      const sim = response.data;
-      setName(sim.name);
-      
-      // Load parameters if they exist
-      if (sim.parameters) {
-        // Set parameters from the loaded simulation
-        if (sim.parameters.pipe) {
-          setPipeLengthM(sim.parameters.pipe.length_m || 10);
-          setPipeInnerDiameterM(sim.parameters.pipe.inner_diameter_m || 0.5);
-          setPipeMaterial(sim.parameters.pipe.material || 'Steel');
-          setPipeAbsoluteRoughnessM(sim.parameters.pipe.absolute_roughness_m || 0.000045);
-        }
-        if (sim.parameters.air) {
-          setAirPropertyMode(sim.parameters.air.property_mode || 'assume_tp');
-          setAirTemperatureC(sim.parameters.air.temperature_C || 20);
-          setAirPressurePa(sim.parameters.air.pressure_Pa || 101325);
-          setAirDensityKgM3(sim.parameters.air.density_kg_m3 || 1.204);
-          setAirDynamicViscosityPaS(sim.parameters.air.dynamic_viscosity_Pa_s || 1.81e-5);
-        }
-        if (sim.parameters.flow) {
-          setVolumetricFlowRateM3S(sim.parameters.flow.volumetric_flow_rate_m3_s || 0.25);
-        }
-        if (sim.parameters.losses) {
-          setIncludeMinorLosses(sim.parameters.losses.include_minor_losses ?? true);
-          setMinorLossKTotal(sim.parameters.losses.minor_loss_K_total || 0.5);
-        }
+      const res = await simulationAPI.getById(id);
+      const sim = res.data;
+      setName(sim.name ?? '');
+      const p = sim.parameters;
+      if (p?.pipe) {
+        setPipeLengthM(p.pipe.length_m ?? 10);
+        setPipeInnerDiameterM(p.pipe.inner_diameter_m ?? 0.5);
+        setPipeOuterDiameterM(p.pipe.outer_diameter_m ?? 0.55);
+        setPipeMaterial(p.pipe.material ?? 'Steel');
+        setPipeAbsoluteRoughnessM(p.pipe.absolute_roughness_m ?? 0.000045);
       }
-      
-      // Set result if it exists
-      if (sim.results) {
-        setResult({
-          backend_response: sim,
-          local_preview: null
-        });
+      if (p?.air) { setAirTemperatureC(p.air.temperature_C ?? 20); setAirPressurePa(p.air.pressure_Pa ?? 101325); }
+      if (p?.flow) {
+        setVolumetricFlowRateM3S(p.flow.volumetric_flow_rate_m3_s ?? 0.25);
+        if (p.flow.velocity_profile_model) setVelocityProfileMode(p.flow.velocity_profile_model);
       }
+      if (p?.losses) { setIncludeMinorLosses(p.losses.include_minor_losses ?? true); setMinorLossKTotal(p.losses.minor_loss_K_total ?? 0.5); }
+      if (p?.cross_section) setCrossSectionSamples(p.cross_section.samples ?? 50);
+      if (sim.results) setBackendResult(sim);
     } catch (err: any) {
       setError('Failed to load simulation: ' + (err.response?.data?.detail || err.message));
-    } finally {
-      setLoadingExisting(false);
-    }
+    } finally { setLoadingExisting(false); }
   };
 
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
-
-  // -------- Structured raw inputs (for cylindrical air flow through a pipe) --------
-  const materialRoughnessM: Record<string, number> = useMemo(
-    () => ({
-      // Typical absolute roughness values (order-of-magnitude). Users can always override.
-      Steel: 0.000045,
-      Copper: 0.0000015,
-      PVC: 0.0000015,
-      'Ductile Iron': 0.00026,
-      'Galvanized Steel': 0.00015,
-    }),
-    [],
-  );
-
-  const [pipeLengthM, setPipeLengthM] = useState(10);
-  const [pipeInnerDiameterM, setPipeInnerDiameterM] = useState(0.5);
-  const [pipeMaterial, setPipeMaterial] = useState<string>('Steel');
-  const [pipeAbsoluteRoughnessM, setPipeAbsoluteRoughnessM] = useState<number>(
-    materialRoughnessM['Steel'],
-  );
-
-  const [airPropertyMode, setAirPropertyMode] = useState<'assume_tp' | 'explicit'>('assume_tp');
-  const [airTemperatureC, setAirTemperatureC] = useState(20);
-  const [airPressurePa, setAirPressurePa] = useState(101325);
-  const [airDensityKgM3, setAirDensityKgM3] = useState(1.204);
-  const [airDynamicViscosityPaS, setAirDynamicViscosityPaS] = useState(1.81e-5);
-
-  const [volumetricFlowRateM3S, setVolumetricFlowRateM3S] = useState(0.25);
-  const [minorLossKTotal, setMinorLossKTotal] = useState(0.5);
-  const [includeMinorLosses, setIncludeMinorLosses] = useState(true);
-
-  const [velocityProfileMode, setVelocityProfileMode] = useState<'auto_by_re' | 'laminar' | 'turbulent'>(
-    'auto_by_re',
-  );
-  const [crossSectionSamples, setCrossSectionSamples] = useState(50); // user requested 50
-
-  // -------- Derived preview computations (client-side) --------
+  // ── physics ──
   const computed = useMemo(() => {
-    const D = pipeInnerDiameterM;
-    const L = pipeLengthM;
-    const Q = volumetricFlowRateM3S;
-    const eps = pipeAbsoluteRoughnessM;
-    const n = Math.max(3, Math.floor(crossSectionSamples));
-
-    const validGeometry = Number.isFinite(D) && D > 0 && Number.isFinite(L) && L > 0;
-    const validFlow = Number.isFinite(Q) && Q > 0;
-    const validFluids =
-      airPropertyMode === 'explicit'
-        ? [airDensityKgM3, airDynamicViscosityPaS].every((x) => Number.isFinite(x) && x > 0)
-        : Number.isFinite(airTemperatureC) &&
-          Number.isFinite(airPressurePa) &&
-          airTemperatureC > -273.15 &&
-          airPressurePa > 0;
-
-    if (!validGeometry || !validFlow || !validFluids) {
-      return {
-        isValid: false,
-        D,
-        L,
-        Q,
-        eps,
-        n,
-        rho: NaN,
-        mu: NaN,
-        area: NaN,
-        Vavg: NaN,
-        Re: NaN,
-        frictionFactor: NaN,
-        flowRegime: 'unknown' as 'laminar' | 'transition' | 'turbulent' | 'unknown',
-        pressureDropPa: NaN,
-        velocityProfile: [] as Array<{ rNorm: number; u: number }>,
-      };
-    }
-
-    const area = Math.PI * Math.pow(D / 2, 2);
-    const Vavg = Q / area;
-
-    let rho = airDensityKgM3;
-    let mu = airDynamicViscosityPaS;
-
-    if (airPropertyMode === 'assume_tp') {
-      // Simple ideal gas density + Sutherland viscosity for air.
-      const T = airTemperatureC + 273.15;
-      const R = 287.05; // J/(kg*K)
-      rho = airPressurePa / (R * T);
-
-      // Sutherland's law constants for air
-      const mu0 = 1.716e-5; // Pa*s at T0
-      const T0 = 273.15; // K
-      const S = 111; // K
-      mu = mu0 * ((T0 + S) / (T + S)) * Math.pow(T / T0, 1.5);
-    }
-
-    // Reynolds number (based on average velocity)
-    const Re = (rho * Vavg * D) / mu;
-
-    const flowRegime =
-      Re < 2300 ? 'laminar' : Re <= 4000 ? ('transition' as const) : ('turbulent' as const);
-
-    // Friction factor (Darcy-Weisbach) using laminar definition or Haaland correlation.
-    let frictionFactor: number;
-    if (Re < 2300) {
-      frictionFactor = 64 / Re;
-    } else {
-      // Haaland: valid for turbulent flow with roughness.
-      const relRough = eps / D;
-      const term = Math.pow(relRough / 3.7, 1.11) + 6.9 / Re;
-      frictionFactor = Math.pow(-1.8 * Math.log10(term), -2);
-    }
-
-    const dpMajor = frictionFactor * (L / D) * (rho * Math.pow(Vavg, 2) / 2);
-    const dpMinor = includeMinorLosses ? minorLossKTotal * (rho * Math.pow(Vavg, 2) / 2) : 0;
-    const pressureDropPa = dpMajor + dpMinor;
-
-    const selectedProfile =
-      velocityProfileMode === 'auto_by_re'
-        ? flowRegime === 'laminar' || flowRegime === 'transition'
-          ? 'laminar'
-          : 'turbulent'
-        : velocityProfileMode;
-
-    const profile: Array<{ rNorm: number; u: number }> = [];
-
-    // Build a normalized radial velocity profile (no swirl), sampled at evenly spaced r.
-    // We scale each profile so that its cross-section average velocity matches Vavg.
-    for (let i = 0; i < n; i++) {
-      const rNorm = n === 1 ? 0 : i / (n - 1); // 0=centerline, 1=wall
-      let u: number;
-
-      if (selectedProfile === 'laminar') {
-        // Fully developed laminar profile:
-        // u(r) = umax * (1 - (r/R)^2), with average u_avg = umax/2 => umax = 2*u_avg
-        const umax = 2 * Vavg;
-        u = umax * (1 - Math.pow(rNorm, 2));
-      } else {
-        // Turbulent 1/7 power-law variant:
-        // u(r) = umax * (1 - r/R)^(1/7), and for this form u_avg = umax*(49/60)
-        // => umax = u_avg*(60/49)
-        const umax = Vavg * (60 / 49);
-        u = umax * Math.pow(1 - rNorm, 1 / 7);
-      }
-
-      // Numerical safety near the wall
-      if (!Number.isFinite(u) || u < 0) u = 0;
-      profile.push({ rNorm, u });
-    }
-
+    const rho  = computeAirDensity(airTemperatureC, airPressurePa);
+    const mu   = computeDynamicViscosity(airTemperatureC);
+    const area = Math.PI * (pipeInnerDiameterM / 2) ** 2;
+    const v    = area > 0 ? volumetricFlowRateM3S / area : 0;
+    const Re   = computeRe(rho, v, pipeInnerDiameterM, mu);
+    const f    = computeFF(Re, pipeAbsoluteRoughnessM, pipeInnerDiameterM);
+    const dPf  = computeDP(f, pipeLengthM, pipeInnerDiameterM, rho, v);
+    const dPm  = includeMinorLosses ? minorLossKTotal * 0.5 * rho * v * v : 0;
+    const regime = getRegime(Re);
+    const sp: 'laminar'|'turbulent' =
+      velocityProfileMode === 'auto_by_re' ? (regime === 'turbulent' ? 'turbulent' : 'laminar')
+      : velocityProfileMode === 'turbulent' ? 'turbulent' : 'laminar';
     return {
-      isValid: true,
-      D,
-      L,
-      Q,
-      eps,
-      n,
-      rho,
-      mu,
-      area,
-      Vavg,
-      Re,
-      frictionFactor,
-      flowRegime: flowRegime === 'transition' ? 'transition' : flowRegime,
-      pressureDropPa,
-      velocityProfile: profile,
-      selectedProfile,
+      density: rho, viscosity: mu, velocity: v, reynolds: Re,
+      frictionFactor: f, pressureDrop: dPf + dPm,
+      frictionDrop: dPf, minorDrop: dPm, flowRegime: regime,
+      selectedProfile: sp, massFlow: rho * volumetricFlowRateM3S,
+      area, wallShear: (f / 8) * rho * v * v,
     };
-  }, [
-    airDynamicViscosityPaS,
-    airDensityKgM3,
-    airPressurePa,
-    airPropertyMode,
-    airTemperatureC,
-    crossSectionSamples,
-    includeMinorLosses,
-    minorLossKTotal,
-    pipeAbsoluteRoughnessM,
-    pipeInnerDiameterM,
-    pipeLengthM,
-    velocityProfileMode,
-    volumetricFlowRateM3S,
-  ]);
+  }, [airTemperatureC, airPressurePa, pipeInnerDiameterM, volumetricFlowRateM3S,
+      pipeAbsoluteRoughnessM, pipeLengthM, includeMinorLosses, minorLossKTotal, velocityProfileMode]);
 
-  const generatedParameters = useMemo(() => {
-    const D = pipeInnerDiameterM;
-    const R = D / 2;
+  const generatedParameters = useMemo(() => ({
+    type: 'cylindrical_air_flow',
+    pipe: { length_m: pipeLengthM, inner_diameter_m: pipeInnerDiameterM, outer_diameter_m: pipeOuterDiameterM, inner_radius_m: pipeInnerDiameterM/2, material: pipeMaterial, absolute_roughness_m: pipeAbsoluteRoughnessM, shape: pipeShape },
+    air: { property_mode: 'assume_tp', temperature_C: airTemperatureC, pressure_Pa: airPressurePa, density_kg_m3: computed.density, dynamic_viscosity_Pa_s: computed.viscosity },
+    flow: { volumetric_flow_rate_m3_s: volumetricFlowRateM3S, average_velocity_m_s: computed.velocity, reynolds_number: computed.reynolds, flow_regime: computed.flowRegime, velocity_profile_model: computed.selectedProfile },
+    losses: { include_minor_losses: includeMinorLosses, minor_loss_K_total: minorLossKTotal, friction_factor_darcy: computed.frictionFactor, pressure_drop_Pa: computed.pressureDrop },
+    cross_section: { samples: crossSectionSamples },
+  }), [pipeLengthM, pipeInnerDiameterM, pipeOuterDiameterM, pipeMaterial, pipeAbsoluteRoughnessM,
+       pipeShape, airTemperatureC, airPressurePa, volumetricFlowRateM3S, includeMinorLosses,
+       minorLossKTotal, crossSectionSamples, computed]);
 
-    // We include both user-provided and derived fields in the JSON so the backend can
-    // use them immediately (even if it later improves its own computations).
-    return {
-      type: 'cylindrical_air_flow',
-      pipe: {
-        length_m: pipeLengthM,
-        inner_diameter_m: D,
-        inner_radius_m: R,
-        material: pipeMaterial,
-        absolute_roughness_m: pipeAbsoluteRoughnessM,
-      },
-      air: {
-        property_mode: airPropertyMode,
-        temperature_C: airTemperatureC,
-        pressure_Pa: airPressurePa,
-        density_kg_m3: computed.rho,
-        dynamic_viscosity_Pa_s: computed.mu,
-      },
-      flow: {
-        volumetric_flow_rate_m3_s: volumetricFlowRateM3S,
-        average_velocity_m_s: computed.Vavg,
-        reynolds_number: computed.Re,
-        flow_regime: computed.flowRegime,
-        velocity_profile_model: computed.isValid
-          ? computed.selectedProfile
-          : velocityProfileMode === 'laminar'
-            ? 'laminar'
-            : 'turbulent',
-      },
-      losses: {
-        include_minor_losses: includeMinorLosses,
-        minor_loss_K_total: minorLossKTotal,
-        friction_factor_darcy: computed.frictionFactor,
-        pressure_drop_Pa: computed.pressureDropPa,
-      },
-      cross_section: {
-        samples: Math.max(3, Math.floor(crossSectionSamples)),
-        // Helps backend map the radial sampling to expected array lengths.
-      },
-    };
-  }, [
-    airPropertyMode,
-    airPressurePa,
-    airTemperatureC,
-    computed.flowRegime,
-    computed.frictionFactor,
-    computed.isValid,
-    computed.mu,
-    computed.pressureDropPa,
-    computed.Re,
-    computed.rho,
-    computed.selectedProfile,
-    computed.Vavg,
-    crossSectionSamples,
-    includeMinorLosses,
-    minorLossKTotal,
-    pipeAbsoluteRoughnessM,
-    pipeInnerDiameterM,
-    pipeLengthM,
-    pipeMaterial,
-    volumetricFlowRateM3S,
-    velocityProfileMode,
-  ]);
-
-  const submit = async () => {
+  const handleSave = async () => {
     setError(null);
-
-    if (!name.trim()) {
-      setError('Please enter a simulation name.');
-      return;
-    }
-
-    // If we're viewing an existing simulation, don't create a new one
-    if (simulationId) {
-      setError('You are viewing an existing simulation. To create a new one, go back to dashboard and click "New Simulation".');
-      return;
-    }
-
-    const localPreview = {
-      preview_type: 'cylindrical_air_flow',
-      computed_at: new Date().toISOString(),
-      metrics: {
-        average_velocity_m_s: computed.Vavg,
-        reynolds_number: computed.Re,
-        friction_factor_darcy: computed.frictionFactor,
-        pressure_drop_Pa: computed.pressureDropPa,
-        flow_regime: computed.flowRegime,
-        velocity_profile_model: computed.isValid ? computed.selectedProfile : velocityProfileMode,
-      },
-      velocity_profile: computed.velocityProfile,
-      inputs: generatedParameters,
-    };
-
-    setSubmitting(true);
+    if (!name.trim()) { setError('Please enter a simulation name.'); return; }
+    if (simulationId) { setError('Viewing an existing simulation — go to Dashboard to create a new one.'); return; }
+    setSaving(true); setSubmitting(true);
     try {
-      const response = await simulationAPI.create({
-        name: name.trim(),
-        parameters: generatedParameters,
-      });
-      setResult({
-        local_preview: localPreview,
-        backend_response: response.data,
-      });
+      const res = await simulationAPI.create({ name: name.trim(), parameters: generatedParameters });
+      setBackendResult(res.data); setSaved(true); setTimeout(() => setSaved(false), 3000);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Failed to run simulation.');
-      setResult({
-        local_preview: localPreview,
-        backend_error: e?.response?.data || { message: e?.message },
-      });
-    } finally {
-      setSubmitting(false);
-    }
+      setError(e?.response?.data?.detail || 'Failed to save simulation.');
+    } finally { setSaving(false); setSubmitting(false); }
   };
 
-  const localPreview = result?.local_preview;
-  const backendResponse = result?.backend_response;
+  const reColor = computed.reynolds < 2300 ? '#4fbbf7' : computed.reynolds < 4000 ? '#f7c14f' : '#f7614f';
+  const isViewing = !!simulationId;
 
-  const isDark = theme === 'dark';
-  const styles = getSimulationStyles(isDark);
+  const sceneProps: SceneProps = {
+    pipeShape, pipeRadius: pipeInnerDiameterM / 2, pipeLength: pipeLengthM,
+    material: pipeMaterial, velocity: computed.velocity,
+    pressureDrop: computed.pressureDrop, reynolds: computed.reynolds,
+    flowRegime: computed.flowRegime, colorMode, particleColorScheme, particleSize,
+  };
 
   return (
-    <div style={styles.container}>
-      <nav style={styles.nav}>
-        <div style={styles.navLeft}>
-          <h1 style={styles.logo}>SmartTracker</h1>
-          <span style={styles.badge}>Simulation • Pipe Inputs</span>
+    <div style={C.page}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+        *{box-sizing:border-box;}
+        input[type=number]::-webkit-inner-spin-button{opacity:0.3;}
+        input[type=number]:focus{border-color:rgba(80,160,255,0.5)!important;box-shadow:0 0 0 3px rgba(80,160,255,0.1);}
+        input[type=number]:disabled{opacity:0.5;cursor:not-allowed;}
+        select{appearance:none;-webkit-appearance:none;}
+        select:focus{border-color:rgba(80,160,255,0.5)!important;outline:none;}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+        @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        ::-webkit-scrollbar{width:6px;height:6px;}
+        ::-webkit-scrollbar-track{background:rgba(10,20,40,0.3);border-radius:3px;}
+        ::-webkit-scrollbar-thumb{background:rgba(80,120,200,0.4);border-radius:3px;transition:background 0.2s;}
+        ::-webkit-scrollbar-thumb:hover{background:rgba(80,120,200,0.6);}
+      `}</style>
+      <div style={C.bg}/><div style={C.gridBg}/>
+
+      {/* ── Nav ── */}
+      <nav style={C.nav}>
+        <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
+          <button onClick={() => navigate('/dashboard')} style={C.backBtn}>← Dashboard</button>
+          <div style={C.divider}/>
+          <div style={{ display:'flex', flexDirection:'column' }}>
+            <span style={C.navTitle}>Cylindrical Air Flow Simulator {isViewing && <span style={{ fontSize:'11px', color:'#a0c4ff', opacity:0.7 }}>(Viewing)</span>}</span>
+            <span style={C.navSub}>{isViewing ? 'Read-only · existing simulation' : '3D live simulation · drag to orbit · inputs update instantly'}</span>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={toggleTheme} style={styles.themeToggle} aria-label="Toggle theme">
-            {theme === 'light' ? '🌙' : '☀️'}
-          </button>
-          <button onClick={() => navigate('/dashboard')} style={styles.backButton}>
-            Back to Dashboard
-          </button>
+        <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+          {loadingExisting && <span style={{ fontSize:'11px', fontFamily:'"IBM Plex Mono"', color:'rgba(160,200,255,0.5)', animation:'pulse 1.5s infinite' }}>Loading…</span>}
+          <div style={{ ...C.regimeBadge, borderColor: reColor+'60', color: reColor }}>
+            <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:reColor, animation:'pulse 2s infinite' }}/>
+            {computed.flowRegime.charAt(0).toUpperCase()+computed.flowRegime.slice(1)}
+          </div>
+          {!isViewing && (
+            <button onClick={handleSave} disabled={saving||submitting} style={{ ...C.saveBtn, ...(saved?{background:'rgba(50,200,100,0.2)',borderColor:'rgba(50,200,100,0.5)',color:'#50c878'}:{}), ...(saving?{opacity:0.7}:{}) }}>
+              {saving ? '⏳ Saving…' : saved ? '✓ Saved!' : '⊕ Save'}
+            </button>
+          )}
         </div>
       </nav>
 
-      {loadingExisting && (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#667eea' }}>
-          Loading simulation...
-        </div>
+      {/* ── Name bar ── */}
+      <div style={C.nameBar}>
+        <input value={name} onChange={e=>setName(e.target.value)}
+          placeholder={isViewing?'Simulation name':'Name this simulation…'}
+          readOnly={isViewing} disabled={isViewing}
+          style={{ ...C.nameInput, ...(isViewing?{opacity:0.6,cursor:'default'}:{}) }}/>
+        {isViewing && <span style={{ fontSize:'11px', fontFamily:'"IBM Plex Mono"', color:'rgba(160,200,255,0.35)', marginLeft:'14px' }}>Go to Dashboard → New Simulation to create a new one</span>}
+      </div>
+
+      {error && (
+        <div style={C.errBanner}>⚠ {error}<button onClick={()=>setError(null)} style={C.errClose}>✕</button></div>
       )}
 
-      <main style={styles.main}>
-        <div style={styles.hero}>
-          <div style={styles.heroTitle}>
-            Cylindrical Air Flow Simulator
-            {simulationId && <span style={{ marginLeft: '12px', fontSize: '16px', color: '#667eea' }}>(Viewing Existing)</span>}
+      {/* ── Main layout: left sidebar + 3D viewport + right metrics ── */}
+      <div style={C.body}>
+
+        {/* ──── LEFT: inputs ──── */}
+        <div style={C.left}>
+
+          {/* Pipe Shape selector */}
+          <div style={C.card}>
+            <SecHdr icon="🔷" title="Pipe Shape"/>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+              {(Object.entries(PIPE_SHAPES) as [PipeShape, typeof PIPE_SHAPES[PipeShape]][]).map(([key, sh]) => (
+                <button key={key} onClick={()=>setPipeShape(key)} disabled={isViewing}
+                  style={{ padding:'10px 8px', borderRadius:'10px', border:`1px solid ${pipeShape===key?'rgba(100,160,255,0.6)':'rgba(80,120,200,0.2)'}`, background: pipeShape===key?'rgba(80,140,255,0.15)':'rgba(10,20,40,0.4)', color: pipeShape===key?'#a0c4ff':'rgba(160,180,220,0.6)', fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:isViewing?'not-allowed':'pointer', transition:'all 0.2s', display:'flex', flexDirection:'column', alignItems:'center', gap:'4px' }}>
+                  <span style={{ fontSize:'18px' }}>{sh.icon}</span>
+                  <span>{sh.label}</span>
+                  <span style={{ fontSize:'9px', opacity:0.6 }}>{sh.description}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <div style={styles.heroSubtitle}>
-            {simulationId 
-              ? 'You are viewing an existing simulation. To create a new one, go back to the dashboard.'
-              : 'Enter pipe + air + flow conditions, then review a live (client-side) realistic preview. Your JSON is still sent to the backend `POST /simulations`.'}
+
+          {/* Colour mode */}
+          <div style={C.card}>
+            <SecHdr icon="🎨" title="Visualisation Mode"/>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+              {(['pressure','velocity','friction','material'] as const).map(m => (
+                <button key={m} onClick={()=>setColorMode(m)}
+                  style={{ padding:'9px 6px', borderRadius:'9px', border:`1px solid ${colorMode===m?'rgba(100,160,255,0.6)':'rgba(80,120,200,0.2)'}`, background: colorMode===m?'rgba(80,140,255,0.15)':'rgba(10,20,40,0.4)', color: colorMode===m?'#a0c4ff':'rgba(160,180,220,0.6)', fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        <div style={styles.grid}>
-          <div style={styles.card}>
-            <h2 style={styles.title}>Run Simulation</h2>
-            <p style={styles.subtitle}>
-              Enter pipe + air + flow parameters. The backend receives the computed JSON automatically.
-            </p>
-
-            <div style={styles.formRow}>
-              <label style={styles.label}>Simulation name</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Ventilation - Baseline"
-                style={styles.input}
-                readOnly={!!simulationId}
-                disabled={!!simulationId}
-              />
-            </div>
-
-            <div style={styles.section}>
-              <div style={styles.sectionHeader}>Pipe Geometry</div>
-
-              <div style={styles.twoCols}>
-                  <RangeField
-                    label="Length (m)"
-                    value={pipeLengthM}
-                    min={0.5}
-                    max={30}
-                    step={0.1}
-                    formatValue={(v) => v.toFixed(1)}
-                    onChange={(v) => setPipeLengthM(v)}
-                    styles={styles}
-                  />
-                  <RangeField
-                    label="Inner diameter (m)"
-                    value={pipeInnerDiameterM}
-                    min={0.05}
-                    max={0.8}
-                    step={0.001}
-                    formatValue={(v) => v.toFixed(3)}
-                    onChange={(v) => setPipeInnerDiameterM(v)}
-                    styles={styles}
-                  />
+          {/* Particle Colors */}
+          <div style={C.card}>
+            <SecHdr icon="✨" title="Particle Effects"/>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              <div>
+                <span style={{ ...fld.label, display:'block', marginBottom:'6px' }}>Color Scheme</span>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                  {(['rainbow','blue','fire','cyan','purple'] as const).map(scheme => (
+                    <button key={scheme} onClick={()=>setParticleColorScheme(scheme)}
+                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleColorScheme===scheme?'rgba(100,160,255,0.6)':'rgba(80,120,200,0.2)'}`, background: particleColorScheme===scheme?'rgba(80,140,255,0.15)':'rgba(10,20,40,0.4)', color: particleColorScheme===scheme?'#a0c4ff':'rgba(160,180,220,0.6)', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                      {scheme}
+                    </button>
+                  ))}
+                </div>
               </div>
+              <div>
+                <span style={{ ...fld.label, display:'block', marginBottom:'6px' }}>Particle Size</span>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'6px' }}>
+                  {(['small','medium','large'] as const).map(size => (
+                    <button key={size} onClick={()=>setParticleSize(size)}
+                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleSize===size?'rgba(100,160,255,0.6)':'rgba(80,120,200,0.2)'}`, background: particleSize===size?'rgba(80,140,255,0.15)':'rgba(10,20,40,0.4)', color: particleSize===size?'#a0c4ff':'rgba(160,180,220,0.6)', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
 
-              <div style={styles.twoCols}>
-                <div style={styles.formRowSmall}>
-                  <label style={styles.labelSm}>Material</label>
-                  <select
-                    value={pipeMaterial}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setPipeMaterial(next);
-                      const roughness = materialRoughnessM[next];
-                      if (typeof roughness === 'number') setPipeAbsoluteRoughnessM(roughness);
-                    }}
-                    style={styles.input}
-                  >
-                    {Object.keys(materialRoughnessM).map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
+          {/* Pipe Geometry */}
+          <div style={C.card}>
+            <SecHdr icon="⌀" title="Pipe Geometry"/>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              <Field label="Length" value={pipeLengthM} unit="m" min={0.5} max={1000} step={0.5} onChange={v=>setPipeLengthM(Number(v))} description="Total pipe run" readOnly={isViewing}/>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                <Field label="Inner Ø" value={pipeInnerDiameterM} unit="m" min={0.001} max={5} step={0.001} onChange={v=>setPipeInnerDiameterM(Number(v))} readOnly={isViewing}/>
+                <Field label="Outer Ø" value={pipeOuterDiameterM} unit="m" min={0.002} max={5.5} step={0.001} onChange={v=>setPipeOuterDiameterM(Number(v))} readOnly={isViewing}/>
+              </div>
+              <Field label="Roughness ε" value={pipeAbsoluteRoughnessM} unit="m" min={0} max={0.01} step={0.000001} onChange={v=>setPipeAbsoluteRoughnessM(Number(v))} description="Absolute roughness" readOnly={isViewing}/>
+              <div>
+                <span style={{ ...fld.label, display:'block', marginBottom:'4px' }}>Material</span>
+                <div style={{ position:'relative' }}>
+                  <select value={pipeMaterial} onChange={e=>setPipeMaterial(e.target.value)} disabled={isViewing}
+                    style={{ ...C.sel, ...(isViewing?{opacity:0.5,cursor:'not-allowed'}:{}) }}>
+                    {Object.entries(MATERIALS).map(([k,m])=><option key={k} value={k}>{m.label}</option>)}
                   </select>
+                  <span style={C.arr}>▾</span>
                 </div>
-                <div style={styles.formRowSmall}>
-                  <label style={styles.labelSm}>Abs. roughness (m)</label>
-                  <input
-                    type="number"
-                    step="0.000001"
-                    min="0"
-                    value={pipeAbsoluteRoughnessM}
-                    onChange={(e) => setPipeAbsoluteRoughnessM(parseFloat(e.target.value))}
-                    style={styles.input}
-                  />
-                </div>
-              </div>
-
-              <div style={styles.note}>
-                Roughness is used for friction factor (Darcy-Weisbach).
               </div>
             </div>
+          </div>
 
-            <div style={styles.section}>
-              <div style={styles.sectionHeader}>Air Properties</div>
-
-              <div style={styles.twoCols}>
-                <div style={styles.formRowSmall}>
-                  <label style={styles.labelSm}>Mode</label>
-                  <select
-                    value={airPropertyMode}
-                    onChange={(e) => setAirPropertyMode(e.target.value as any)}
-                    style={styles.input}
-                  >
-                    <option value="assume_tp">Assume from Temperature/Pressure</option>
-                    <option value="explicit">Use Explicit Density/Viscosity</option>
-                  </select>
-                </div>
-                <RangeField
-                  label="Dynamic viscosity (Pa·s)"
-                  value={airDynamicViscosityPaS}
-                  min={1e-6}
-                  max={5e-5}
-                  step={1e-7}
-                  disabled={airPropertyMode !== 'explicit'}
-                  formatValue={(v) => v.toExponential(2)}
-                  onChange={(v) => setAirDynamicViscosityPaS(v)}
-                  styles={styles}
-                />
-              </div>
-
-              <div style={styles.twoCols}>
-                <RangeField
-                  label="Temperature (C)"
-                  value={airTemperatureC}
-                  min={-10}
-                  max={60}
-                  step={0.1}
-                  disabled={airPropertyMode !== 'assume_tp'}
-                  formatValue={(v) => v.toFixed(1)}
-                  onChange={(v) => setAirTemperatureC(v)}
-                  styles={styles}
-                />
-                <RangeField
-                  label="Pressure (Pa)"
-                  value={airPressurePa}
-                  min={50000}
-                  max={200000}
-                  step={500}
-                  disabled={airPropertyMode !== 'assume_tp'}
-                  formatValue={(v) => Math.round(v).toLocaleString()}
-                  onChange={(v) => setAirPressurePa(v)}
-                  styles={styles}
-                />
-              </div>
-
-              <RangeField
-                label="Density (kg/m³)"
-                value={airDensityKgM3}
-                min={0.5}
-                max={2.0}
-                step={0.001}
-                disabled={airPropertyMode !== 'explicit'}
-                formatValue={(v) => v.toFixed(3)}
-                onChange={(v) => setAirDensityKgM3(v)}
-                styles={styles}
-              />
+          {/* Air + Flow */}
+          <div style={C.card}>
+            <SecHdr icon="🌡" title="Air Properties"/>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+              <Field label="Temp" value={airTemperatureC} unit="°C" min={-40} max={200} step={1} onChange={v=>setAirTemperatureC(Number(v))} readOnly={isViewing}/>
+              <Field label="Pressure" value={airPressurePa} unit="Pa" min={50000} max={500000} step={100} onChange={v=>setAirPressurePa(Number(v))} readOnly={isViewing}/>
             </div>
+            <div style={{ marginTop:'8px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+              <div style={C.pill}><span style={C.pillL}>Density</span><span style={C.pillV}>{computed.density.toFixed(4)}<small> kg/m³</small></span></div>
+              <div style={C.pill}><span style={C.pillL}>Viscosity</span><span style={C.pillV}>{(computed.viscosity*1e5).toFixed(3)}<small> ×10⁻⁵</small></span></div>
+            </div>
+          </div>
 
-            <div style={styles.section}>
-              <div style={styles.sectionHeader}>Flow Conditions</div>
-
-              <div style={styles.twoCols}>
-                <RangeField
-                  label="Flow rate (m³/s)"
-                  value={volumetricFlowRateM3S}
-                  min={0.01}
-                  max={2.5}
-                  step={0.001}
-                  formatValue={(v) => v.toFixed(3)}
-                  onChange={(v) => setVolumetricFlowRateM3S(v)}
-                  styles={styles}
-                />
-                <div style={styles.formRowSmall}>
-                  <label style={styles.labelSm}>Velocity profile model</label>
-                  <select value={velocityProfileMode} onChange={(e) => setVelocityProfileMode(e.target.value as any)} style={styles.input}>
+          <div style={C.card}>
+            <SecHdr icon="💨" title="Flow Conditions"/>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              <Field label="Flow Rate Q" value={volumetricFlowRateM3S} unit="m³/s" min={0.0001} max={100} step={0.001} onChange={v=>setVolumetricFlowRateM3S(Number(v))} readOnly={isViewing}/>
+              <Field label="Minor Loss K" value={minorLossKTotal} unit="—" min={0} max={10} step={0.1} onChange={v=>setMinorLossKTotal(Number(v))} readOnly={isViewing||!includeMinorLosses}/>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                <input type="checkbox" id="incl" checked={includeMinorLosses} disabled={isViewing} onChange={e=>setIncludeMinorLosses(e.target.checked)} style={{ accentColor:'#667eea', width:'14px', height:'14px' }}/>
+                <label htmlFor="incl" style={{ fontSize:'10px', fontFamily:'"IBM Plex Mono"', color:'rgba(200,210,230,0.6)' }}>Include minor losses</label>
+              </div>
+              <div>
+                <span style={{ ...fld.label, display:'block', marginBottom:'4px' }}>Velocity Profile</span>
+                <div style={{ position:'relative' }}>
+                  <select value={velocityProfileMode} onChange={e=>setVelocityProfileMode(e.target.value as any)} disabled={isViewing}
+                    style={{ ...C.sel, ...(isViewing?{opacity:0.5}:{}) }}>
                     <option value="auto_by_re">Auto (by Reynolds)</option>
                     <option value="laminar">Laminar (parabolic)</option>
                     <option value="turbulent">Turbulent (1/7 power)</option>
                   </select>
+                  <span style={C.arr}>▾</span>
                 </div>
               </div>
-
-              <div style={styles.twoCols}>
-                <RangeField
-                  label="Minor losses (K total)"
-                  value={minorLossKTotal}
-                  min={0}
-                  max={10}
-                  step={0.05}
-                  disabled={!includeMinorLosses}
-                  formatValue={(v) => v.toFixed(2)}
-                  onChange={(v) => setMinorLossKTotal(v)}
-                  styles={styles}
-                />
-                <div style={styles.formRowSmall}>
-                  <label style={styles.labelSm}>Include minor losses</label>
-                  <label style={styles.checkboxRow}>
-                    <input
-                      type="checkbox"
-                      checked={includeMinorLosses}
-                      onChange={(e) => setIncludeMinorLosses(e.target.checked)}
-                    />
-                    <span style={styles.checkboxText}>Yes</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div style={styles.section}>
-              <div style={styles.sectionHeader}>Cross-Section Sampling</div>
-
-              <div style={styles.twoCols}>
-                <RangeField
-                  label="Samples across radius"
-                  value={crossSectionSamples}
-                  min={10}
-                  max={120}
-                  step={1}
-                  formatValue={(v) => String(Math.round(v))}
-                  onChange={(v) => setCrossSectionSamples(Math.round(v))}
-                  styles={styles}
-                />
-              </div>
-            </div>
-
-            {error ? <div style={styles.error}>{error}</div> : null}
-
-            <div style={styles.actions}>
-              <button onClick={submit} style={styles.primaryButton} disabled={submitting || !!simulationId}>
-                {simulationId ? 'Viewing Existing Simulation' : submitting ? 'Running...' : 'Run'}
-              </button>
+              <Field label="Cross-Section Samples" value={crossSectionSamples} min={10} max={120} step={1} onChange={v=>setCrossSectionSamples(Math.round(Number(v)))} readOnly={isViewing}/>
             </div>
           </div>
 
-          <div style={styles.card}>
-            <h3 style={styles.sectionTitle}>Live Preview (Client-Side)</h3>
-            {!computed.isValid ? (
-              <div style={styles.previewPlaceholder}>Enter valid pipe/air/flow inputs to see results.</div>
-            ) : (
-              <>
-                <div style={styles.realtimeCanvasWrap}>
-                  <RealTimeTubeSim
-                    diameterM={computed.D}
-                    lengthM={computed.L}
-                    regime={computed.flowRegime}
-                    velocityMps={computed.Vavg}
-                    pressureDropPa={computed.pressureDropPa}
-                    profileMode={
-                      computed.selectedProfile || (computed.flowRegime === 'laminar' ? 'laminar' : 'turbulent')
-                    }
-                  />
-                </div>
-                <div style={styles.metricsGrid}>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Average velocity</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(computed.Vavg) ? computed.Vavg.toFixed(4) : '—'} m/s
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Reynolds number</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(computed.Re) ? computed.Re.toFixed(0) : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Friction factor (Darcy)</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(computed.frictionFactor) ? computed.frictionFactor.toFixed(5) : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Pressure drop</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(computed.pressureDropPa)
-                        ? `${(computed.pressureDropPa / 1000).toFixed(3)} kPa`
-                        : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Flow regime</div>
-                    <div style={styles.metricValue}>{computed.flowRegime}</div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Velocity profile</div>
-                    <div style={styles.metricValue}>
-                      {computed.selectedProfile === 'laminar' ? 'Parabolic' : '1/7 power'}
-                    </div>
-                  </div>
-                </div>
+        </div>{/* end LEFT */}
 
-                <div style={styles.chartWrap}>
-                  <div style={styles.chartTitle}>Velocity across pipe cross-section</div>
-                  <RadialVelocityChart
-                    profile={computed.velocityProfile}
-                    title="u(r)"
-                    subtitle={`samples=${computed.n}`}
-                  />
-                  <div style={styles.chartFoot}>
-                    r=0 (center) to r=R (wall). Profile is scaled to match the computed average velocity.
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+        {/* ──── CENTRE: 3D viewport ──── */}
+        <div style={C.viewport}>
+          <ThreePipeScene {...sceneProps}/>
         </div>
 
-        {result ? (
-          <div style={styles.card}>
-            <h3 style={styles.sectionTitle}>Latest Result</h3>
-
-            {localPreview ? (
-              <>
-                <div style={styles.pipeVizWrap}>
-                  <div style={styles.pipeVizHeader}>
-                    <div style={styles.pipeVizTitle}>Pipe Visual</div>
-                    <div style={styles.pipeVizMeta}>
-                      u={localPreview?.metrics?.average_velocity_m_s
-                        ? Number(localPreview.metrics.average_velocity_m_s).toFixed(2)
-                        : '—'}{' '}
-                      m/s • D=
-                      {localPreview?.inputs?.pipe?.inner_diameter_m
-                        ? Number(localPreview.inputs.pipe.inner_diameter_m).toFixed(3)
-                        : '—'}{' '}
-                      m
-                    </div>
-                  </div>
-                  <PipeVisualization
-                    diameterM={Number(localPreview?.inputs?.pipe?.inner_diameter_m) || 0}
-                    lengthM={Number(localPreview?.inputs?.pipe?.length_m) || 0}
-                    regime={localPreview?.metrics?.flow_regime || 'unknown'}
-                    velocityMps={Number(localPreview?.metrics?.average_velocity_m_s) || 0}
-                    pressureDropPa={Number(localPreview?.metrics?.pressure_drop_Pa) || 0}
-                  />
-                </div>
-
-                <div style={styles.metricsGrid}>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Average velocity</div>
-                    <div style={styles.metricValue}>
-                      {Number(localPreview?.metrics?.average_velocity_m_s).toFixed(4)} m/s
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Reynolds number</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(Number(localPreview?.metrics?.reynolds_number))
-                        ? Number(localPreview.metrics.reynolds_number).toFixed(0)
-                        : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Friction factor (Darcy)</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(Number(localPreview?.metrics?.friction_factor_darcy))
-                        ? Number(localPreview.metrics.friction_factor_darcy).toFixed(5)
-                        : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Pressure drop</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(Number(localPreview?.metrics?.pressure_drop_Pa))
-                        ? `${(Number(localPreview.metrics.pressure_drop_Pa) / 1000).toFixed(3)} kPa`
-                        : '—'}
-                    </div>
-                  </div>
-                </div>
-
-                {Array.isArray(localPreview?.velocity_profile) && localPreview.velocity_profile.length > 0 ? (
-                  <div style={styles.chartWrap}>
-                    <div style={styles.chartTitle}>Velocity across pipe cross-section</div>
-                    <RadialVelocityChart
-                      profile={localPreview.velocity_profile}
-                      title="u(r)"
-                      subtitle={`samples=${localPreview?.inputs?.cross_section?.samples || localPreview.velocity_profile.length}`}
-                    />
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-
-            {backendResponse?.results ? (
-              <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: '#1f2a44', marginBottom: 8 }}>
-                  Backend output (placeholder)
-                </div>
-                <div style={styles.metricsGrid}>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Mean</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(Number(backendResponse.results.mean)) ? Number(backendResponse.results.mean).toFixed(4) : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Median</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(Number(backendResponse.results.median)) ? Number(backendResponse.results.median).toFixed(4) : '—'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : null}
+        {/* ──── RIGHT: metrics ──── */}
+        <div style={C.right}>
+          <div style={C.card}>
+            <SecHdr icon="⚡" title="Live Metrics"/>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              <Metric label="Avg Velocity" value={computed.velocity.toFixed(3)} unit="m/s" hi="#4fbbf7"/>
+              <Metric label="Reynolds No."
+                value={computed.reynolds < 1000 ? computed.reynolds.toFixed(1) : (computed.reynolds/1000).toFixed(2)+'k'}
+                hi={reColor}/>
+              <Metric label="Flow Regime"
+                value={computed.flowRegime.charAt(0).toUpperCase()+computed.flowRegime.slice(1)}
+                unit={computed.selectedProfile==='laminar'?'Parabolic profile':'1/7 Power Law'}
+                hi={reColor}/>
+              <Metric label="Friction Factor f" value={computed.frictionFactor.toFixed(5)} unit="Darcy–Weisbach"/>
+              <Metric label="Total Δp" value={(computed.pressureDrop/1000).toFixed(4)} unit="kPa" hi="#f7614f"/>
+              <Metric label="Friction Δp" value={(computed.frictionDrop/1000).toFixed(4)} unit="kPa"/>
+              <Metric label="Minor Loss Δp" value={(computed.minorDrop/1000).toFixed(4)} unit="kPa"/>
+              <Metric label="Mass Flow ṁ" value={computed.massFlow.toFixed(4)} unit="kg/s"/>
+              <Metric label="Wall Shear τ" value={computed.wallShear.toFixed(4)} unit="Pa"/>
+            </div>
           </div>
-        ) : null}
-      </main>
+
+          {backendResult?.results && (
+            <div style={C.card}>
+              <SecHdr icon="🖥" title="Backend Output"/>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {typeof backendResult.results.mean !== 'undefined' && <Metric label="Mean" value={Number(backendResult.results.mean).toFixed(4)}/>}
+                {typeof backendResult.results.median !== 'undefined' && <Metric label="Median" value={Number(backendResult.results.median).toFixed(4)}/>}
+              </div>
+            </div>
+          )}
+        </div>{/* end RIGHT */}
+
+      </div>{/* end body */}
     </div>
   );
 }
 
-function getSimulationStyles(isDark: boolean): { [key: string]: React.CSSProperties } {
-  return {
-    container: {
-      minHeight: '100vh',
-      backgroundColor: isDark ? '#0f1419' : '#f8f9fa',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    },
-    nav: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: '20px 40px',
-      backgroundColor: isDark ? '#1a1f2e' : 'white',
-      boxShadow: isDark ? '0 2px 20px rgba(0,0,0,0.3)' : '0 2px 10px rgba(0,0,0,0.05)',
-      borderBottom: isDark ? '1px solid #2d3748' : 'none',
-    },
-    navLeft: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '12px',
-    },
-    logo: {
-      fontSize: '24px',
-      fontWeight: 'bold',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      WebkitBackgroundClip: 'text',
-      WebkitTextFillColor: 'transparent',
-      margin: 0,
-    },
-    badge: {
-      fontSize: '12px',
-      padding: '6px 10px',
-      borderRadius: '999px',
-      backgroundColor: isDark ? '#667eea20' : '#eef2ff',
-      color: isDark ? '#a5b4fc' : '#3949ab',
-      fontWeight: 700,
-      border: isDark ? '1px solid #667eea40' : 'none',
-    },
-    themeToggle: {
-      width: '40px',
-      height: '40px',
-      borderRadius: '50%',
-      border: 'none',
-      backgroundColor: isDark ? '#2d3748' : '#f3f4f6',
-      cursor: 'pointer',
-      fontSize: '18px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      transition: 'all 0.2s ease',
-      boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
-    } as React.CSSProperties,
-    backButton: {
-      padding: '10px 14px',
-      backgroundColor: isDark ? '#2d3748' : '#1a1a1a',
-      color: 'white',
-      border: 'none',
-      borderRadius: '10px',
-      cursor: 'pointer',
-      fontSize: '14px',
-      fontWeight: 700,
-    },
-    main: {
-      padding: '40px',
-      maxWidth: '1000px',
-      margin: '0 auto',
-    },
-    card: {
-      backgroundColor: isDark ? '#1a1f2e' : 'white',
-      padding: '28px',
-      borderRadius: '12px',
-      boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 2px 10px rgba(0,0,0,0.05)',
-      marginBottom: '20px',
-      border: isDark ? '1px solid #2d3748' : 'none',
-    },
-    title: {
-      fontSize: '26px',
-      margin: '0 0 8px 0',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-    },
-    subtitle: {
-      fontSize: '14px',
-      margin: '0 0 22px 0',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      lineHeight: 1.6,
-    },
-    sectionTitle: {
-      fontSize: '18px',
-      fontWeight: 800,
-      margin: '0 0 12px 0',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-    },
-    formRow: {
-      marginBottom: '18px',
-    },
-    label: {
-      display: 'block',
-      fontSize: '13px',
-      fontWeight: 700,
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-      marginBottom: '8px',
-    },
-    input: {
-      width: '100%',
-      padding: '12px 14px',
-      border: isDark ? '1px solid #4a5568' : '1px solid #dee2e6',
-      borderRadius: '10px',
-      fontSize: '14px',
-      outline: 'none',
-      backgroundColor: isDark ? '#2d3748' : 'white',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-    },
-    textarea: {
-      minHeight: '240px',
-      padding: '12px 14px',
-      border: isDark ? '1px solid #4a5568' : '1px solid #dee2e6',
-      borderRadius: '10px',
-      fontSize: '13px',
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-      outline: 'none',
-      resize: 'vertical' as const,
-      backgroundColor: isDark ? '#2d3748' : 'white',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-    },
-    hint: {
-      marginTop: '8px',
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-    },
-    actions: {
-      display: 'flex',
-      justifyContent: 'flex-end',
-      marginTop: '10px',
-    },
-    primaryButton: {
-      padding: '12px 18px',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      color: 'white',
-      border: 'none',
-      borderRadius: '10px',
-      cursor: 'pointer',
-      fontSize: '14px',
-      fontWeight: 800,
-    },
-    error: {
-      padding: '12px 14px',
-      borderRadius: '10px',
-      backgroundColor: isDark ? '#7f1d1d20' : '#ffebee',
-      color: isDark ? '#fca5a5' : '#c62828',
-      border: isDark ? '1px solid #7f1d1d40' : '1px solid #ffcdd2',
-      fontSize: '13px',
-      fontWeight: 600,
-      marginBottom: '10px',
-    },
-    pre: {
-      margin: 0,
-      padding: '14px',
-      backgroundColor: '#0b1020',
-      color: '#e6edf3',
-      borderRadius: '12px',
-      overflowX: 'auto' as const,
-      fontSize: '12px',
-      lineHeight: 1.5,
-    },
-    hero: {
-      padding: '26px 28px',
-      borderRadius: '16px',
-      background: isDark 
-        ? 'linear-gradient(135deg, rgba(102,126,234,0.15) 0%, rgba(118,75,162,0.15) 100%)'
-        : 'linear-gradient(135deg, rgba(102,126,234,0.12) 0%, rgba(118,75,162,0.12) 100%)',
-      border: isDark ? '1px solid #2d3748' : '1px solid rgba(102,126,234,0.18)',
-      boxShadow: isDark ? '0 2px 10px rgba(0,0,0,0.2)' : '0 2px 10px rgba(0,0,0,0.04)',
-      marginBottom: '18px',
-    },
-    heroTitle: {
-      fontSize: '22px',
-      fontWeight: 900,
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-      marginBottom: '6px',
-    },
-    heroSubtitle: {
-      fontSize: '13px',
-      color: isDark ? '#a0aec0' : '#5e6a7a',
-      lineHeight: 1.6,
-      maxWidth: 840,
-    },
-    grid: {
-      display: 'grid',
-      gridTemplateColumns: '520px 1fr',
-      gap: '18px',
-    },
-    section: {
-      marginTop: '18px',
-      backgroundColor: isDark ? '#151a27' : '#fcfcff',
-      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
-      borderRadius: '12px',
-      padding: '14px',
-    },
-    sectionHeader: {
-      fontSize: '13px',
-      fontWeight: 900,
-      color: isDark ? '#f7fafc' : '#1f2a44',
-      marginBottom: '12px',
-    },
-    twoCols: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: '12px',
-    },
-    formRowSmall: {
-      marginBottom: '10px',
-    },
-    labelSm: {
-      display: 'block',
-      fontSize: '12px',
-      fontWeight: 800,
-      color: isDark ? '#f7fafc' : '#2a3553',
-      marginBottom: '6px',
-    },
-    note: {
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      marginTop: '4px',
-      lineHeight: 1.5,
-    },
-    labelRow: {
-      display: 'flex',
-      alignItems: 'baseline' as const,
-      justifyContent: 'space-between',
-      gap: '12px',
-      marginBottom: '6px',
-    },
-    smallHint: {
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      fontWeight: 700,
-    },
-    checkboxRow: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px',
-      paddingTop: '8px',
-    },
-    checkboxText: {
-      fontSize: '13px',
-      color: isDark ? '#f7fafc' : '#2a3553',
-      fontWeight: 700,
-    },
-    previewPlaceholder: {
-      padding: '14px 0',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      fontSize: '13px',
-      lineHeight: 1.6,
-    },
-    metricsGrid: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-      gap: '10px',
-      marginTop: '10px',
-      marginBottom: '12px',
-    },
-    metric: {
-      backgroundColor: isDark ? '#151a27' : '#f8f9ff',
-      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
-      borderRadius: '12px',
-      padding: '12px',
-    },
-    metricLabel: {
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      fontWeight: 800,
-      marginBottom: '6px',
-    },
-    metricValue: {
-      fontSize: '15px',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-      fontWeight: 900,
-      lineHeight: 1.2,
-      wordBreak: 'break-word' as const,
-    },
-    chartWrap: {
-      backgroundColor: isDark ? '#151a27' : '#fcfcff',
-      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
-      borderRadius: '12px',
-      padding: '14px',
-      marginTop: '12px',
-    },
-    chartTitle: {
-      fontSize: '13px',
-      fontWeight: 900,
-      color: isDark ? '#f7fafc' : '#1f2a44',
-      marginBottom: '8px',
-    },
-    chartFoot: {
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      marginTop: '8px',
-      lineHeight: 1.5,
-    },
-    pipeVizWrap: {
-      backgroundColor: isDark ? '#151a27' : '#fcfcff',
-      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
-      borderRadius: '12px',
-      padding: '14px',
-      marginTop: '8px',
-    },
-    pipeVizHeader: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      gap: 12,
-      marginBottom: '10px',
-      alignItems: 'baseline' as const,
-    },
-    pipeVizTitle: {
-      fontSize: '13px',
-      fontWeight: 900,
-      color: isDark ? '#f7fafc' : '#1f2a44',
-    },
-    pipeVizMeta: {
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      fontWeight: 800,
-      textAlign: 'right' as const,
-    },
-    pipeVizSvg: {
-      width: '100%',
-      height: 'auto',
-      display: 'block',
-    },
-    realtimeCanvasWrap: {
-      background: isDark 
-        ? 'linear-gradient(180deg, rgba(11,16,32,0.85) 0%, rgba(11,16,32,0.35) 100%)'
-        : 'linear-gradient(180deg, rgba(11,16,32,0.75) 0%, rgba(11,16,32,0.25) 100%)',
-      borderRadius: '14px',
-      border: isDark ? '1px solid rgba(102,126,234,0.3)' : '1px solid rgba(102,126,234,0.22)',
-      overflow: 'hidden' as const,
-      height: '360px',
-      position: 'relative' as const,
-      marginTop: '8px',
-    },
-    sliderBlock: {
-      padding: '12px 12px',
-      borderRadius: '12px',
-      backgroundColor: isDark ? '#151a27' : '#fcfcff',
-      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
-      marginBottom: '12px',
-    },
-    sliderTop: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'baseline' as const,
-      gap: 12,
-      marginBottom: 8,
-    },
-    sliderLabel: {
-      fontSize: '12px',
-      fontWeight: 900,
-      color: isDark ? '#f7fafc' : '#1f2a44',
-    },
-    sliderValue: {
-      fontSize: '12px',
-      fontWeight: 900,
-      color: isDark ? '#a0aec0' : '#6c757d',
-    },
-    sliderRange: {
-      width: '100%',
-    },
-  };
-}
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    minHeight: '100vh',
-    backgroundColor: '#f8f9fa',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  nav: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px 40px',
-    backgroundColor: 'white',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
-  },
-  navLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  logo: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    margin: 0,
-  },
-  badge: {
-    fontSize: '12px',
-    padding: '6px 10px',
-    borderRadius: '999px',
-    backgroundColor: '#eef2ff',
-    color: '#3949ab',
-    fontWeight: 700,
-  },
-  themeToggle: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    border: 'none',
-    backgroundColor: '#f3f4f6',
-    cursor: 'pointer',
-    fontSize: '18px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-  } as React.CSSProperties,
-  backButton: {
-    padding: '10px 14px',
-    backgroundColor: '#1a1a1a',
-    color: 'white',
-    border: 'none',
-    borderRadius: '10px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: 700,
-  },
-  main: {
-    padding: '40px',
-    maxWidth: '1000px',
-    margin: '0 auto',
-  },
-  card: {
-    backgroundColor: 'white',
-    padding: '28px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
-    marginBottom: '20px',
-  },
-  title: {
-    fontSize: '26px',
-    margin: '0 0 8px 0',
-    color: '#1a1a1a',
-  },
-  subtitle: {
-    fontSize: '14px',
-    margin: '0 0 22px 0',
-    color: '#6c757d',
-    lineHeight: 1.6,
-  },
-  sectionTitle: {
-    fontSize: '18px',
-    fontWeight: 800,
-    margin: '0 0 12px 0',
-    color: '#1a1a1a',
-  },
-  formRow: {
-    marginBottom: '18px',
-  },
-  label: {
-    display: 'block',
-    fontSize: '13px',
-    fontWeight: 700,
-    color: '#1a1a1a',
-    marginBottom: '8px',
-  },
-  input: {
-    width: '100%',
-    padding: '12px 14px',
-    border: '1px solid #dee2e6',
-    borderRadius: '10px',
-    fontSize: '14px',
-    outline: 'none',
-  },
-  textarea: {
-    width: '100%',
-    minHeight: '240px',
-    padding: '12px 14px',
-    border: '1px solid #dee2e6',
-    borderRadius: '10px',
-    fontSize: '13px',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    outline: 'none',
-    resize: 'vertical',
-  },
-  hint: {
-    marginTop: '8px',
-    fontSize: '12px',
-    color: '#6c757d',
-  },
-  actions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    marginTop: '10px',
-  },
-  primaryButton: {
-    padding: '12px 18px',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    color: 'white',
-    border: 'none',
-    borderRadius: '10px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: 800,
-  },
-  error: {
-    padding: '12px 14px',
-    borderRadius: '10px',
-    backgroundColor: '#ffebee',
-    color: '#c62828',
-    border: '1px solid #ffcdd2',
-    fontSize: '13px',
-    fontWeight: 600,
-    marginBottom: '10px',
-  },
-  pre: {
-    margin: 0,
-    padding: '14px',
-    backgroundColor: '#0b1020',
-    color: '#e6edf3',
-    borderRadius: '12px',
-    overflowX: 'auto',
-    fontSize: '12px',
-    lineHeight: 1.5,
-  },
-  hero: {
-    padding: '26px 28px',
-    borderRadius: '16px',
-    background:
-      'linear-gradient(135deg, rgba(102,126,234,0.12) 0%, rgba(118,75,162,0.12) 100%)',
-    border: '1px solid rgba(102,126,234,0.18)',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
-    marginBottom: '18px',
-  },
-  heroTitle: {
-    fontSize: '22px',
-    fontWeight: 900,
-    color: '#1a1a1a',
-    marginBottom: '6px',
-  },
-  heroSubtitle: {
-    fontSize: '13px',
-    color: '#5e6a7a',
-    lineHeight: 1.6,
-    maxWidth: 840,
-  },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: '520px 1fr',
-    gap: '18px',
-  },
-  section: {
-    marginTop: '18px',
-    backgroundColor: '#fcfcff',
-    border: '1px solid #eef0f6',
-    borderRadius: '12px',
-    padding: '14px',
-  },
-  sectionHeader: {
-    fontSize: '13px',
-    fontWeight: 900,
-    color: '#1f2a44',
-    marginBottom: '12px',
-  },
-  twoCols: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '12px',
-  },
-  formRowSmall: {
-    marginBottom: '10px',
-  },
-  labelSm: {
-    display: 'block',
-    fontSize: '12px',
-    fontWeight: 800,
-    color: '#2a3553',
-    marginBottom: '6px',
-  },
-  note: {
-    fontSize: '12px',
-    color: '#6c757d',
-    marginTop: '4px',
-    lineHeight: 1.5,
-  },
-  labelRow: {
-    display: 'flex',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    gap: '12px',
-    marginBottom: '6px',
-  },
-  smallHint: {
-    fontSize: '12px',
-    color: '#6c757d',
-    fontWeight: 700,
-  },
-  checkboxRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    paddingTop: '8px',
-  },
-  checkboxText: {
-    fontSize: '13px',
-    color: '#2a3553',
-    fontWeight: 700,
-  },
-  previewPlaceholder: {
-    padding: '14px 0',
-    color: '#6c757d',
-    fontSize: '13px',
-    lineHeight: 1.6,
-  },
-  metricsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-    gap: '10px',
-    marginTop: '10px',
-    marginBottom: '12px',
-  },
-  metric: {
-    backgroundColor: '#f8f9ff',
-    border: '1px solid #eef0f6',
-    borderRadius: '12px',
-    padding: '12px',
-  },
-  metricLabel: {
-    fontSize: '12px',
-    color: '#6c757d',
-    fontWeight: 800,
-    marginBottom: '6px',
-  },
-  metricValue: {
-    fontSize: '15px',
-    color: '#1a1a1a',
-    fontWeight: 900,
-    lineHeight: 1.2,
-    wordBreak: 'break-word',
-  },
-  chartWrap: {
-    backgroundColor: '#fcfcff',
-    border: '1px solid #eef0f6',
-    borderRadius: '12px',
-    padding: '14px',
-    marginTop: '12px',
-  },
-  chartTitle: {
-    fontSize: '13px',
-    fontWeight: 900,
-    color: '#1f2a44',
-    marginBottom: '8px',
-  },
-  chartFoot: {
-    fontSize: '12px',
-    color: '#6c757d',
-    marginTop: '8px',
-    lineHeight: 1.5,
-  },
-  pipeVizWrap: {
-    backgroundColor: '#fcfcff',
-    border: '1px solid #eef0f6',
-    borderRadius: '12px',
-    padding: '14px',
-    marginTop: '8px',
-  },
-  pipeVizHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: '10px',
-    alignItems: 'baseline',
-  },
-  pipeVizTitle: {
-    fontSize: '13px',
-    fontWeight: 900,
-    color: '#1f2a44',
-  },
-  pipeVizMeta: {
-    fontSize: '12px',
-    color: '#6c757d',
-    fontWeight: 800,
-    textAlign: 'right',
-  },
-  pipeVizSvg: {
-    width: '100%',
-    height: 'auto',
-    display: 'block',
-  },
-  realtimeCanvasWrap: {
-    background: 'linear-gradient(180deg, rgba(11,16,32,0.75) 0%, rgba(11,16,32,0.25) 100%)',
-    borderRadius: '14px',
-    border: '1px solid rgba(102,126,234,0.22)',
-    overflow: 'hidden',
-    height: '360px',
-    position: 'relative',
-    marginTop: '8px',
-  },
-  sliderBlock: {
-    padding: '12px 12px',
-    borderRadius: '12px',
-    backgroundColor: '#fcfcff',
-    border: '1px solid #eef0f6',
-    marginBottom: '12px',
-  },
-  sliderTop: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    gap: 12,
-    marginBottom: 8,
-  },
-  sliderLabel: {
-    fontSize: '12px',
-    fontWeight: 900,
-    color: '#1f2a44',
-  },
-  sliderValue: {
-    fontSize: '12px',
-    fontWeight: 900,
-    color: '#6c757d',
-  },
-  sliderRange: {
-    width: '100%',
-  },
+const C: Record<string, React.CSSProperties> = {
+  page:     { minHeight:'100vh', height:'100vh', overflow:'hidden', background:'#020c1e', color:'#e8f0ff', fontFamily:'"IBM Plex Mono",monospace', position:'relative', display:'flex', flexDirection:'column' },
+  bg:       { position:'fixed', inset:0, background:'radial-gradient(ellipse 80% 60% at 50% -10%,rgba(30,80,180,0.25) 0%,transparent 70%),radial-gradient(ellipse 50% 40% at 80% 80%,rgba(80,20,160,0.15) 0%,transparent 60%)', pointerEvents:'none', zIndex:0 },
+  gridBg:   { position:'fixed', inset:0, backgroundImage:'linear-gradient(rgba(80,120,200,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(80,120,200,0.04) 1px,transparent 1px)', backgroundSize:'40px 40px', pointerEvents:'none', zIndex:0 },
+  nav:      { position:'relative', zIndex:10, display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 24px', borderBottom:'1px solid rgba(80,120,200,0.15)', background:'rgba(2,12,30,0.85)', backdropFilter:'blur(12px)', flexShrink:0 },
+  backBtn:  { background:'rgba(80,120,200,0.1)', border:'1px solid rgba(80,120,200,0.2)', borderRadius:'8px', color:'rgba(160,200,255,0.7)', fontSize:'12px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'600', padding:'7px 12px', cursor:'pointer' },
+  divider:  { width:'1px', height:'28px', background:'rgba(80,120,200,0.2)' },
+  navTitle: { fontSize:'14px', fontFamily:'"Space Grotesk",sans-serif', fontWeight:'700', color:'#e8f0ff' },
+  navSub:   { fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', color:'rgba(140,170,220,0.4)', marginTop:'1px' },
+  regimeBadge: { display:'flex', alignItems:'center', gap:'8px', padding:'5px 12px', borderRadius:'999px', border:'1px solid', fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', background:'rgba(2,12,30,0.6)', letterSpacing:'0.05em' },
+  saveBtn:  { padding:'8px 18px', background:'linear-gradient(135deg,rgba(80,140,255,0.25),rgba(120,80,220,0.25))', border:'1px solid rgba(100,160,255,0.4)', borderRadius:'9px', color:'#a0c4ff', fontSize:'12px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.3s' },
+  nameBar:  { position:'relative', zIndex:10, padding:'9px 24px', borderBottom:'1px solid rgba(80,120,200,0.08)', background:'rgba(2,12,30,0.5)', display:'flex', alignItems:'center', flexShrink:0 },
+  nameInput:{ background:'transparent', border:'none', borderBottom:'1px solid rgba(80,120,200,0.2)', color:'rgba(200,220,255,0.8)', fontSize:'13px', fontFamily:'"Space Grotesk",sans-serif', fontWeight:'600', padding:'3px 0', outline:'none', width:'320px' },
+  errBanner:{ position:'relative', zIndex:10, padding:'9px 24px', background:'rgba(200,50,50,0.15)', borderBottom:'1px solid rgba(200,80,80,0.3)', color:'#fca5a5', fontSize:'12px', fontFamily:'"IBM Plex Mono",monospace', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 },
+  errClose: { background:'transparent', border:'none', color:'#fca5a5', cursor:'pointer', fontSize:'14px', padding:'0 4px' },
+  body:     { position:'relative', zIndex:10, display:'grid', gridTemplateColumns:'240px 1fr 220px', gap:'0', flex:1, minHeight:0, overflow:'hidden' },
+  left:     { borderRight:'1px solid rgba(80,120,200,0.12)', overflowY:'auto', overflowX:'hidden', padding:'10px', display:'flex', flexDirection:'column', gap:'8px', background:'rgba(2,10,25,0.5)', scrollbarWidth:'thin', scrollbarColor:'rgba(80,120,200,0.3) transparent' } as React.CSSProperties,
+  viewport: { position:'relative', overflow:'hidden', flex:1, minWidth:0, height:'100%', background:'#040a18' },
+  controlsHint: { position:'absolute', bottom:'12px', left:'12px', background:'rgba(8,20,50,0.9)', border:'1px solid rgba(102,126,234,0.3)', borderRadius:'8px', padding:'8px 12px', backdropFilter:'blur(8px)', color:'#e8f0ff', fontSize:'10px', lineHeight:'1.5', zIndex:10, boxShadow:'0 4px 12px rgba(0,0,0,0.3)' } as React.CSSProperties,
+  right:    { borderLeft:'1px solid rgba(80,120,200,0.12)', overflowY:'auto', overflowX:'hidden', padding:'10px', display:'flex', flexDirection:'column', gap:'8px', background:'rgba(2,10,25,0.5)', scrollbarWidth:'thin', scrollbarColor:'rgba(80,120,200,0.3) transparent' } as React.CSSProperties,
+  card:     { background:'rgba(8,20,50,0.65)', border:'1px solid rgba(80,120,200,0.14)', borderRadius:'10px', padding:'10px', backdropFilter:'blur(8px)' },
+  sel:      { width:'100%', padding:'7px 28px 7px 10px', background:'rgba(10,20,40,0.6)', border:'1px solid rgba(80,120,200,0.2)', borderRadius:'8px', color:'#e8f0ff', fontSize:'12px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'600', cursor:'pointer' } as React.CSSProperties,
+  arr:      { position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', color:'rgba(150,180,230,0.4)', fontSize:'12px', pointerEvents:'none' } as React.CSSProperties,
+  pill:     { background:'rgba(0,10,30,0.5)', border:'1px solid rgba(80,120,200,0.12)', borderRadius:'7px', padding:'7px 10px', display:'flex', flexDirection:'column', gap:'2px' } as React.CSSProperties,
+  pillL:    { fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', letterSpacing:'0.1em', textTransform:'uppercase', color:'rgba(140,170,220,0.4)' },
+  pillV:    { fontSize:'12px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'600', color:'rgba(180,210,255,0.7)' },
 };
-
-function RangeField({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  disabled,
-  formatValue,
-  styles,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (next: number) => void;
-  disabled?: boolean;
-  formatValue?: (v: number) => string;
-  styles: { [key: string]: React.CSSProperties };
-}) {
-  const valueText = formatValue ? formatValue(value) : String(value);
-
-  return (
-    <div style={styles.sliderBlock}>
-      <div style={styles.sliderTop}>
-        <div style={styles.sliderLabel}>{label}</div>
-        <div style={styles.sliderValue}>{valueText}</div>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        style={styles.sliderRange}
-        aria-disabled={disabled}
-      />
-    </div>
-  );
-}
-
-function RealTimeTubeSim({
-  diameterM,
-  lengthM,
-  regime,
-  velocityMps,
-  pressureDropPa,
-  profileMode,
-}: {
-  diameterM: number;
-  lengthM: number;
-  regime: string;
-  velocityMps: number;
-  pressureDropPa: number;
-  profileMode: string;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  const paramsRef = useRef({
-    diameterM,
-    lengthM,
-    regime,
-    velocityMps,
-    pressureDropPa,
-    profileMode,
-  });
-
-  useEffect(() => {
-    paramsRef.current = {
-      diameterM,
-      lengthM,
-      regime,
-      velocityMps,
-      pressureDropPa,
-      profileMode,
-    };
-  }, [diameterM, lengthM, regime, velocityMps, pressureDropPa, profileMode]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let raf = 0;
-
-    const resizeObserver = new ResizeObserver(() => {
-      const parent = canvas.parentElement;
-      if (!parent) return;
-      const rect = parent.getBoundingClientRect();
-      const w = Math.max(1, rect.width);
-      const h = Math.max(1, rect.height);
-      canvas.width = Math.floor(w * dpr);
-      canvas.height = Math.floor(h * dpr);
-    });
-
-    const parent = canvas.parentElement;
-    if (parent) resizeObserver.observe(parent);
-
-    const hexToRgb = (hex: string) => {
-      const clean = hex.replace('#', '');
-      const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
-      const n = parseInt(full, 16);
-      const r = (n >> 16) & 255;
-      const g = (n >> 8) & 255;
-      const b = n & 255;
-      return { r, g, b };
-    };
-
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-    const mixRgb = (a: string, b: string, t: number, alpha = 1) => {
-      const A = hexToRgb(a);
-      const B = hexToRgb(b);
-      const r = lerp(A.r, B.r, t);
-      const g = lerp(A.g, B.g, t);
-      const bb = lerp(A.b, B.b, t);
-      return `rgba(${r.toFixed(0)},${g.toFixed(0)},${bb.toFixed(0)},${alpha})`;
-    };
-    const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
-
-    const pointOnQuad = (xA: number, yA: number, xC: number, yC: number, xB: number, yB: number, t: number) => {
-      const u = 1 - t;
-      const x = u * u * xA + 2 * u * t * xC + t * t * xB;
-      const y = u * u * yA + 2 * u * t * yC + t * t * yB;
-      return { x, y };
-    };
-
-    const quadDeriv = (xA: number, yA: number, xC: number, yC: number, xB: number, yB: number, t: number) => {
-      // P'(t) for quadratic Bezier
-      const u = 1 - t;
-      const dx = 2 * u * (xC - xA) + 2 * t * (xB - xC);
-      const dy = 2 * u * (yC - yA) + 2 * t * (yB - yC);
-      return { dx, dy };
-    };
-
-    const draw = (ts: number) => {
-      raf = requestAnimationFrame(draw);
-
-      const { diameterM, lengthM, regime, velocityMps, pressureDropPa, profileMode } = paramsRef.current;
-      const parent = canvas.parentElement;
-      const wCss = parent ? parent.getBoundingClientRect().width : canvas.width / dpr;
-      const hCss = parent ? parent.getBoundingClientRect().height : canvas.height / dpr;
-      const w = Math.max(1, wCss);
-      const h = Math.max(1, hCss);
-
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, w, h);
-
-      // Background
-      const bg = ctx.createLinearGradient(0, 0, 0, h);
-      bg.addColorStop(0, 'rgba(2,6,23,0.90)');
-      bg.addColorStop(1, 'rgba(2,6,23,0.35)');
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, w, h);
-
-      // Subtle grid
-      ctx.globalAlpha = 0.25;
-      ctx.strokeStyle = 'rgba(102,126,234,0.25)';
-      ctx.lineWidth = 1;
-      const gridStep = Math.max(30, Math.round(w / 18));
-      for (let gx = 0; gx <= w; gx += gridStep) {
-        ctx.beginPath();
-        ctx.moveTo(gx, 0);
-        ctx.lineTo(gx, h);
-        ctx.stroke();
-      }
-      for (let gy = 0; gy <= h; gy += gridStep) {
-        ctx.beginPath();
-        ctx.moveTo(0, gy);
-        ctx.lineTo(w, gy);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-
-      const intensity = clamp01((velocityMps - 0.03) / 3.5); // 0..1
-      const dpKPa = Math.max(0, pressureDropPa / 1000);
-      const dpNorm = clamp01(dpKPa / 50);
-
-      const regimeColor =
-        regime === 'laminar'
-          ? '#5b7cfa'
-          : regime === 'transition'
-            ? '#8c4bff'
-            : regime === 'turbulent'
-              ? '#f97316'
-              : '#94a3b8';
-
-      const cool = '#60a5fa';
-      const tNow = ts / 1000;
-      const speed = (0.10 + 0.55 * intensity) * (0.4 + Math.min(2, lengthM / 10));
-      const waveCenter = (tNow * speed + 0.1) % 1;
-
-      // Tube geometry mapped to canvas
-      const xA = w * 0.10;
-      const xB = w * 0.93;
-      const y = h * 0.55;
-      const xC = (xA + xB) / 2;
-      const yC = y - h * (0.09 + 0.05 * intensity);
-
-      const dClamped = Math.max(0.02, Math.min(0.9, diameterM));
-      const radiusOuter = Math.max(8, (dClamped / 0.9) * (h * 0.22));
-      const radiusBore = radiusOuter * 0.58;
-
-      // Tube shell
-      ctx.save();
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.shadowBlur = 18 + 35 * intensity;
-      ctx.shadowColor = mixRgb(cool, regimeColor, 0.65, 1);
-
-      ctx.strokeStyle = mixRgb(cool, regimeColor, 0.35 + 0.55 * dpNorm, 0.25);
-      ctx.lineWidth = radiusOuter * 1.45;
-      ctx.beginPath();
-      ctx.moveTo(xA, y);
-      ctx.quadraticCurveTo(xC, yC, xB, y);
-      ctx.stroke();
-
-      ctx.strokeStyle = mixRgb(cool, regimeColor, 0.55 + 0.35 * intensity, 0.55);
-      ctx.lineWidth = radiusOuter * 1.08;
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.moveTo(xA, y);
-      ctx.quadraticCurveTo(xC, yC, xB, y);
-      ctx.stroke();
-
-      ctx.strokeStyle = 'rgba(2,6,23,0.65)';
-      ctx.lineWidth = radiusBore * 0.95;
-      ctx.beginPath();
-      ctx.moveTo(xA, y);
-      ctx.quadraticCurveTo(xC, yC, xB, y);
-      ctx.stroke();
-      ctx.restore();
-
-      // Volume-ish slices
-      const slices = 30;
-      const bands = 3; // radial bands
-
-      for (let i = 0; i < slices; i++) {
-        const t = (i + 0.5) / slices;
-        const p = pointOnQuad(xA, y, xC, yC, xB, y, t);
-        const d = quadDeriv(xA, y, xC, yC, xB, y, t);
-        const angle = Math.atan2(d.dy, d.dx);
-
-        const axialDist = Math.abs(t - waveCenter);
-        const axialBand = 0.10 + 0.16 * (0.3 + intensity * 0.7);
-        const brightness = clamp01(1 - axialDist / axialBand);
-
-        const axialBoost = 0.35 + 0.65 * brightness;
-
-        for (let b = 0; b < bands; b++) {
-          const rNorm = (b + 0.35) / bands; // 0..1-ish
-          let uNorm: number;
-          if (profileMode === 'laminar') {
-            uNorm = clamp01(1 - rNorm * rNorm);
-          } else {
-            // treat as turbulent-ish
-            uNorm = clamp01(Math.pow(1 - rNorm, 1 / 7));
-          }
-
-          const alpha = (0.08 + 0.22 * uNorm) * axialBoost * (0.35 + 0.65 * dpNorm);
-          const colorMix = clamp01(0.25 * dpNorm + 0.55 * intensity + 0.25 * uNorm);
-          const fill = mixRgb(cool, regimeColor, colorMix, alpha);
-
-          const rx = radiusBore * (0.18 + 0.28 * rNorm);
-          const ry = radiusBore * (0.08 + 0.18 * rNorm);
-
-          ctx.save();
-          ctx.translate(p.x, p.y);
-          ctx.rotate(angle);
-          ctx.scale(1, 0.65);
-          ctx.beginPath();
-          ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-          ctx.fillStyle = fill;
-          ctx.fill();
-          ctx.restore();
-        }
-      }
-
-      // Tiny “contour” lines
-      ctx.save();
-      ctx.globalAlpha = 0.35;
-      ctx.strokeStyle = 'rgba(102,126,234,0.55)';
-      ctx.lineWidth = 1;
-      const rings = 5;
-      for (let b = 0; b < rings; b++) {
-        const rr = radiusBore * (0.18 + b * 0.16);
-        for (let i = 0; i < 6; i++) {
-          const t = (i + 1) / 7;
-          const p = pointOnQuad(xA, y, xC, yC, xB, y, t);
-          const d = quadDeriv(xA, y, xC, yC, xB, y, t);
-          const angle = Math.atan2(d.dy, d.dx);
-
-          ctx.save();
-          ctx.translate(p.x, p.y);
-          ctx.rotate(angle);
-          ctx.scale(1, 0.65);
-          ctx.beginPath();
-          ctx.ellipse(0, 0, rr, rr * 0.35, 0, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.restore();
-        }
-      }
-      ctx.restore();
-    };
-
-    raf = requestAnimationFrame(draw);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      resizeObserver.disconnect();
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100%', height: '100%', display: 'block' }}
-      aria-label="Real-time cylindrical airflow simulation"
-      role="img"
-    />
-  );
-}
-
-function PipeVisualization({
-  diameterM,
-  lengthM,
-  regime,
-  velocityMps,
-  pressureDropPa,
-}: {
-  diameterM: number;
-  lengthM: number;
-  regime: string;
-  velocityMps: number;
-  pressureDropPa: number;
-}) {
-  const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
-  const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
-
-  const w = 420;
-  const h = 180;
-
-  const xStart = 70;
-  const y = 92;
-  const lengthPortion = clamp01(lengthM / 30); // 0..1
-  const xEnd = xStart + (w - 2 * xStart) * clamp(0.35 + 0.65 * lengthPortion, 0.35, 1);
-
-  const dClamped = clamp(diameterM, 0.05, 0.8);
-  const outerStroke = 10 + ((dClamped - 0.05) / (0.8 - 0.05)) * 24; // ~10..34
-  const innerStroke = Math.max(outerStroke - 6, 6);
-
-  const intensity = clamp01((velocityMps - 0.05) / 8); // ~0..1 for typical ventilation
-  const particlesBase = regime === 'laminar' ? 7 : regime === 'transition' ? 10 : 14;
-  const particlesCount = particlesBase + Math.round(intensity * (regime === 'turbulent' ? 10 : 7));
-
-  const regimeColor =
-    regime === 'laminar'
-      ? '#5b7cfa'
-      : regime === 'transition'
-        ? '#8c4bff'
-        : regime === 'turbulent'
-          ? '#f97316'
-          : '#94a3b8';
-
-  const dashDurationS = Math.max(0.7, 5.5 - intensity * 4.5);
-
-  // Quadratic curve control point (gives depth so it feels like a “real” pipe).
-  const xA = xStart;
-  const yA = y;
-  const xC = (xStart + xEnd) / 2;
-  const yC = y - 14 - intensity * 6;
-  const xB = xEnd;
-  const yB = y;
-
-  const pathD = `M ${xA} ${yA} Q ${xC} ${yC} ${xB} ${yB}`;
-
-  const pointOnQuad = (t: number) => {
-    // B(t) = (1-t)^2*A + 2(1-t)*t*C + t^2*B
-    const u = 1 - t;
-    const x = u * u * xA + 2 * u * t * xC + t * t * xB;
-    const yy = u * u * yA + 2 * u * t * yC + t * t * yB;
-    return { x, y: yy };
-  };
-
-  const opacity = regime === 'laminar' ? 0.55 : regime === 'transition' ? 0.7 : 0.85;
-
-  const kPa = pressureDropPa / 1000;
-
-  // Flow particles spacing: bias slightly toward the inlet for “directional” feel.
-  const particles = Array.from({ length: particlesCount }, (_, i) => {
-    const t = (i + 0.5) / particlesCount;
-    const tBias = Math.pow(t, 0.85);
-    const p = pointOnQuad(tBias);
-    const r = 1.6 + intensity * (regime === 'laminar' ? 2.2 : 3.2) * (0.35 + 0.65 * (1 - t));
-    const alpha = 0.18 + intensity * 0.65 * (1 - t * 0.95);
-    return { ...p, r, alpha };
-  });
-
-  return (
-    <div>
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        style={styles.pipeVizSvg}
-        role="img"
-        aria-label="Pipe visualization"
-      >
-        <defs>
-          <linearGradient id="pipeGlow" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor={regimeColor} stopOpacity="0.85" />
-            <stop offset="0.7" stopColor={regimeColor} stopOpacity="0.25" />
-            <stop offset="1" stopColor="#94a3b8" stopOpacity="0.15" />
-          </linearGradient>
-          <linearGradient id="dashGlow" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor="#ffffff" stopOpacity="0.9" />
-            <stop offset="1" stopColor={regimeColor} stopOpacity="0.55" />
-          </linearGradient>
-        </defs>
-
-        {/* Outer shell */}
-        <path d={pathD} stroke="#e5e7eb" strokeWidth={outerStroke + 5} strokeLinecap="round" opacity="0.35" fill="none" />
-        {/* Inner “pipe” */}
-        <path d={pathD} stroke="url(#pipeGlow)" strokeWidth={outerStroke} strokeLinecap="round" opacity={opacity} fill="none" />
-        {/* Inner bore */}
-        <path d={pathD} stroke="#0b1020" strokeWidth={innerStroke} strokeLinecap="round" opacity="0.22" fill="none" />
-
-        {/* Inlet/outlet */}
-        <circle cx={xA} cy={yA} r={outerStroke * 0.46} fill={regimeColor} opacity={0.16} />
-        <circle cx={xB} cy={yB} r={outerStroke * 0.46} fill={regimeColor} opacity={0.16} />
-
-        {/* Flow direction cue */}
-        <g>
-          <style>
-            {`
-              .pipeFlowDash {
-                stroke-dasharray: 7 10;
-                animation: pipeDash ${dashDurationS}s linear infinite;
-              }
-              @keyframes pipeDash {
-                from { stroke-dashoffset: 0; }
-                to { stroke-dashoffset: -120; }
-              }
-            `}
-          </style>
-          <path
-            d={pathD}
-            stroke="url(#dashGlow)"
-            strokeWidth={Math.max(3, innerStroke * 0.25)}
-            strokeLinecap="round"
-            fill="none"
-            className="pipeFlowDash"
-            opacity={0.9}
-          />
-        </g>
-
-        {/* Particles along the pipe */}
-        {particles.map((p, idx) => (
-          <circle key={idx} cx={p.x} cy={p.y} r={p.r} fill={regimeColor} opacity={p.alpha} />
-        ))}
-
-        {/* Labels */}
-        <text x={xStart} y={30} fontSize="12" fill="#1f2a44" fontWeight={900}>
-          L={lengthM.toFixed(1)}m
-        </text>
-        <text x={xStart} y={46} fontSize="11" fill="#6c757d" fontWeight={800}>
-          D={diameterM.toFixed(3)}m
-        </text>
-        <text x={xStart} y={62} fontSize="11" fill="#6c757d" fontWeight={800}>
-          dp={isFinite(kPa) ? kPa.toFixed(3) : '—'} kPa
-        </text>
-        <text x={xEnd} y={62} fontSize="11" fill="#6c757d" fontWeight={800} textAnchor="end">
-          {regime}
-        </text>
-      </svg>
-    </div>
-  );
-}
-
-function RadialVelocityChart({
-  profile,
-  title,
-  subtitle,
-}: {
-  profile: Array<{ rNorm: number; u: number }>;
-  title: string;
-  subtitle?: string;
-}) {
-  const w = 360;
-  const h = 180;
-  const pad = 18;
-
-  const maxU = Math.max(...profile.map((p) => p.u), 0);
-  const scaleY = (u: number) => {
-    if (maxU <= 0) return h - pad;
-    const t = u / maxU;
-    return (h - pad) - t * (h - 2 * pad);
-  };
-  const scaleX = (rNorm: number) => pad + rNorm * (w - 2 * pad);
-
-  const pts = profile.map((p) => ({ x: scaleX(p.rNorm), y: scaleY(p.u) }));
-
-  const line = pts
-    .map((p, idx) => {
-      const cmd = idx === 0 ? 'M' : 'L';
-      return `${cmd} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
-    })
-    .join(' ');
-
-  const area = `M ${pad} ${h - pad} ${pts.map((p) => `L ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')} L ${w - pad} ${
-    h - pad
-  } Z`;
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
-        <div style={{ fontSize: 12, fontWeight: 900, color: '#1f2a44' }}>
-          {title}
-        </div>
-        <div style={{ fontSize: 12, color: '#6c757d', fontWeight: 800 }}>{subtitle}</div>
-      </div>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 'auto' }}>
-        <defs>
-          <linearGradient id="velFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#667eea" stopOpacity="0.35" />
-            <stop offset="1" stopColor="#764ba2" stopOpacity="0.03" />
-          </linearGradient>
-        </defs>
-
-        {/* Axes */}
-        <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="#e6e8ef" strokeWidth="1" />
-        <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="#e6e8ef" strokeWidth="1" />
-
-        {/* Area + line */}
-        <path d={area} fill="url(#velFill)" />
-        <path d={line} fill="none" stroke="#667eea" strokeWidth="2.5" strokeLinecap="round" />
-
-        {/* Wall/center labels */}
-        <text x={pad} y={h - 4} fontSize="10" fill="#6c757d" fontWeight={800}>
-          r=0
-        </text>
-        <text x={w - pad} y={h - 4} fontSize="10" fill="#6c757d" fontWeight={800} textAnchor="end">
-          r=R
-        </text>
-      </svg>
-    </div>
-  );
-}
-
