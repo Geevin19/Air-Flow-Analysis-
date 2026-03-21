@@ -97,7 +97,7 @@ export default function Simulation() {
 
   useEffect(()=>{
     if (!isNew && id) {
-      simulationAPI.get(Number(id))
+      simulationAPI.getById(Number(id))
         .then(r=>{ setResult(r.data); setForm(r.data as any) })
         .catch(()=>{ toast.error('Simulation not found'); navigate('/dashboard') })
         .finally(()=>setLoading(false))
@@ -114,7 +114,19 @@ export default function Simulation() {
     if (!form.name){toast.error('Please enter a simulation name');return}
     setSubmitting(true)
     try {
-      const r = await simulationAPI.create(form)
+      const r = await simulationAPI.create({
+  name: form.name,
+  parameters: {
+    velocity: form.velocity,
+    air_density: form.air_density,
+    frontal_area: form.frontal_area,
+    drag_coefficient: form.drag_coefficient,
+    lift_coefficient: form.lift_coefficient,
+    angle_of_attack: form.angle_of_attack,
+    vehicle_type: form.vehicle_type,
+    description: form.description
+  }
+})
       toast.success('Simulation complete!')
       setResult(r.data)
       navigate(`/simulation/${r.data.id}`,{replace:true})
@@ -276,14 +288,16 @@ export default function Simulation() {
                 ))}
               </div>
 
-              {result.flow_data?.length>0&&(
-                <div className="charts-grid">
-                  <FlowVelocityChart data={result.flow_data}/>
-                  <DynamicPressureChart data={result.flow_data}/>
-                  {result.pressure_distribution?.length>0&&<PressureDistributionChart data={result.pressure_distribution}/>}
-                  <VelocityProfileChart data={result.flow_data}/>
-                </div>
-              )}
+              {(result?.flow_data?.length ?? 0) > 0 && (
+  <div className="charts-grid">
+    <FlowVelocityChart data={result.flow_data ?? []} />
+    <DynamicPressureChart data={result.flow_data ?? []} />
+    {((result?.pressure_distribution?.length ?? 0) > 0) && (
+  <PressureDistributionChart data={result.pressure_distribution ?? []} />
+)}
+    <VelocityProfileChart data={result.flow_data ?? []} />
+  </div>
+)} 
             </div>
           )}
 

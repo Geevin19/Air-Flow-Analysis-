@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import Navbar from '../components/Navbar'
 import { simulationAPI, type SimulationResult } from '../services/api'
@@ -68,8 +68,8 @@ const S = `
 
 const VI: Record<string,string> = {car:'🚗',truck:'🚛',motorcycle:'🏍️',aircraft:'✈️',drone:'🛸',custom:'🔧',default:'🌊'}
 
-export default function Dashboard() {
-  const navigate = useNavigate()
+export default function Dashboard(){
+
   const [sims,    setSims]    = useState<SimulationResult[]>([])
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState('')
@@ -81,7 +81,7 @@ export default function Dashboard() {
   useEffect(()=>{ fetch() },[])
 
   const fetch = async () => {
-    try { const r = await simulationAPI.list(); setSims(r.data) }
+    try { const r = await simulationAPI.getAll(); setSims(r.data) }
     catch { toast.error('Failed to load simulations') }
     finally { setLoading(false) }
   }
