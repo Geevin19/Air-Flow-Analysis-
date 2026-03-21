@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Simulation from './pages/Simulation'
+import LiveIoT from './pages/LiveIoT'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
         <Route path="/simulation/new" element={<PrivateRoute><Simulation /></PrivateRoute>} />
         <Route path="/simulation/:id" element={<PrivateRoute><Simulation /></PrivateRoute>} />
+        <Route path="/iot-live" element={<PrivateRoute><LiveIoT /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

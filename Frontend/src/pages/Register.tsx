@@ -80,7 +80,7 @@ export default function Register() {
   const [form, setForm] = useState({fname:'',lname:'',email:'',company:'',password:'',confirm:''})
   const [showPass, setShowPass] = useState(false)
   const [showConf, setShowConf] = useState(false)
-  const [loading,  setLoading]  = useState(false)
+  const [loading, setLoading] = useState(false)
   const {score,hint} = getStrength(form.password)
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(f=>({...f,[k]:e.target.value}))
 
@@ -93,7 +93,7 @@ export default function Register() {
     try {
       const res = await authAPI.register({first_name:form.fname,last_name:form.lname,email:form.email,company:form.company||undefined,password:form.password})
       localStorage.setItem('token', res.data.access_token)
-      localStorage.setItem('user',  JSON.stringify(res.data.user))
+      localStorage.setItem('user', JSON.stringify(res.data.user))
       toast.success('Account created! Welcome to AeroFlow 🎉')
       navigate('/dashboard')
     } catch(err:any){
@@ -151,8 +151,12 @@ export default function Register() {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                   </button>
                 </div>
-                <div className={`strength${score>0?` s${score}`:''}`}><span/><span/><span/><span/></div>
-                <p className="str-hint">{hint}</p>
+                {form.password && (
+                  <>
+                    <div className={`strength${score>0?` s${score}`:''}`}><span/><span/><span/><span/></div>
+                    <p className="str-hint">{hint}</p>
+                  </>
+                )}
               </div>
               <div className="fg">
                 <label className="lbl">Confirm password *</label>
