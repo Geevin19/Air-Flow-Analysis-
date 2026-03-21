@@ -1,2105 +1,301 @@
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import Navbar from '../components/Navbar'
+import { FlowVelocityChart, PressureDistributionChart, DynamicPressureChart, VelocityProfileChart } from '../components/SimulationChart'
+import { simulationAPI, type SimulationResult, type SimulationPayload } from '../services/api'
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { simulationAPI } from '../services/api';
+const S = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap');
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#eef2f7;--surf:#ffffff;--surf2:#f5f8fc;--border:#dde3ec;--border2:#c5cfdf;--a1:#3b6fd4;--a2:#5b9bd5;--text:#1a2333;--muted:#6b7a90;--label:#44546a;--success:#2e9e6b;--danger:#d95f5f;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
+  .sp-bg{position:fixed;inset:0;z-index:0;pointer-events:none;}
+  .sp-bg::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 50% 40% at 0% 0%,rgba(59,111,212,.07) 0%,transparent 50%);}
+  .sp-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(59,111,212,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(59,111,212,.035) 1px,transparent 1px);background-size:36px 36px;}
+  .sp-wrap{position:relative;z-index:1;min-height:100vh;}
+  .sp-main{max-width:1280px;margin:0 auto;padding:2.5rem clamp(1rem,4vw,3rem);}
+  .breadcrumb{display:flex;align-items:center;gap:.45rem;font-size:.81rem;color:var(--muted);margin-bottom:1.8rem;}
+  .breadcrumb a{color:var(--muted);text-decoration:none;transition:color .18s;}
+  .breadcrumb a:hover{color:var(--a1);}
+  .breadcrumb span{color:var(--text);}
+  .sp-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:clamp(1.5rem,3vw,2rem);font-weight:800;letter-spacing:-.02em;color:var(--text);margin-bottom:.35rem;}
+  .sp-title .ac{color:var(--a1);}
+  .sp-sub{font-size:.87rem;color:var(--muted);margin-bottom:2rem;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.75rem;align-items:start;}
+  .fc{background:var(--surf);border:1px solid var(--border);border-radius:14px;padding:1.75rem;position:relative;overflow:hidden;box-shadow:0 1px 4px rgba(59,111,212,.04);margin-bottom:1.25rem;}
+  .fc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--a1),var(--a2));}
+  .fc-title{font-size:.92rem;font-weight:700;color:var(--text);margin-bottom:1.3rem;display:flex;align-items:center;gap:.5rem;}
+  .fc-icon{width:26px;height:26px;background:rgba(59,111,212,.08);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.85rem;}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:.85rem;}
+  .fg{margin-bottom:1rem;}
+  .lbl{display:block;font-size:.78rem;font-weight:600;color:var(--label);margin-bottom:.38rem;letter-spacing:.02em;}
+  .inp-bare{width:100%;padding:.68rem .75rem;background:var(--surf2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:.87rem;font-family:'Inter',sans-serif;outline:none;transition:border-color .18s;}
+  .inp-bare:focus{border-color:var(--a1);}
+  select.inp-bare{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7a90' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;}
+  textarea.inp-bare{resize:vertical;min-height:65px;}
+  .vt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.55rem;margin-bottom:1rem;}
+  .vt{cursor:pointer;padding:.58rem .35rem;border:1px solid var(--border);border-radius:8px;text-align:center;font-size:.8rem;transition:all .18s;background:var(--surf2);}
+  .vt:hover{border-color:rgba(59,111,212,.35);background:rgba(59,111,212,.04);}
+  .vt.sel{border-color:var(--a1);background:rgba(59,111,212,.07);color:var(--a1);font-weight:700;}
+  .vt-icon{font-size:1.2rem;display:block;margin-bottom:.18rem;}
+  .range-wrap{position:relative;margin-top:.3rem;}
+  .range-val{position:absolute;right:0;top:-20px;font-size:.72rem;color:var(--a1);font-weight:600;}
+  .range-inp{-webkit-appearance:none;appearance:none;width:100%;height:4px;background:var(--border);border-radius:4px;outline:none;cursor:pointer;}
+  .range-inp::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:linear-gradient(135deg,var(--a1),var(--a2));border-radius:50%;cursor:pointer;}
+  .btn-run{width:100%;padding:.85rem;background:linear-gradient(135deg,var(--a1),var(--a2));border:none;border-radius:9px;color:#fff;font-size:.92rem;font-weight:600;font-family:'Inter',sans-serif;cursor:pointer;letter-spacing:.02em;transition:transform .15s,box-shadow .18s;box-shadow:0 3px 12px rgba(59,111,212,.28);margin-top:.5rem;display:flex;align-items:center;justify-content:center;gap:.5rem;}
+  .btn-run:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 5px 18px rgba(59,111,212,.32);}
+  .btn-run:disabled{opacity:.58;cursor:not-allowed;}
+  .results-section{margin-top:2.2rem;}
+  .res-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.4rem;flex-wrap:wrap;gap:1rem;}
+  .res-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.3rem;font-weight:800;color:var(--text);}
+  .status-badge{display:inline-flex;align-items:center;gap:.38rem;padding:.3rem .85rem;border-radius:100px;font-size:.78rem;font-weight:600;}
+  .sb-completed{background:rgba(46,158,107,.08);color:var(--success);border:1px solid rgba(46,158,107,.2);}
+  .sb-running{background:rgba(59,111,212,.08);color:var(--a1);border:1px solid rgba(59,111,212,.2);animation:pulse 1.5s ease-in-out infinite;}
+  .sb-failed{background:rgba(217,95,95,.08);color:var(--danger);border:1px solid rgba(217,95,95,.2);}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+  .info-panel{background:var(--surf);border:1px solid var(--border);border-radius:13px;padding:1.3rem;margin-bottom:1.4rem;box-shadow:0 1px 4px rgba(59,111,212,.04);}
+  .info-label{font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.85rem;}
+  .info-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.65rem;}
+  .info-item{display:flex;flex-direction:column;gap:.12rem;}
+  .info-key{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+  .info-val{font-size:.88rem;font-weight:600;color:var(--text);}
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:1rem;margin-bottom:1.75rem;}
+  .kpi{background:var(--surf);border:1px solid var(--border);border-radius:12px;padding:1.1rem;position:relative;overflow:hidden;box-shadow:0 1px 4px rgba(59,111,212,.04);}
+  .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--kg,linear-gradient(90deg,var(--a1),var(--a2)));}
+  .kpi-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.5rem;font-weight:800;color:var(--a1);}
+  .kpi-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:.18rem;}
+  .charts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:1.3rem;}
+  .loading-state{text-align:center;padding:4rem 2rem;}
+  .spinner{width:44px;height:44px;border:3px solid var(--border);border-top-color:var(--a1);border-radius:50%;animation:spin .75s linear infinite;margin:0 auto 1.3rem;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media(max-width:860px){.form-grid{grid-template-columns:1fr}.charts-grid{grid-template-columns:1fr}.two-col{grid-template-columns:1fr}}
+  @media(max-width:480px){.vt-grid{grid-template-columns:repeat(2,1fr)}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+`
 
-type Theme = 'light' | 'dark';
+const VEHICLES = [
+  {id:'car',label:'Car',icon:'🚗'},{id:'truck',label:'Truck',icon:'🚛'},
+  {id:'motorcycle',label:'Moto',icon:'🏍️'},{id:'aircraft',label:'Aircraft',icon:'✈️'},
+  {id:'drone',label:'Drone',icon:'🛸'},{id:'custom',label:'Custom',icon:'🔧'},
+]
+
+const DEFAULT: SimulationPayload = {
+  name:'',description:'',vehicle_type:'car',
+  velocity:30,air_density:1.225,frontal_area:2.2,
+  drag_coefficient:0.30,lift_coefficient:-0.1,angle_of_attack:0,
+}
 
 export default function Simulation() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const simulationId = searchParams.get('id');
-  
-  const [name, setName] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<any>(null);
-  const [loadingExisting, setLoadingExisting] = useState(false);
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('theme');
-    return (saved as Theme) || 'light';
-  });
+  const {id}     = useParams()
+  const navigate = useNavigate()
+  const isNew    = !id || id==='new'
 
-  useEffect(() => {
-    localStorage.setItem('theme', theme);
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
+  const [form,       setForm]       = useState<SimulationPayload>(DEFAULT)
+  const [result,     setResult]     = useState<SimulationResult|null>(null)
+  const [loading,    setLoading]    = useState(!isNew)
+  const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (simulationId) {
-      loadExistingSimulation(parseInt(simulationId));
+  useEffect(()=>{
+    if (!isNew && id) {
+      simulationAPI.get(Number(id))
+        .then(r=>{ setResult(r.data); setForm(r.data as any) })
+        .catch(()=>{ toast.error('Simulation not found'); navigate('/dashboard') })
+        .finally(()=>setLoading(false))
     }
-  }, [simulationId]);
+  },[id])
 
-  const loadExistingSimulation = async (id: number) => {
-    setLoadingExisting(true);
+  const set = (k: keyof SimulationPayload) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => {
+    const v = e.target.type==='number'||e.target.type==='range' ? Number(e.target.value) : e.target.value
+    setForm(f=>({...f,[k]:v}))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.name){toast.error('Please enter a simulation name');return}
+    setSubmitting(true)
     try {
-      const response = await simulationAPI.getById(id);
-      const sim = response.data;
-      setName(sim.name);
-      
-      // Load parameters if they exist
-      if (sim.parameters) {
-        // Set parameters from the loaded simulation
-        if (sim.parameters.pipe) {
-          setPipeLengthM(sim.parameters.pipe.length_m || 10);
-          setPipeInnerDiameterM(sim.parameters.pipe.inner_diameter_m || 0.5);
-          setPipeMaterial(sim.parameters.pipe.material || 'Steel');
-          setPipeAbsoluteRoughnessM(sim.parameters.pipe.absolute_roughness_m || 0.000045);
-        }
-        if (sim.parameters.air) {
-          setAirPropertyMode(sim.parameters.air.property_mode || 'assume_tp');
-          setAirTemperatureC(sim.parameters.air.temperature_C || 20);
-          setAirPressurePa(sim.parameters.air.pressure_Pa || 101325);
-          setAirDensityKgM3(sim.parameters.air.density_kg_m3 || 1.204);
-          setAirDynamicViscosityPaS(sim.parameters.air.dynamic_viscosity_Pa_s || 1.81e-5);
-        }
-        if (sim.parameters.flow) {
-          setVolumetricFlowRateM3S(sim.parameters.flow.volumetric_flow_rate_m3_s || 0.25);
-        }
-        if (sim.parameters.losses) {
-          setIncludeMinorLosses(sim.parameters.losses.include_minor_losses ?? true);
-          setMinorLossKTotal(sim.parameters.losses.minor_loss_K_total || 0.5);
-        }
-      }
-      
-      // Set result if it exists
-      if (sim.results) {
-        setResult({
-          backend_response: sim,
-          local_preview: null
-        });
-      }
-    } catch (err: any) {
-      setError('Failed to load simulation: ' + (err.response?.data?.detail || err.message));
-    } finally {
-      setLoadingExisting(false);
-    }
-  };
+      const r = await simulationAPI.create(form)
+      toast.success('Simulation complete!')
+      setResult(r.data)
+      navigate(`/simulation/${r.data.id}`,{replace:true})
+    } catch(err:any){
+      toast.error(err.response?.data?.detail||'Simulation failed')
+    } finally { setSubmitting(false) }
+  }
 
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
+  const kpis = result ? [
+    {label:'Drag Force',       val:`${result.drag_force?.toFixed(2)} N`,       kg:'linear-gradient(90deg,#3b6fd4,#5b9bd5)'},
+    {label:'Lift Force',       val:`${result.lift_force?.toFixed(2)} N`,       kg:'linear-gradient(90deg,#5b7fd4,#5b9bd5)'},
+    {label:'Dynamic Pressure', val:`${result.dynamic_pressure?.toFixed(1)} Pa`,kg:'linear-gradient(90deg,#2e9e6b,#5b9bd5)'},
+    {label:'Power Required',   val:`${result.power_required?.toFixed(1)} W`,   kg:'linear-gradient(90deg,#e8943a,#ffd32a)'},
+    {label:'Reynolds Number',  val:result.reynolds_number?.toExponential(2),   kg:'linear-gradient(90deg,#3b6fd4,#5b7fd4)'},
+    {label:'Efficiency Score', val:`${result.efficiency_score?.toFixed(1)}%`,  kg:'linear-gradient(90deg,#2e9e6b,#3b6fd4)'},
+  ] : []
 
-  // -------- Structured raw inputs (for cylindrical air flow through a pipe) --------
-  const materialRoughnessM: Record<string, number> = useMemo(
-    () => ({
-      // Typical absolute roughness values (order-of-magnitude). Users can always override.
-      Steel: 0.000045,
-      Copper: 0.0000015,
-      PVC: 0.0000015,
-      'Ductile Iron': 0.00026,
-      'Galvanized Steel': 0.00015,
-    }),
-    [],
-  );
-
-  const [pipeLengthM, setPipeLengthM] = useState(10);
-  const [pipeInnerDiameterM, setPipeInnerDiameterM] = useState(0.5);
-  const [pipeMaterial, setPipeMaterial] = useState<string>('Steel');
-  const [pipeAbsoluteRoughnessM, setPipeAbsoluteRoughnessM] = useState<number>(
-    materialRoughnessM['Steel'],
-  );
-
-  const [airPropertyMode, setAirPropertyMode] = useState<'assume_tp' | 'explicit'>('assume_tp');
-  const [airTemperatureC, setAirTemperatureC] = useState(20);
-  const [airPressurePa, setAirPressurePa] = useState(101325);
-  const [airDensityKgM3, setAirDensityKgM3] = useState(1.204);
-  const [airDynamicViscosityPaS, setAirDynamicViscosityPaS] = useState(1.81e-5);
-
-  const [volumetricFlowRateM3S, setVolumetricFlowRateM3S] = useState(0.25);
-  const [minorLossKTotal, setMinorLossKTotal] = useState(0.5);
-  const [includeMinorLosses, setIncludeMinorLosses] = useState(true);
-
-  const [velocityProfileMode, setVelocityProfileMode] = useState<'auto_by_re' | 'laminar' | 'turbulent'>(
-    'auto_by_re',
-  );
-  const [crossSectionSamples, setCrossSectionSamples] = useState(50); // user requested 50
-
-  // -------- Derived preview computations (client-side) --------
-  const computed = useMemo(() => {
-    const D = pipeInnerDiameterM;
-    const L = pipeLengthM;
-    const Q = volumetricFlowRateM3S;
-    const eps = pipeAbsoluteRoughnessM;
-    const n = Math.max(3, Math.floor(crossSectionSamples));
-
-    const validGeometry = Number.isFinite(D) && D > 0 && Number.isFinite(L) && L > 0;
-    const validFlow = Number.isFinite(Q) && Q > 0;
-    const validFluids =
-      airPropertyMode === 'explicit'
-        ? [airDensityKgM3, airDynamicViscosityPaS].every((x) => Number.isFinite(x) && x > 0)
-        : Number.isFinite(airTemperatureC) &&
-          Number.isFinite(airPressurePa) &&
-          airTemperatureC > -273.15 &&
-          airPressurePa > 0;
-
-    if (!validGeometry || !validFlow || !validFluids) {
-      return {
-        isValid: false,
-        D,
-        L,
-        Q,
-        eps,
-        n,
-        rho: NaN,
-        mu: NaN,
-        area: NaN,
-        Vavg: NaN,
-        Re: NaN,
-        frictionFactor: NaN,
-        flowRegime: 'unknown' as 'laminar' | 'transition' | 'turbulent' | 'unknown',
-        pressureDropPa: NaN,
-        velocityProfile: [] as Array<{ rNorm: number; u: number }>,
-      };
-    }
-
-    const area = Math.PI * Math.pow(D / 2, 2);
-    const Vavg = Q / area;
-
-    let rho = airDensityKgM3;
-    let mu = airDynamicViscosityPaS;
-
-    if (airPropertyMode === 'assume_tp') {
-      // Simple ideal gas density + Sutherland viscosity for air.
-      const T = airTemperatureC + 273.15;
-      const R = 287.05; // J/(kg*K)
-      rho = airPressurePa / (R * T);
-
-      // Sutherland's law constants for air
-      const mu0 = 1.716e-5; // Pa*s at T0
-      const T0 = 273.15; // K
-      const S = 111; // K
-      mu = mu0 * ((T0 + S) / (T + S)) * Math.pow(T / T0, 1.5);
-    }
-
-    // Reynolds number (based on average velocity)
-    const Re = (rho * Vavg * D) / mu;
-
-    const flowRegime =
-      Re < 2300 ? 'laminar' : Re <= 4000 ? ('transition' as const) : ('turbulent' as const);
-
-    // Friction factor (Darcy-Weisbach) using laminar definition or Haaland correlation.
-    let frictionFactor: number;
-    if (Re < 2300) {
-      frictionFactor = 64 / Re;
-    } else {
-      // Haaland: valid for turbulent flow with roughness.
-      const relRough = eps / D;
-      const term = Math.pow(relRough / 3.7, 1.11) + 6.9 / Re;
-      frictionFactor = Math.pow(-1.8 * Math.log10(term), -2);
-    }
-
-    const dpMajor = frictionFactor * (L / D) * (rho * Math.pow(Vavg, 2) / 2);
-    const dpMinor = includeMinorLosses ? minorLossKTotal * (rho * Math.pow(Vavg, 2) / 2) : 0;
-    const pressureDropPa = dpMajor + dpMinor;
-
-    const selectedProfile =
-      velocityProfileMode === 'auto_by_re'
-        ? flowRegime === 'laminar' || flowRegime === 'transition'
-          ? 'laminar'
-          : 'turbulent'
-        : velocityProfileMode;
-
-    const profile: Array<{ rNorm: number; u: number }> = [];
-
-    // Build a normalized radial velocity profile (no swirl), sampled at evenly spaced r.
-    // We scale each profile so that its cross-section average velocity matches Vavg.
-    for (let i = 0; i < n; i++) {
-      const rNorm = n === 1 ? 0 : i / (n - 1); // 0=centerline, 1=wall
-      let u: number;
-
-      if (selectedProfile === 'laminar') {
-        // Fully developed laminar profile:
-        // u(r) = umax * (1 - (r/R)^2), with average u_avg = umax/2 => umax = 2*u_avg
-        const umax = 2 * Vavg;
-        u = umax * (1 - Math.pow(rNorm, 2));
-      } else {
-        // Turbulent 1/7 power-law variant:
-        // u(r) = umax * (1 - r/R)^(1/7), and for this form u_avg = umax*(49/60)
-        // => umax = u_avg*(60/49)
-        const umax = Vavg * (60 / 49);
-        u = umax * Math.pow(1 - rNorm, 1 / 7);
-      }
-
-      // Numerical safety near the wall
-      if (!Number.isFinite(u) || u < 0) u = 0;
-      profile.push({ rNorm, u });
-    }
-
-    return {
-      isValid: true,
-      D,
-      L,
-      Q,
-      eps,
-      n,
-      rho,
-      mu,
-      area,
-      Vavg,
-      Re,
-      frictionFactor,
-      flowRegime: flowRegime === 'transition' ? 'transition' : flowRegime,
-      pressureDropPa,
-      velocityProfile: profile,
-      selectedProfile,
-    };
-  }, [
-    airDynamicViscosityPaS,
-    airDensityKgM3,
-    airPressurePa,
-    airPropertyMode,
-    airTemperatureC,
-    crossSectionSamples,
-    includeMinorLosses,
-    minorLossKTotal,
-    pipeAbsoluteRoughnessM,
-    pipeInnerDiameterM,
-    pipeLengthM,
-    velocityProfileMode,
-    volumetricFlowRateM3S,
-  ]);
-
-  const generatedParameters = useMemo(() => {
-    const D = pipeInnerDiameterM;
-    const R = D / 2;
-
-    // We include both user-provided and derived fields in the JSON so the backend can
-    // use them immediately (even if it later improves its own computations).
-    return {
-      type: 'cylindrical_air_flow',
-      pipe: {
-        length_m: pipeLengthM,
-        inner_diameter_m: D,
-        inner_radius_m: R,
-        material: pipeMaterial,
-        absolute_roughness_m: pipeAbsoluteRoughnessM,
-      },
-      air: {
-        property_mode: airPropertyMode,
-        temperature_C: airTemperatureC,
-        pressure_Pa: airPressurePa,
-        density_kg_m3: computed.rho,
-        dynamic_viscosity_Pa_s: computed.mu,
-      },
-      flow: {
-        volumetric_flow_rate_m3_s: volumetricFlowRateM3S,
-        average_velocity_m_s: computed.Vavg,
-        reynolds_number: computed.Re,
-        flow_regime: computed.flowRegime,
-        velocity_profile_model: computed.isValid
-          ? computed.selectedProfile
-          : velocityProfileMode === 'laminar'
-            ? 'laminar'
-            : 'turbulent',
-      },
-      losses: {
-        include_minor_losses: includeMinorLosses,
-        minor_loss_K_total: minorLossKTotal,
-        friction_factor_darcy: computed.frictionFactor,
-        pressure_drop_Pa: computed.pressureDropPa,
-      },
-      cross_section: {
-        samples: Math.max(3, Math.floor(crossSectionSamples)),
-        // Helps backend map the radial sampling to expected array lengths.
-      },
-    };
-  }, [
-    airPropertyMode,
-    airPressurePa,
-    airTemperatureC,
-    computed.flowRegime,
-    computed.frictionFactor,
-    computed.isValid,
-    computed.mu,
-    computed.pressureDropPa,
-    computed.Re,
-    computed.rho,
-    computed.selectedProfile,
-    computed.Vavg,
-    crossSectionSamples,
-    includeMinorLosses,
-    minorLossKTotal,
-    pipeAbsoluteRoughnessM,
-    pipeInnerDiameterM,
-    pipeLengthM,
-    pipeMaterial,
-    volumetricFlowRateM3S,
-    velocityProfileMode,
-  ]);
-
-  const submit = async () => {
-    setError(null);
-
-    if (!name.trim()) {
-      setError('Please enter a simulation name.');
-      return;
-    }
-
-    // If we're viewing an existing simulation, don't create a new one
-    if (simulationId) {
-      setError('You are viewing an existing simulation. To create a new one, go back to dashboard and click "New Simulation".');
-      return;
-    }
-
-    const localPreview = {
-      preview_type: 'cylindrical_air_flow',
-      computed_at: new Date().toISOString(),
-      metrics: {
-        average_velocity_m_s: computed.Vavg,
-        reynolds_number: computed.Re,
-        friction_factor_darcy: computed.frictionFactor,
-        pressure_drop_Pa: computed.pressureDropPa,
-        flow_regime: computed.flowRegime,
-        velocity_profile_model: computed.isValid ? computed.selectedProfile : velocityProfileMode,
-      },
-      velocity_profile: computed.velocityProfile,
-      inputs: generatedParameters,
-    };
-
-    setSubmitting(true);
-    try {
-      const response = await simulationAPI.create({
-        name: name.trim(),
-        parameters: generatedParameters,
-      });
-      setResult({
-        local_preview: localPreview,
-        backend_response: response.data,
-      });
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Failed to run simulation.');
-      setResult({
-        local_preview: localPreview,
-        backend_error: e?.response?.data || { message: e?.message },
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const localPreview = result?.local_preview;
-  const backendResponse = result?.backend_response;
-
-  const isDark = theme === 'dark';
-  const styles = getSimulationStyles(isDark);
+  if (loading) return (
+    <>
+      <style>{S}</style>
+      <div className="sp-wrap"><Navbar variant="app"/>
+        <div className="loading-state"><div className="spinner"/><p style={{color:'var(--muted)'}}>Loading simulation…</p></div>
+      </div>
+    </>
+  )
 
   return (
-    <div style={styles.container}>
-      <nav style={styles.nav}>
-        <div style={styles.navLeft}>
-          <h1 style={styles.logo}>SmartTracker</h1>
-          <span style={styles.badge}>Simulation • Pipe Inputs</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={toggleTheme} style={styles.themeToggle} aria-label="Toggle theme">
-            {theme === 'light' ? '🌙' : '☀️'}
-          </button>
-          <button onClick={() => navigate('/dashboard')} style={styles.backButton}>
-            Back to Dashboard
-          </button>
-        </div>
-      </nav>
-
-      {loadingExisting && (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#667eea' }}>
-          Loading simulation...
-        </div>
-      )}
-
-      <main style={styles.main}>
-        <div style={styles.hero}>
-          <div style={styles.heroTitle}>
-            Cylindrical Air Flow Simulator
-            {simulationId && <span style={{ marginLeft: '12px', fontSize: '16px', color: '#667eea' }}>(Viewing Existing)</span>}
-          </div>
-          <div style={styles.heroSubtitle}>
-            {simulationId 
-              ? 'You are viewing an existing simulation. To create a new one, go back to the dashboard.'
-              : 'Enter pipe + air + flow conditions, then review a live (client-side) realistic preview. Your JSON is still sent to the backend `POST /simulations`.'}
-          </div>
-        </div>
-
-        <div style={styles.grid}>
-          <div style={styles.card}>
-            <h2 style={styles.title}>Run Simulation</h2>
-            <p style={styles.subtitle}>
-              Enter pipe + air + flow parameters. The backend receives the computed JSON automatically.
-            </p>
-
-            <div style={styles.formRow}>
-              <label style={styles.label}>Simulation name</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Ventilation - Baseline"
-                style={styles.input}
-                readOnly={!!simulationId}
-                disabled={!!simulationId}
-              />
-            </div>
-
-            <div style={styles.section}>
-              <div style={styles.sectionHeader}>Pipe Geometry</div>
-
-              <div style={styles.twoCols}>
-                  <RangeField
-                    label="Length (m)"
-                    value={pipeLengthM}
-                    min={0.5}
-                    max={30}
-                    step={0.1}
-                    formatValue={(v) => v.toFixed(1)}
-                    onChange={(v) => setPipeLengthM(v)}
-                    styles={styles}
-                  />
-                  <RangeField
-                    label="Inner diameter (m)"
-                    value={pipeInnerDiameterM}
-                    min={0.05}
-                    max={0.8}
-                    step={0.001}
-                    formatValue={(v) => v.toFixed(3)}
-                    onChange={(v) => setPipeInnerDiameterM(v)}
-                    styles={styles}
-                  />
-              </div>
-
-              <div style={styles.twoCols}>
-                <div style={styles.formRowSmall}>
-                  <label style={styles.labelSm}>Material</label>
-                  <select
-                    value={pipeMaterial}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setPipeMaterial(next);
-                      const roughness = materialRoughnessM[next];
-                      if (typeof roughness === 'number') setPipeAbsoluteRoughnessM(roughness);
-                    }}
-                    style={styles.input}
-                  >
-                    {Object.keys(materialRoughnessM).map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div style={styles.formRowSmall}>
-                  <label style={styles.labelSm}>Abs. roughness (m)</label>
-                  <input
-                    type="number"
-                    step="0.000001"
-                    min="0"
-                    value={pipeAbsoluteRoughnessM}
-                    onChange={(e) => setPipeAbsoluteRoughnessM(parseFloat(e.target.value))}
-                    style={styles.input}
-                  />
-                </div>
-              </div>
-
-              <div style={styles.note}>
-                Roughness is used for friction factor (Darcy-Weisbach).
-              </div>
-            </div>
-
-            <div style={styles.section}>
-              <div style={styles.sectionHeader}>Air Properties</div>
-
-              <div style={styles.twoCols}>
-                <div style={styles.formRowSmall}>
-                  <label style={styles.labelSm}>Mode</label>
-                  <select
-                    value={airPropertyMode}
-                    onChange={(e) => setAirPropertyMode(e.target.value as any)}
-                    style={styles.input}
-                  >
-                    <option value="assume_tp">Assume from Temperature/Pressure</option>
-                    <option value="explicit">Use Explicit Density/Viscosity</option>
-                  </select>
-                </div>
-                <RangeField
-                  label="Dynamic viscosity (Pa·s)"
-                  value={airDynamicViscosityPaS}
-                  min={1e-6}
-                  max={5e-5}
-                  step={1e-7}
-                  disabled={airPropertyMode !== 'explicit'}
-                  formatValue={(v) => v.toExponential(2)}
-                  onChange={(v) => setAirDynamicViscosityPaS(v)}
-                  styles={styles}
-                />
-              </div>
-
-              <div style={styles.twoCols}>
-                <RangeField
-                  label="Temperature (C)"
-                  value={airTemperatureC}
-                  min={-10}
-                  max={60}
-                  step={0.1}
-                  disabled={airPropertyMode !== 'assume_tp'}
-                  formatValue={(v) => v.toFixed(1)}
-                  onChange={(v) => setAirTemperatureC(v)}
-                  styles={styles}
-                />
-                <RangeField
-                  label="Pressure (Pa)"
-                  value={airPressurePa}
-                  min={50000}
-                  max={200000}
-                  step={500}
-                  disabled={airPropertyMode !== 'assume_tp'}
-                  formatValue={(v) => Math.round(v).toLocaleString()}
-                  onChange={(v) => setAirPressurePa(v)}
-                  styles={styles}
-                />
-              </div>
-
-              <RangeField
-                label="Density (kg/m³)"
-                value={airDensityKgM3}
-                min={0.5}
-                max={2.0}
-                step={0.001}
-                disabled={airPropertyMode !== 'explicit'}
-                formatValue={(v) => v.toFixed(3)}
-                onChange={(v) => setAirDensityKgM3(v)}
-                styles={styles}
-              />
-            </div>
-
-            <div style={styles.section}>
-              <div style={styles.sectionHeader}>Flow Conditions</div>
-
-              <div style={styles.twoCols}>
-                <RangeField
-                  label="Flow rate (m³/s)"
-                  value={volumetricFlowRateM3S}
-                  min={0.01}
-                  max={2.5}
-                  step={0.001}
-                  formatValue={(v) => v.toFixed(3)}
-                  onChange={(v) => setVolumetricFlowRateM3S(v)}
-                  styles={styles}
-                />
-                <div style={styles.formRowSmall}>
-                  <label style={styles.labelSm}>Velocity profile model</label>
-                  <select value={velocityProfileMode} onChange={(e) => setVelocityProfileMode(e.target.value as any)} style={styles.input}>
-                    <option value="auto_by_re">Auto (by Reynolds)</option>
-                    <option value="laminar">Laminar (parabolic)</option>
-                    <option value="turbulent">Turbulent (1/7 power)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={styles.twoCols}>
-                <RangeField
-                  label="Minor losses (K total)"
-                  value={minorLossKTotal}
-                  min={0}
-                  max={10}
-                  step={0.05}
-                  disabled={!includeMinorLosses}
-                  formatValue={(v) => v.toFixed(2)}
-                  onChange={(v) => setMinorLossKTotal(v)}
-                  styles={styles}
-                />
-                <div style={styles.formRowSmall}>
-                  <label style={styles.labelSm}>Include minor losses</label>
-                  <label style={styles.checkboxRow}>
-                    <input
-                      type="checkbox"
-                      checked={includeMinorLosses}
-                      onChange={(e) => setIncludeMinorLosses(e.target.checked)}
-                    />
-                    <span style={styles.checkboxText}>Yes</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div style={styles.section}>
-              <div style={styles.sectionHeader}>Cross-Section Sampling</div>
-
-              <div style={styles.twoCols}>
-                <RangeField
-                  label="Samples across radius"
-                  value={crossSectionSamples}
-                  min={10}
-                  max={120}
-                  step={1}
-                  formatValue={(v) => String(Math.round(v))}
-                  onChange={(v) => setCrossSectionSamples(Math.round(v))}
-                  styles={styles}
-                />
-              </div>
-            </div>
-
-            {error ? <div style={styles.error}>{error}</div> : null}
-
-            <div style={styles.actions}>
-              <button onClick={submit} style={styles.primaryButton} disabled={submitting || !!simulationId}>
-                {simulationId ? 'Viewing Existing Simulation' : submitting ? 'Running...' : 'Run'}
-              </button>
-            </div>
+    <>
+      <style>{S}</style>
+      <div className="sp-bg"><div className="sp-grid"/></div>
+      <div className="sp-wrap">
+        <Navbar variant="app"/>
+        <main className="sp-main">
+          <div className="breadcrumb">
+            <Link to="/dashboard">Dashboard</Link>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <span>{isNew?'New Simulation':result?.name||'Simulation'}</span>
           </div>
 
-          <div style={styles.card}>
-            <h3 style={styles.sectionTitle}>Live Preview (Client-Side)</h3>
-            {!computed.isValid ? (
-              <div style={styles.previewPlaceholder}>Enter valid pipe/air/flow inputs to see results.</div>
-            ) : (
-              <>
-                <div style={styles.realtimeCanvasWrap}>
-                  <RealTimeTubeSim
-                    diameterM={computed.D}
-                    lengthM={computed.L}
-                    regime={computed.flowRegime}
-                    velocityMps={computed.Vavg}
-                    pressureDropPa={computed.pressureDropPa}
-                    profileMode={
-                      computed.selectedProfile || (computed.flowRegime === 'laminar' ? 'laminar' : 'turbulent')
+          <h1 className="sp-title">{isNew?<>Run a <span className="ac">New Simulation</span></>:<><span className="ac">{result?.name}</span></>}</h1>
+          <p className="sp-sub">{isNew?'Configure aerodynamic parameters and run a CFD simulation':`Vehicle: ${result?.vehicle_type} · ${new Date(result?.created_at||'').toLocaleDateString()}`}</p>
+
+          <form onSubmit={handleSubmit}>
+            <div className="form-grid">
+              <div>
+                <div className="fc">
+                  <div className="fc-title"><div className="fc-icon">📋</div> Simulation Info</div>
+                  <div className="fg">
+                    <label className="lbl">Simulation Name *</label>
+                    <input className="inp-bare" type="text" placeholder="e.g. Sports Car Baseline" value={form.name} onChange={set('name')}/>
+                  </div>
+                  <div className="fg">
+                    <label className="lbl">Description <span style={{fontWeight:400,color:'var(--muted)'}}>— optional</span></label>
+                    <textarea className="inp-bare" placeholder="Notes about this configuration…" value={form.description||''} onChange={set('description')}/>
+                  </div>
+                  <div className="fg" style={{marginBottom:0}}>
+                    <label className="lbl">Vehicle Type</label>
+                    <div className="vt-grid">
+                      {VEHICLES.map(v=>(
+                        <div key={v.id} className={`vt${form.vehicle_type===v.id?' sel':''}`} onClick={()=>setForm(f=>({...f,vehicle_type:v.id}))}>
+                          <span className="vt-icon">{v.icon}</span>{v.label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="fc">
+                  <div className="fc-title"><div className="fc-icon">💨</div> Flow Parameters</div>
+                  <div className="two-col">
+                    <div className="fg">
+                      <label className="lbl">Velocity (m/s)</label>
+                      <div className="range-wrap">
+                        <span className="range-val">{form.velocity} m/s</span>
+                        <input className="range-inp" type="range" min="1" max="340" step="1" value={form.velocity} onChange={set('velocity')}/>
+                      </div>
+                    </div>
+                    <div className="fg">
+                      <label className="lbl">Angle of Attack (°)</label>
+                      <div className="range-wrap">
+                        <span className="range-val">{form.angle_of_attack}°</span>
+                        <input className="range-inp" type="range" min="-20" max="20" step="0.5" value={form.angle_of_attack} onChange={set('angle_of_attack')}/>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="fg">
+                    <label className="lbl">Air Density (kg/m³)</label>
+                    <input className="inp-bare" type="number" step="0.001" value={form.air_density} onChange={set('air_density')}/>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="fc">
+                  <div className="fc-title"><div className="fc-icon">📐</div> Geometry</div>
+                  <div className="fg">
+                    <label className="lbl">Frontal Area (m²)</label>
+                    <input className="inp-bare" type="number" step="0.01" value={form.frontal_area} onChange={set('frontal_area')}/>
+                  </div>
+                </div>
+
+                <div className="fc">
+                  <div className="fc-title"><div className="fc-icon">⚡</div> Aerodynamic Coefficients</div>
+                  <div className="fg">
+                    <label className="lbl">Drag Coefficient (Cd)</label>
+                    <div className="range-wrap">
+                      <span className="range-val">{form.drag_coefficient.toFixed(2)}</span>
+                      <input className="range-inp" type="range" min="0.01" max="2.0" step="0.01" value={form.drag_coefficient} onChange={set('drag_coefficient')}/>
+                    </div>
+                  </div>
+                  <div className="fg" style={{marginBottom:0}}>
+                    <label className="lbl">Lift Coefficient (Cl)</label>
+                    <div className="range-wrap">
+                      <span className="range-val">{form.lift_coefficient.toFixed(2)}</span>
+                      <input className="range-inp" type="range" min="-2.0" max="2.0" step="0.01" value={form.lift_coefficient} onChange={set('lift_coefficient')}/>
+                    </div>
+                  </div>
+                </div>
+
+                {isNew&&(
+                  <button className="btn-run" type="submit" disabled={submitting}>
+                    {submitting
+                      ? <><div style={{width:16,height:16,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .7s linear infinite'}}/> Running…</>
+                      : <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run Simulation</>
                     }
-                  />
-                </div>
-                <div style={styles.metricsGrid}>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Average velocity</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(computed.Vavg) ? computed.Vavg.toFixed(4) : '—'} m/s
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Reynolds number</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(computed.Re) ? computed.Re.toFixed(0) : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Friction factor (Darcy)</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(computed.frictionFactor) ? computed.frictionFactor.toFixed(5) : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Pressure drop</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(computed.pressureDropPa)
-                        ? `${(computed.pressureDropPa / 1000).toFixed(3)} kPa`
-                        : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Flow regime</div>
-                    <div style={styles.metricValue}>{computed.flowRegime}</div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Velocity profile</div>
-                    <div style={styles.metricValue}>
-                      {computed.selectedProfile === 'laminar' ? 'Parabolic' : '1/7 power'}
-                    </div>
-                  </div>
-                </div>
+                  </button>
+                )}
+              </div>
+            </div>
+          </form>
 
-                <div style={styles.chartWrap}>
-                  <div style={styles.chartTitle}>Velocity across pipe cross-section</div>
-                  <RadialVelocityChart
-                    profile={computed.velocityProfile}
-                    title="u(r)"
-                    subtitle={`samples=${computed.n}`}
-                  />
-                  <div style={styles.chartFoot}>
-                    r=0 (center) to r=R (wall). Profile is scaled to match the computed average velocity.
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+          {result&&result.status==='completed'&&(
+            <div className="results-section">
+              <div className="res-header">
+                <h2 className="res-title">Simulation Results</h2>
+                <span className="status-badge sb-completed">✓ Completed</span>
+              </div>
 
-        {result ? (
-          <div style={styles.card}>
-            <h3 style={styles.sectionTitle}>Latest Result</h3>
-
-            {localPreview ? (
-              <>
-                <div style={styles.pipeVizWrap}>
-                  <div style={styles.pipeVizHeader}>
-                    <div style={styles.pipeVizTitle}>Pipe Visual</div>
-                    <div style={styles.pipeVizMeta}>
-                      u={localPreview?.metrics?.average_velocity_m_s
-                        ? Number(localPreview.metrics.average_velocity_m_s).toFixed(2)
-                        : '—'}{' '}
-                      m/s • D=
-                      {localPreview?.inputs?.pipe?.inner_diameter_m
-                        ? Number(localPreview.inputs.pipe.inner_diameter_m).toFixed(3)
-                        : '—'}{' '}
-                      m
+              <div className="info-panel">
+                <div className="info-label">Input Parameters</div>
+                <div className="info-grid">
+                  {[['Vehicle',result.vehicle_type],['Velocity',`${result.velocity} m/s`],['Air Density',`${result.air_density} kg/m³`],
+                    ['Frontal Area',`${result.frontal_area} m²`],['Cd',result.drag_coefficient],['Cl',result.lift_coefficient],
+                    ['Angle of Attack',`${result.angle_of_attack}°`]].map(([k,v])=>(
+                    <div className="info-item" key={String(k)}>
+                      <span className="info-key">{k}</span>
+                      <span className="info-val">{String(v)}</span>
                     </div>
-                  </div>
-                  <PipeVisualization
-                    diameterM={Number(localPreview?.inputs?.pipe?.inner_diameter_m) || 0}
-                    lengthM={Number(localPreview?.inputs?.pipe?.length_m) || 0}
-                    regime={localPreview?.metrics?.flow_regime || 'unknown'}
-                    velocityMps={Number(localPreview?.metrics?.average_velocity_m_s) || 0}
-                    pressureDropPa={Number(localPreview?.metrics?.pressure_drop_Pa) || 0}
-                  />
-                </div>
-
-                <div style={styles.metricsGrid}>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Average velocity</div>
-                    <div style={styles.metricValue}>
-                      {Number(localPreview?.metrics?.average_velocity_m_s).toFixed(4)} m/s
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Reynolds number</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(Number(localPreview?.metrics?.reynolds_number))
-                        ? Number(localPreview.metrics.reynolds_number).toFixed(0)
-                        : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Friction factor (Darcy)</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(Number(localPreview?.metrics?.friction_factor_darcy))
-                        ? Number(localPreview.metrics.friction_factor_darcy).toFixed(5)
-                        : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Pressure drop</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(Number(localPreview?.metrics?.pressure_drop_Pa))
-                        ? `${(Number(localPreview.metrics.pressure_drop_Pa) / 1000).toFixed(3)} kPa`
-                        : '—'}
-                    </div>
-                  </div>
-                </div>
-
-                {Array.isArray(localPreview?.velocity_profile) && localPreview.velocity_profile.length > 0 ? (
-                  <div style={styles.chartWrap}>
-                    <div style={styles.chartTitle}>Velocity across pipe cross-section</div>
-                    <RadialVelocityChart
-                      profile={localPreview.velocity_profile}
-                      title="u(r)"
-                      subtitle={`samples=${localPreview?.inputs?.cross_section?.samples || localPreview.velocity_profile.length}`}
-                    />
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-
-            {backendResponse?.results ? (
-              <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: '#1f2a44', marginBottom: 8 }}>
-                  Backend output (placeholder)
-                </div>
-                <div style={styles.metricsGrid}>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Mean</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(Number(backendResponse.results.mean)) ? Number(backendResponse.results.mean).toFixed(4) : '—'}
-                    </div>
-                  </div>
-                  <div style={styles.metric}>
-                    <div style={styles.metricLabel}>Median</div>
-                    <div style={styles.metricValue}>
-                      {isFinite(Number(backendResponse.results.median)) ? Number(backendResponse.results.median).toFixed(4) : '—'}
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
-            ) : null}
-          </div>
-        ) : null}
-      </main>
-    </div>
-  );
-}
 
-function getSimulationStyles(isDark: boolean): { [key: string]: React.CSSProperties } {
-  return {
-    container: {
-      minHeight: '100vh',
-      backgroundColor: isDark ? '#0f1419' : '#f8f9fa',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    },
-    nav: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: '20px 40px',
-      backgroundColor: isDark ? '#1a1f2e' : 'white',
-      boxShadow: isDark ? '0 2px 20px rgba(0,0,0,0.3)' : '0 2px 10px rgba(0,0,0,0.05)',
-      borderBottom: isDark ? '1px solid #2d3748' : 'none',
-    },
-    navLeft: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '12px',
-    },
-    logo: {
-      fontSize: '24px',
-      fontWeight: 'bold',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      WebkitBackgroundClip: 'text',
-      WebkitTextFillColor: 'transparent',
-      margin: 0,
-    },
-    badge: {
-      fontSize: '12px',
-      padding: '6px 10px',
-      borderRadius: '999px',
-      backgroundColor: isDark ? '#667eea20' : '#eef2ff',
-      color: isDark ? '#a5b4fc' : '#3949ab',
-      fontWeight: 700,
-      border: isDark ? '1px solid #667eea40' : 'none',
-    },
-    themeToggle: {
-      width: '40px',
-      height: '40px',
-      borderRadius: '50%',
-      border: 'none',
-      backgroundColor: isDark ? '#2d3748' : '#f3f4f6',
-      cursor: 'pointer',
-      fontSize: '18px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      transition: 'all 0.2s ease',
-      boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
-    } as React.CSSProperties,
-    backButton: {
-      padding: '10px 14px',
-      backgroundColor: isDark ? '#2d3748' : '#1a1a1a',
-      color: 'white',
-      border: 'none',
-      borderRadius: '10px',
-      cursor: 'pointer',
-      fontSize: '14px',
-      fontWeight: 700,
-    },
-    main: {
-      padding: '40px',
-      maxWidth: '1000px',
-      margin: '0 auto',
-    },
-    card: {
-      backgroundColor: isDark ? '#1a1f2e' : 'white',
-      padding: '28px',
-      borderRadius: '12px',
-      boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 2px 10px rgba(0,0,0,0.05)',
-      marginBottom: '20px',
-      border: isDark ? '1px solid #2d3748' : 'none',
-    },
-    title: {
-      fontSize: '26px',
-      margin: '0 0 8px 0',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-    },
-    subtitle: {
-      fontSize: '14px',
-      margin: '0 0 22px 0',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      lineHeight: 1.6,
-    },
-    sectionTitle: {
-      fontSize: '18px',
-      fontWeight: 800,
-      margin: '0 0 12px 0',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-    },
-    formRow: {
-      marginBottom: '18px',
-    },
-    label: {
-      display: 'block',
-      fontSize: '13px',
-      fontWeight: 700,
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-      marginBottom: '8px',
-    },
-    input: {
-      width: '100%',
-      padding: '12px 14px',
-      border: isDark ? '1px solid #4a5568' : '1px solid #dee2e6',
-      borderRadius: '10px',
-      fontSize: '14px',
-      outline: 'none',
-      backgroundColor: isDark ? '#2d3748' : 'white',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-    },
-    textarea: {
-      minHeight: '240px',
-      padding: '12px 14px',
-      border: isDark ? '1px solid #4a5568' : '1px solid #dee2e6',
-      borderRadius: '10px',
-      fontSize: '13px',
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-      outline: 'none',
-      resize: 'vertical' as const,
-      backgroundColor: isDark ? '#2d3748' : 'white',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-    },
-    hint: {
-      marginTop: '8px',
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-    },
-    actions: {
-      display: 'flex',
-      justifyContent: 'flex-end',
-      marginTop: '10px',
-    },
-    primaryButton: {
-      padding: '12px 18px',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      color: 'white',
-      border: 'none',
-      borderRadius: '10px',
-      cursor: 'pointer',
-      fontSize: '14px',
-      fontWeight: 800,
-    },
-    error: {
-      padding: '12px 14px',
-      borderRadius: '10px',
-      backgroundColor: isDark ? '#7f1d1d20' : '#ffebee',
-      color: isDark ? '#fca5a5' : '#c62828',
-      border: isDark ? '1px solid #7f1d1d40' : '1px solid #ffcdd2',
-      fontSize: '13px',
-      fontWeight: 600,
-      marginBottom: '10px',
-    },
-    pre: {
-      margin: 0,
-      padding: '14px',
-      backgroundColor: '#0b1020',
-      color: '#e6edf3',
-      borderRadius: '12px',
-      overflowX: 'auto' as const,
-      fontSize: '12px',
-      lineHeight: 1.5,
-    },
-    hero: {
-      padding: '26px 28px',
-      borderRadius: '16px',
-      background: isDark 
-        ? 'linear-gradient(135deg, rgba(102,126,234,0.15) 0%, rgba(118,75,162,0.15) 100%)'
-        : 'linear-gradient(135deg, rgba(102,126,234,0.12) 0%, rgba(118,75,162,0.12) 100%)',
-      border: isDark ? '1px solid #2d3748' : '1px solid rgba(102,126,234,0.18)',
-      boxShadow: isDark ? '0 2px 10px rgba(0,0,0,0.2)' : '0 2px 10px rgba(0,0,0,0.04)',
-      marginBottom: '18px',
-    },
-    heroTitle: {
-      fontSize: '22px',
-      fontWeight: 900,
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-      marginBottom: '6px',
-    },
-    heroSubtitle: {
-      fontSize: '13px',
-      color: isDark ? '#a0aec0' : '#5e6a7a',
-      lineHeight: 1.6,
-      maxWidth: 840,
-    },
-    grid: {
-      display: 'grid',
-      gridTemplateColumns: '520px 1fr',
-      gap: '18px',
-    },
-    section: {
-      marginTop: '18px',
-      backgroundColor: isDark ? '#151a27' : '#fcfcff',
-      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
-      borderRadius: '12px',
-      padding: '14px',
-    },
-    sectionHeader: {
-      fontSize: '13px',
-      fontWeight: 900,
-      color: isDark ? '#f7fafc' : '#1f2a44',
-      marginBottom: '12px',
-    },
-    twoCols: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: '12px',
-    },
-    formRowSmall: {
-      marginBottom: '10px',
-    },
-    labelSm: {
-      display: 'block',
-      fontSize: '12px',
-      fontWeight: 800,
-      color: isDark ? '#f7fafc' : '#2a3553',
-      marginBottom: '6px',
-    },
-    note: {
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      marginTop: '4px',
-      lineHeight: 1.5,
-    },
-    labelRow: {
-      display: 'flex',
-      alignItems: 'baseline' as const,
-      justifyContent: 'space-between',
-      gap: '12px',
-      marginBottom: '6px',
-    },
-    smallHint: {
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      fontWeight: 700,
-    },
-    checkboxRow: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px',
-      paddingTop: '8px',
-    },
-    checkboxText: {
-      fontSize: '13px',
-      color: isDark ? '#f7fafc' : '#2a3553',
-      fontWeight: 700,
-    },
-    previewPlaceholder: {
-      padding: '14px 0',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      fontSize: '13px',
-      lineHeight: 1.6,
-    },
-    metricsGrid: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-      gap: '10px',
-      marginTop: '10px',
-      marginBottom: '12px',
-    },
-    metric: {
-      backgroundColor: isDark ? '#151a27' : '#f8f9ff',
-      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
-      borderRadius: '12px',
-      padding: '12px',
-    },
-    metricLabel: {
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      fontWeight: 800,
-      marginBottom: '6px',
-    },
-    metricValue: {
-      fontSize: '15px',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-      fontWeight: 900,
-      lineHeight: 1.2,
-      wordBreak: 'break-word' as const,
-    },
-    chartWrap: {
-      backgroundColor: isDark ? '#151a27' : '#fcfcff',
-      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
-      borderRadius: '12px',
-      padding: '14px',
-      marginTop: '12px',
-    },
-    chartTitle: {
-      fontSize: '13px',
-      fontWeight: 900,
-      color: isDark ? '#f7fafc' : '#1f2a44',
-      marginBottom: '8px',
-    },
-    chartFoot: {
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      marginTop: '8px',
-      lineHeight: 1.5,
-    },
-    pipeVizWrap: {
-      backgroundColor: isDark ? '#151a27' : '#fcfcff',
-      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
-      borderRadius: '12px',
-      padding: '14px',
-      marginTop: '8px',
-    },
-    pipeVizHeader: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      gap: 12,
-      marginBottom: '10px',
-      alignItems: 'baseline' as const,
-    },
-    pipeVizTitle: {
-      fontSize: '13px',
-      fontWeight: 900,
-      color: isDark ? '#f7fafc' : '#1f2a44',
-    },
-    pipeVizMeta: {
-      fontSize: '12px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      fontWeight: 800,
-      textAlign: 'right' as const,
-    },
-    pipeVizSvg: {
-      width: '100%',
-      height: 'auto',
-      display: 'block',
-    },
-    realtimeCanvasWrap: {
-      background: isDark 
-        ? 'linear-gradient(180deg, rgba(11,16,32,0.85) 0%, rgba(11,16,32,0.35) 100%)'
-        : 'linear-gradient(180deg, rgba(11,16,32,0.75) 0%, rgba(11,16,32,0.25) 100%)',
-      borderRadius: '14px',
-      border: isDark ? '1px solid rgba(102,126,234,0.3)' : '1px solid rgba(102,126,234,0.22)',
-      overflow: 'hidden' as const,
-      height: '360px',
-      position: 'relative' as const,
-      marginTop: '8px',
-    },
-    sliderBlock: {
-      padding: '12px 12px',
-      borderRadius: '12px',
-      backgroundColor: isDark ? '#151a27' : '#fcfcff',
-      border: isDark ? '1px solid #2d3748' : '1px solid #eef0f6',
-      marginBottom: '12px',
-    },
-    sliderTop: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'baseline' as const,
-      gap: 12,
-      marginBottom: 8,
-    },
-    sliderLabel: {
-      fontSize: '12px',
-      fontWeight: 900,
-      color: isDark ? '#f7fafc' : '#1f2a44',
-    },
-    sliderValue: {
-      fontSize: '12px',
-      fontWeight: 900,
-      color: isDark ? '#a0aec0' : '#6c757d',
-    },
-    sliderRange: {
-      width: '100%',
-    },
-  };
-}
+              <div className="kpi-grid">
+                {kpis.map(k=>(
+                  <div className="kpi" key={k.label} style={{'--kg':k.kg} as React.CSSProperties}>
+                    <div className="kpi-val">{k.val}</div>
+                    <div className="kpi-label">{k.label}</div>
+                  </div>
+                ))}
+              </div>
 
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    minHeight: '100vh',
-    backgroundColor: '#f8f9fa',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  nav: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px 40px',
-    backgroundColor: 'white',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
-  },
-  navLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  logo: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    margin: 0,
-  },
-  badge: {
-    fontSize: '12px',
-    padding: '6px 10px',
-    borderRadius: '999px',
-    backgroundColor: '#eef2ff',
-    color: '#3949ab',
-    fontWeight: 700,
-  },
-  themeToggle: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    border: 'none',
-    backgroundColor: '#f3f4f6',
-    cursor: 'pointer',
-    fontSize: '18px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-  } as React.CSSProperties,
-  backButton: {
-    padding: '10px 14px',
-    backgroundColor: '#1a1a1a',
-    color: 'white',
-    border: 'none',
-    borderRadius: '10px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: 700,
-  },
-  main: {
-    padding: '40px',
-    maxWidth: '1000px',
-    margin: '0 auto',
-  },
-  card: {
-    backgroundColor: 'white',
-    padding: '28px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
-    marginBottom: '20px',
-  },
-  title: {
-    fontSize: '26px',
-    margin: '0 0 8px 0',
-    color: '#1a1a1a',
-  },
-  subtitle: {
-    fontSize: '14px',
-    margin: '0 0 22px 0',
-    color: '#6c757d',
-    lineHeight: 1.6,
-  },
-  sectionTitle: {
-    fontSize: '18px',
-    fontWeight: 800,
-    margin: '0 0 12px 0',
-    color: '#1a1a1a',
-  },
-  formRow: {
-    marginBottom: '18px',
-  },
-  label: {
-    display: 'block',
-    fontSize: '13px',
-    fontWeight: 700,
-    color: '#1a1a1a',
-    marginBottom: '8px',
-  },
-  input: {
-    width: '100%',
-    padding: '12px 14px',
-    border: '1px solid #dee2e6',
-    borderRadius: '10px',
-    fontSize: '14px',
-    outline: 'none',
-  },
-  textarea: {
-    width: '100%',
-    minHeight: '240px',
-    padding: '12px 14px',
-    border: '1px solid #dee2e6',
-    borderRadius: '10px',
-    fontSize: '13px',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-    outline: 'none',
-    resize: 'vertical',
-  },
-  hint: {
-    marginTop: '8px',
-    fontSize: '12px',
-    color: '#6c757d',
-  },
-  actions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    marginTop: '10px',
-  },
-  primaryButton: {
-    padding: '12px 18px',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    color: 'white',
-    border: 'none',
-    borderRadius: '10px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: 800,
-  },
-  error: {
-    padding: '12px 14px',
-    borderRadius: '10px',
-    backgroundColor: '#ffebee',
-    color: '#c62828',
-    border: '1px solid #ffcdd2',
-    fontSize: '13px',
-    fontWeight: 600,
-    marginBottom: '10px',
-  },
-  pre: {
-    margin: 0,
-    padding: '14px',
-    backgroundColor: '#0b1020',
-    color: '#e6edf3',
-    borderRadius: '12px',
-    overflowX: 'auto',
-    fontSize: '12px',
-    lineHeight: 1.5,
-  },
-  hero: {
-    padding: '26px 28px',
-    borderRadius: '16px',
-    background:
-      'linear-gradient(135deg, rgba(102,126,234,0.12) 0%, rgba(118,75,162,0.12) 100%)',
-    border: '1px solid rgba(102,126,234,0.18)',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
-    marginBottom: '18px',
-  },
-  heroTitle: {
-    fontSize: '22px',
-    fontWeight: 900,
-    color: '#1a1a1a',
-    marginBottom: '6px',
-  },
-  heroSubtitle: {
-    fontSize: '13px',
-    color: '#5e6a7a',
-    lineHeight: 1.6,
-    maxWidth: 840,
-  },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: '520px 1fr',
-    gap: '18px',
-  },
-  section: {
-    marginTop: '18px',
-    backgroundColor: '#fcfcff',
-    border: '1px solid #eef0f6',
-    borderRadius: '12px',
-    padding: '14px',
-  },
-  sectionHeader: {
-    fontSize: '13px',
-    fontWeight: 900,
-    color: '#1f2a44',
-    marginBottom: '12px',
-  },
-  twoCols: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '12px',
-  },
-  formRowSmall: {
-    marginBottom: '10px',
-  },
-  labelSm: {
-    display: 'block',
-    fontSize: '12px',
-    fontWeight: 800,
-    color: '#2a3553',
-    marginBottom: '6px',
-  },
-  note: {
-    fontSize: '12px',
-    color: '#6c757d',
-    marginTop: '4px',
-    lineHeight: 1.5,
-  },
-  labelRow: {
-    display: 'flex',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    gap: '12px',
-    marginBottom: '6px',
-  },
-  smallHint: {
-    fontSize: '12px',
-    color: '#6c757d',
-    fontWeight: 700,
-  },
-  checkboxRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    paddingTop: '8px',
-  },
-  checkboxText: {
-    fontSize: '13px',
-    color: '#2a3553',
-    fontWeight: 700,
-  },
-  previewPlaceholder: {
-    padding: '14px 0',
-    color: '#6c757d',
-    fontSize: '13px',
-    lineHeight: 1.6,
-  },
-  metricsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-    gap: '10px',
-    marginTop: '10px',
-    marginBottom: '12px',
-  },
-  metric: {
-    backgroundColor: '#f8f9ff',
-    border: '1px solid #eef0f6',
-    borderRadius: '12px',
-    padding: '12px',
-  },
-  metricLabel: {
-    fontSize: '12px',
-    color: '#6c757d',
-    fontWeight: 800,
-    marginBottom: '6px',
-  },
-  metricValue: {
-    fontSize: '15px',
-    color: '#1a1a1a',
-    fontWeight: 900,
-    lineHeight: 1.2,
-    wordBreak: 'break-word',
-  },
-  chartWrap: {
-    backgroundColor: '#fcfcff',
-    border: '1px solid #eef0f6',
-    borderRadius: '12px',
-    padding: '14px',
-    marginTop: '12px',
-  },
-  chartTitle: {
-    fontSize: '13px',
-    fontWeight: 900,
-    color: '#1f2a44',
-    marginBottom: '8px',
-  },
-  chartFoot: {
-    fontSize: '12px',
-    color: '#6c757d',
-    marginTop: '8px',
-    lineHeight: 1.5,
-  },
-  pipeVizWrap: {
-    backgroundColor: '#fcfcff',
-    border: '1px solid #eef0f6',
-    borderRadius: '12px',
-    padding: '14px',
-    marginTop: '8px',
-  },
-  pipeVizHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: '10px',
-    alignItems: 'baseline',
-  },
-  pipeVizTitle: {
-    fontSize: '13px',
-    fontWeight: 900,
-    color: '#1f2a44',
-  },
-  pipeVizMeta: {
-    fontSize: '12px',
-    color: '#6c757d',
-    fontWeight: 800,
-    textAlign: 'right',
-  },
-  pipeVizSvg: {
-    width: '100%',
-    height: 'auto',
-    display: 'block',
-  },
-  realtimeCanvasWrap: {
-    background: 'linear-gradient(180deg, rgba(11,16,32,0.75) 0%, rgba(11,16,32,0.25) 100%)',
-    borderRadius: '14px',
-    border: '1px solid rgba(102,126,234,0.22)',
-    overflow: 'hidden',
-    height: '360px',
-    position: 'relative',
-    marginTop: '8px',
-  },
-  sliderBlock: {
-    padding: '12px 12px',
-    borderRadius: '12px',
-    backgroundColor: '#fcfcff',
-    border: '1px solid #eef0f6',
-    marginBottom: '12px',
-  },
-  sliderTop: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    gap: 12,
-    marginBottom: 8,
-  },
-  sliderLabel: {
-    fontSize: '12px',
-    fontWeight: 900,
-    color: '#1f2a44',
-  },
-  sliderValue: {
-    fontSize: '12px',
-    fontWeight: 900,
-    color: '#6c757d',
-  },
-  sliderRange: {
-    width: '100%',
-  },
-};
+              {result.flow_data?.length>0&&(
+                <div className="charts-grid">
+                  <FlowVelocityChart data={result.flow_data}/>
+                  <DynamicPressureChart data={result.flow_data}/>
+                  {result.pressure_distribution?.length>0&&<PressureDistributionChart data={result.pressure_distribution}/>}
+                  <VelocityProfileChart data={result.flow_data}/>
+                </div>
+              )}
+            </div>
+          )}
 
-function RangeField({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  disabled,
-  formatValue,
-  styles,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (next: number) => void;
-  disabled?: boolean;
-  formatValue?: (v: number) => string;
-  styles: { [key: string]: React.CSSProperties };
-}) {
-  const valueText = formatValue ? formatValue(value) : String(value);
-
-  return (
-    <div style={styles.sliderBlock}>
-      <div style={styles.sliderTop}>
-        <div style={styles.sliderLabel}>{label}</div>
-        <div style={styles.sliderValue}>{valueText}</div>
+          {result&&result.status==='running'&&(
+            <div className="loading-state">
+              <div className="spinner"/>
+              <p style={{color:'var(--label)',fontWeight:600}}>Simulation running…</p>
+              <p style={{color:'var(--muted)',fontSize:'.84rem',marginTop:'.45rem'}}>This usually takes a few seconds</p>
+            </div>
+          )}
+        </main>
       </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        style={styles.sliderRange}
-        aria-disabled={disabled}
-      />
-    </div>
-  );
+    </>
+  )
 }
-
-function RealTimeTubeSim({
-  diameterM,
-  lengthM,
-  regime,
-  velocityMps,
-  pressureDropPa,
-  profileMode,
-}: {
-  diameterM: number;
-  lengthM: number;
-  regime: string;
-  velocityMps: number;
-  pressureDropPa: number;
-  profileMode: string;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  const paramsRef = useRef({
-    diameterM,
-    lengthM,
-    regime,
-    velocityMps,
-    pressureDropPa,
-    profileMode,
-  });
-
-  useEffect(() => {
-    paramsRef.current = {
-      diameterM,
-      lengthM,
-      regime,
-      velocityMps,
-      pressureDropPa,
-      profileMode,
-    };
-  }, [diameterM, lengthM, regime, velocityMps, pressureDropPa, profileMode]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let raf = 0;
-
-    const resizeObserver = new ResizeObserver(() => {
-      const parent = canvas.parentElement;
-      if (!parent) return;
-      const rect = parent.getBoundingClientRect();
-      const w = Math.max(1, rect.width);
-      const h = Math.max(1, rect.height);
-      canvas.width = Math.floor(w * dpr);
-      canvas.height = Math.floor(h * dpr);
-    });
-
-    const parent = canvas.parentElement;
-    if (parent) resizeObserver.observe(parent);
-
-    const hexToRgb = (hex: string) => {
-      const clean = hex.replace('#', '');
-      const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
-      const n = parseInt(full, 16);
-      const r = (n >> 16) & 255;
-      const g = (n >> 8) & 255;
-      const b = n & 255;
-      return { r, g, b };
-    };
-
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-    const mixRgb = (a: string, b: string, t: number, alpha = 1) => {
-      const A = hexToRgb(a);
-      const B = hexToRgb(b);
-      const r = lerp(A.r, B.r, t);
-      const g = lerp(A.g, B.g, t);
-      const bb = lerp(A.b, B.b, t);
-      return `rgba(${r.toFixed(0)},${g.toFixed(0)},${bb.toFixed(0)},${alpha})`;
-    };
-    const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
-
-    const pointOnQuad = (xA: number, yA: number, xC: number, yC: number, xB: number, yB: number, t: number) => {
-      const u = 1 - t;
-      const x = u * u * xA + 2 * u * t * xC + t * t * xB;
-      const y = u * u * yA + 2 * u * t * yC + t * t * yB;
-      return { x, y };
-    };
-
-    const quadDeriv = (xA: number, yA: number, xC: number, yC: number, xB: number, yB: number, t: number) => {
-      // P'(t) for quadratic Bezier
-      const u = 1 - t;
-      const dx = 2 * u * (xC - xA) + 2 * t * (xB - xC);
-      const dy = 2 * u * (yC - yA) + 2 * t * (yB - yC);
-      return { dx, dy };
-    };
-
-    const draw = (ts: number) => {
-      raf = requestAnimationFrame(draw);
-
-      const { diameterM, lengthM, regime, velocityMps, pressureDropPa, profileMode } = paramsRef.current;
-      const parent = canvas.parentElement;
-      const wCss = parent ? parent.getBoundingClientRect().width : canvas.width / dpr;
-      const hCss = parent ? parent.getBoundingClientRect().height : canvas.height / dpr;
-      const w = Math.max(1, wCss);
-      const h = Math.max(1, hCss);
-
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, w, h);
-
-      // Background
-      const bg = ctx.createLinearGradient(0, 0, 0, h);
-      bg.addColorStop(0, 'rgba(2,6,23,0.90)');
-      bg.addColorStop(1, 'rgba(2,6,23,0.35)');
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, w, h);
-
-      // Subtle grid
-      ctx.globalAlpha = 0.25;
-      ctx.strokeStyle = 'rgba(102,126,234,0.25)';
-      ctx.lineWidth = 1;
-      const gridStep = Math.max(30, Math.round(w / 18));
-      for (let gx = 0; gx <= w; gx += gridStep) {
-        ctx.beginPath();
-        ctx.moveTo(gx, 0);
-        ctx.lineTo(gx, h);
-        ctx.stroke();
-      }
-      for (let gy = 0; gy <= h; gy += gridStep) {
-        ctx.beginPath();
-        ctx.moveTo(0, gy);
-        ctx.lineTo(w, gy);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-
-      const intensity = clamp01((velocityMps - 0.03) / 3.5); // 0..1
-      const dpKPa = Math.max(0, pressureDropPa / 1000);
-      const dpNorm = clamp01(dpKPa / 50);
-
-      const regimeColor =
-        regime === 'laminar'
-          ? '#5b7cfa'
-          : regime === 'transition'
-            ? '#8c4bff'
-            : regime === 'turbulent'
-              ? '#f97316'
-              : '#94a3b8';
-
-      const cool = '#60a5fa';
-      const tNow = ts / 1000;
-      const speed = (0.10 + 0.55 * intensity) * (0.4 + Math.min(2, lengthM / 10));
-      const waveCenter = (tNow * speed + 0.1) % 1;
-
-      // Tube geometry mapped to canvas
-      const xA = w * 0.10;
-      const xB = w * 0.93;
-      const y = h * 0.55;
-      const xC = (xA + xB) / 2;
-      const yC = y - h * (0.09 + 0.05 * intensity);
-
-      const dClamped = Math.max(0.02, Math.min(0.9, diameterM));
-      const radiusOuter = Math.max(8, (dClamped / 0.9) * (h * 0.22));
-      const radiusBore = radiusOuter * 0.58;
-
-      // Tube shell
-      ctx.save();
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.shadowBlur = 18 + 35 * intensity;
-      ctx.shadowColor = mixRgb(cool, regimeColor, 0.65, 1);
-
-      ctx.strokeStyle = mixRgb(cool, regimeColor, 0.35 + 0.55 * dpNorm, 0.25);
-      ctx.lineWidth = radiusOuter * 1.45;
-      ctx.beginPath();
-      ctx.moveTo(xA, y);
-      ctx.quadraticCurveTo(xC, yC, xB, y);
-      ctx.stroke();
-
-      ctx.strokeStyle = mixRgb(cool, regimeColor, 0.55 + 0.35 * intensity, 0.55);
-      ctx.lineWidth = radiusOuter * 1.08;
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.moveTo(xA, y);
-      ctx.quadraticCurveTo(xC, yC, xB, y);
-      ctx.stroke();
-
-      ctx.strokeStyle = 'rgba(2,6,23,0.65)';
-      ctx.lineWidth = radiusBore * 0.95;
-      ctx.beginPath();
-      ctx.moveTo(xA, y);
-      ctx.quadraticCurveTo(xC, yC, xB, y);
-      ctx.stroke();
-      ctx.restore();
-
-      // Volume-ish slices
-      const slices = 30;
-      const bands = 3; // radial bands
-
-      for (let i = 0; i < slices; i++) {
-        const t = (i + 0.5) / slices;
-        const p = pointOnQuad(xA, y, xC, yC, xB, y, t);
-        const d = quadDeriv(xA, y, xC, yC, xB, y, t);
-        const angle = Math.atan2(d.dy, d.dx);
-
-        const axialDist = Math.abs(t - waveCenter);
-        const axialBand = 0.10 + 0.16 * (0.3 + intensity * 0.7);
-        const brightness = clamp01(1 - axialDist / axialBand);
-
-        const axialBoost = 0.35 + 0.65 * brightness;
-
-        for (let b = 0; b < bands; b++) {
-          const rNorm = (b + 0.35) / bands; // 0..1-ish
-          let uNorm: number;
-          if (profileMode === 'laminar') {
-            uNorm = clamp01(1 - rNorm * rNorm);
-          } else {
-            // treat as turbulent-ish
-            uNorm = clamp01(Math.pow(1 - rNorm, 1 / 7));
-          }
-
-          const alpha = (0.08 + 0.22 * uNorm) * axialBoost * (0.35 + 0.65 * dpNorm);
-          const colorMix = clamp01(0.25 * dpNorm + 0.55 * intensity + 0.25 * uNorm);
-          const fill = mixRgb(cool, regimeColor, colorMix, alpha);
-
-          const rx = radiusBore * (0.18 + 0.28 * rNorm);
-          const ry = radiusBore * (0.08 + 0.18 * rNorm);
-
-          ctx.save();
-          ctx.translate(p.x, p.y);
-          ctx.rotate(angle);
-          ctx.scale(1, 0.65);
-          ctx.beginPath();
-          ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-          ctx.fillStyle = fill;
-          ctx.fill();
-          ctx.restore();
-        }
-      }
-
-      // Tiny “contour” lines
-      ctx.save();
-      ctx.globalAlpha = 0.35;
-      ctx.strokeStyle = 'rgba(102,126,234,0.55)';
-      ctx.lineWidth = 1;
-      const rings = 5;
-      for (let b = 0; b < rings; b++) {
-        const rr = radiusBore * (0.18 + b * 0.16);
-        for (let i = 0; i < 6; i++) {
-          const t = (i + 1) / 7;
-          const p = pointOnQuad(xA, y, xC, yC, xB, y, t);
-          const d = quadDeriv(xA, y, xC, yC, xB, y, t);
-          const angle = Math.atan2(d.dy, d.dx);
-
-          ctx.save();
-          ctx.translate(p.x, p.y);
-          ctx.rotate(angle);
-          ctx.scale(1, 0.65);
-          ctx.beginPath();
-          ctx.ellipse(0, 0, rr, rr * 0.35, 0, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.restore();
-        }
-      }
-      ctx.restore();
-    };
-
-    raf = requestAnimationFrame(draw);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      resizeObserver.disconnect();
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100%', height: '100%', display: 'block' }}
-      aria-label="Real-time cylindrical airflow simulation"
-      role="img"
-    />
-  );
-}
-
-function PipeVisualization({
-  diameterM,
-  lengthM,
-  regime,
-  velocityMps,
-  pressureDropPa,
-}: {
-  diameterM: number;
-  lengthM: number;
-  regime: string;
-  velocityMps: number;
-  pressureDropPa: number;
-}) {
-  const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
-  const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
-
-  const w = 420;
-  const h = 180;
-
-  const xStart = 70;
-  const y = 92;
-  const lengthPortion = clamp01(lengthM / 30); // 0..1
-  const xEnd = xStart + (w - 2 * xStart) * clamp(0.35 + 0.65 * lengthPortion, 0.35, 1);
-
-  const dClamped = clamp(diameterM, 0.05, 0.8);
-  const outerStroke = 10 + ((dClamped - 0.05) / (0.8 - 0.05)) * 24; // ~10..34
-  const innerStroke = Math.max(outerStroke - 6, 6);
-
-  const intensity = clamp01((velocityMps - 0.05) / 8); // ~0..1 for typical ventilation
-  const particlesBase = regime === 'laminar' ? 7 : regime === 'transition' ? 10 : 14;
-  const particlesCount = particlesBase + Math.round(intensity * (regime === 'turbulent' ? 10 : 7));
-
-  const regimeColor =
-    regime === 'laminar'
-      ? '#5b7cfa'
-      : regime === 'transition'
-        ? '#8c4bff'
-        : regime === 'turbulent'
-          ? '#f97316'
-          : '#94a3b8';
-
-  const dashDurationS = Math.max(0.7, 5.5 - intensity * 4.5);
-
-  // Quadratic curve control point (gives depth so it feels like a “real” pipe).
-  const xA = xStart;
-  const yA = y;
-  const xC = (xStart + xEnd) / 2;
-  const yC = y - 14 - intensity * 6;
-  const xB = xEnd;
-  const yB = y;
-
-  const pathD = `M ${xA} ${yA} Q ${xC} ${yC} ${xB} ${yB}`;
-
-  const pointOnQuad = (t: number) => {
-    // B(t) = (1-t)^2*A + 2(1-t)*t*C + t^2*B
-    const u = 1 - t;
-    const x = u * u * xA + 2 * u * t * xC + t * t * xB;
-    const yy = u * u * yA + 2 * u * t * yC + t * t * yB;
-    return { x, y: yy };
-  };
-
-  const opacity = regime === 'laminar' ? 0.55 : regime === 'transition' ? 0.7 : 0.85;
-
-  const kPa = pressureDropPa / 1000;
-
-  // Flow particles spacing: bias slightly toward the inlet for “directional” feel.
-  const particles = Array.from({ length: particlesCount }, (_, i) => {
-    const t = (i + 0.5) / particlesCount;
-    const tBias = Math.pow(t, 0.85);
-    const p = pointOnQuad(tBias);
-    const r = 1.6 + intensity * (regime === 'laminar' ? 2.2 : 3.2) * (0.35 + 0.65 * (1 - t));
-    const alpha = 0.18 + intensity * 0.65 * (1 - t * 0.95);
-    return { ...p, r, alpha };
-  });
-
-  return (
-    <div>
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        style={styles.pipeVizSvg}
-        role="img"
-        aria-label="Pipe visualization"
-      >
-        <defs>
-          <linearGradient id="pipeGlow" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor={regimeColor} stopOpacity="0.85" />
-            <stop offset="0.7" stopColor={regimeColor} stopOpacity="0.25" />
-            <stop offset="1" stopColor="#94a3b8" stopOpacity="0.15" />
-          </linearGradient>
-          <linearGradient id="dashGlow" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor="#ffffff" stopOpacity="0.9" />
-            <stop offset="1" stopColor={regimeColor} stopOpacity="0.55" />
-          </linearGradient>
-        </defs>
-
-        {/* Outer shell */}
-        <path d={pathD} stroke="#e5e7eb" strokeWidth={outerStroke + 5} strokeLinecap="round" opacity="0.35" fill="none" />
-        {/* Inner “pipe” */}
-        <path d={pathD} stroke="url(#pipeGlow)" strokeWidth={outerStroke} strokeLinecap="round" opacity={opacity} fill="none" />
-        {/* Inner bore */}
-        <path d={pathD} stroke="#0b1020" strokeWidth={innerStroke} strokeLinecap="round" opacity="0.22" fill="none" />
-
-        {/* Inlet/outlet */}
-        <circle cx={xA} cy={yA} r={outerStroke * 0.46} fill={regimeColor} opacity={0.16} />
-        <circle cx={xB} cy={yB} r={outerStroke * 0.46} fill={regimeColor} opacity={0.16} />
-
-        {/* Flow direction cue */}
-        <g>
-          <style>
-            {`
-              .pipeFlowDash {
-                stroke-dasharray: 7 10;
-                animation: pipeDash ${dashDurationS}s linear infinite;
-              }
-              @keyframes pipeDash {
-                from { stroke-dashoffset: 0; }
-                to { stroke-dashoffset: -120; }
-              }
-            `}
-          </style>
-          <path
-            d={pathD}
-            stroke="url(#dashGlow)"
-            strokeWidth={Math.max(3, innerStroke * 0.25)}
-            strokeLinecap="round"
-            fill="none"
-            className="pipeFlowDash"
-            opacity={0.9}
-          />
-        </g>
-
-        {/* Particles along the pipe */}
-        {particles.map((p, idx) => (
-          <circle key={idx} cx={p.x} cy={p.y} r={p.r} fill={regimeColor} opacity={p.alpha} />
-        ))}
-
-        {/* Labels */}
-        <text x={xStart} y={30} fontSize="12" fill="#1f2a44" fontWeight={900}>
-          L={lengthM.toFixed(1)}m
-        </text>
-        <text x={xStart} y={46} fontSize="11" fill="#6c757d" fontWeight={800}>
-          D={diameterM.toFixed(3)}m
-        </text>
-        <text x={xStart} y={62} fontSize="11" fill="#6c757d" fontWeight={800}>
-          dp={isFinite(kPa) ? kPa.toFixed(3) : '—'} kPa
-        </text>
-        <text x={xEnd} y={62} fontSize="11" fill="#6c757d" fontWeight={800} textAnchor="end">
-          {regime}
-        </text>
-      </svg>
-    </div>
-  );
-}
-
-function RadialVelocityChart({
-  profile,
-  title,
-  subtitle,
-}: {
-  profile: Array<{ rNorm: number; u: number }>;
-  title: string;
-  subtitle?: string;
-}) {
-  const w = 360;
-  const h = 180;
-  const pad = 18;
-
-  const maxU = Math.max(...profile.map((p) => p.u), 0);
-  const scaleY = (u: number) => {
-    if (maxU <= 0) return h - pad;
-    const t = u / maxU;
-    return (h - pad) - t * (h - 2 * pad);
-  };
-  const scaleX = (rNorm: number) => pad + rNorm * (w - 2 * pad);
-
-  const pts = profile.map((p) => ({ x: scaleX(p.rNorm), y: scaleY(p.u) }));
-
-  const line = pts
-    .map((p, idx) => {
-      const cmd = idx === 0 ? 'M' : 'L';
-      return `${cmd} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
-    })
-    .join(' ');
-
-  const area = `M ${pad} ${h - pad} ${pts.map((p) => `L ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')} L ${w - pad} ${
-    h - pad
-  } Z`;
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
-        <div style={{ fontSize: 12, fontWeight: 900, color: '#1f2a44' }}>
-          {title}
-        </div>
-        <div style={{ fontSize: 12, color: '#6c757d', fontWeight: 800 }}>{subtitle}</div>
-      </div>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 'auto' }}>
-        <defs>
-          <linearGradient id="velFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#667eea" stopOpacity="0.35" />
-            <stop offset="1" stopColor="#764ba2" stopOpacity="0.03" />
-          </linearGradient>
-        </defs>
-
-        {/* Axes */}
-        <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="#e6e8ef" strokeWidth="1" />
-        <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="#e6e8ef" strokeWidth="1" />
-
-        {/* Area + line */}
-        <path d={area} fill="url(#velFill)" />
-        <path d={line} fill="none" stroke="#667eea" strokeWidth="2.5" strokeLinecap="round" />
-
-        {/* Wall/center labels */}
-        <text x={pad} y={h - 4} fontSize="10" fill="#6c757d" fontWeight={800}>
-          r=0
-        </text>
-        <text x={w - pad} y={h - 4} fontSize="10" fill="#6c757d" fontWeight={800} textAnchor="end">
-          r=R
-        </text>
-      </svg>
-    </div>
-  );
-}
-

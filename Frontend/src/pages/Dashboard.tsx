@@ -1,726 +1,196 @@
-import { useMemo, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { authAPI, simulationAPI } from '../services/api';
+import { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import Navbar from '../components/Navbar'
+import { simulationAPI, type SimulationResult } from '../services/api'
 
-type Theme = 'light' | 'dark';
+const S = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap');
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#eef2f7;--surf:#ffffff;--surf2:#f5f8fc;--border:#dde3ec;--a1:#3b6fd4;--a2:#5b9bd5;--text:#1a2333;--muted:#6b7a90;--label:#44546a;--success:#2e9e6b;--danger:#d95f5f;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
+  .db-bg{position:fixed;inset:0;z-index:0;pointer-events:none;}
+  .db-bg::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 55% 40% at 5% 10%,rgba(59,111,212,.07) 0%,transparent 50%),radial-gradient(ellipse 45% 35% at 95% 90%,rgba(91,155,213,.05) 0%,transparent 50%);}
+  .db-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(59,111,212,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(59,111,212,.035) 1px,transparent 1px);background-size:36px 36px;}
+  .db-wrap{position:relative;z-index:1;min-height:100vh;}
+  .db-main{max-width:1280px;margin:0 auto;padding:2.5rem clamp(1rem,4vw,3rem);}
+  .db-header{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:1.5rem;margin-bottom:2.2rem;}
+  .db-greeting{font-family:'Plus Jakarta Sans',sans-serif;font-size:clamp(1.5rem,3vw,2rem);font-weight:800;letter-spacing:-.02em;color:var(--text);}
+  .db-greeting span{color:var(--a1);}
+  .db-sub{font-size:.88rem;color:var(--muted);margin-top:.35rem;}
+  .btn-new{display:inline-flex;align-items:center;gap:.45rem;padding:.72rem 1.4rem;background:linear-gradient(135deg,var(--a1),var(--a2));border:none;border-radius:9px;color:#fff;font-size:.88rem;font-weight:600;font-family:'Inter',sans-serif;cursor:pointer;text-decoration:none;transition:transform .18s,box-shadow .18s;box-shadow:0 3px 10px rgba(59,111,212,.25);white-space:nowrap;}
+  .btn-new:hover{transform:translateY(-1px);box-shadow:0 5px 16px rgba(59,111,212,.32);}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:1.1rem;margin-bottom:2.2rem;}
+  .stat-card{background:var(--surf);border:1px solid var(--border);border-radius:13px;padding:1.3rem;position:relative;overflow:hidden;transition:border-color .18s,transform .18s;box-shadow:0 1px 4px rgba(59,111,212,.04);}
+  .stat-card:hover{border-color:rgba(59,111,212,.25);transform:translateY(-2px);}
+  .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--sg,linear-gradient(90deg,var(--a1),var(--a2)));}
+  .sc-icon{width:38px;height:38px;border-radius:9px;background:var(--si,rgba(59,111,212,.08));display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin-bottom:.9rem;}
+  .sc-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.75rem;font-weight:800;color:var(--a1);}
+  .sc-label{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:.15rem;}
+  .toolbar{display:flex;gap:.65rem;flex-wrap:wrap;margin-bottom:1.6rem;align-items:center;}
+  .search-wrap{position:relative;flex:1;min-width:200px;}
+  .search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;}
+  .search-inp{width:100%;padding:.62rem .62rem .62rem 2.4rem;background:var(--surf);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.86rem;font-family:'Inter',sans-serif;outline:none;transition:border-color .18s;}
+  .search-inp::placeholder{color:#b8c4d4;}
+  .search-inp:focus{border-color:var(--a1);}
+  .filter-btn{padding:.62rem .95rem;background:var(--surf);border:1px solid var(--border);border-radius:8px;color:var(--label);font-size:.83rem;font-family:'Inter',sans-serif;cursor:pointer;transition:border-color .18s,color .18s;white-space:nowrap;}
+  .filter-btn:hover,.filter-btn.active{border-color:var(--a1);color:var(--a1);background:rgba(59,111,212,.04);}
+  .sim-grid{display:grid;gap:.9rem;}
+  .sim-card{background:var(--surf);border:1px solid var(--border);border-radius:13px;padding:1.3rem 1.5rem;display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center;transition:border-color .18s,transform .18s;text-decoration:none;color:inherit;box-shadow:0 1px 4px rgba(59,111,212,.04);}
+  .sim-card:hover{border-color:rgba(59,111,212,.3);transform:translateX(3px);}
+  .sim-name{font-size:.96rem;font-weight:700;color:var(--text);margin-bottom:.4rem;}
+  .sim-tags{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.4rem;}
+  .tag{font-size:.72rem;padding:.18rem .55rem;border-radius:5px;font-weight:600;letter-spacing:.02em;}
+  .tag-v{background:rgba(59,111,212,.08);color:var(--a1);border:1px solid rgba(59,111,212,.15);}
+  .tag-completed{background:rgba(46,158,107,.08);color:var(--success);border:1px solid rgba(46,158,107,.18);}
+  .tag-running{background:rgba(59,111,212,.08);color:var(--a1);border:1px solid rgba(59,111,212,.18);animation:pulse 1.8s ease-in-out infinite;}
+  .tag-pending{background:rgba(232,148,58,.08);color:#e8943a;border:1px solid rgba(232,148,58,.18);}
+  .tag-failed{background:rgba(217,95,95,.08);color:var(--danger);border:1px solid rgba(217,95,95,.18);}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+  .sim-desc{font-size:.8rem;color:var(--muted);}
+  .sim-kpis{display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.5rem;}
+  .kpi-item{display:flex;flex-direction:column;gap:.08rem;}
+  .kpi-val{font-size:.86rem;font-weight:700;color:var(--text);}
+  .kpi-lbl{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+  .sim-right{display:flex;align-items:center;gap:.65rem;}
+  .sim-date{font-size:.75rem;color:var(--muted);text-align:right;white-space:nowrap;}
+  .del-btn{width:30px;height:30px;border-radius:7px;background:rgba(217,95,95,.07);border:1px solid rgba(217,95,95,.18);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .18s;flex-shrink:0;}
+  .del-btn:hover{background:rgba(217,95,95,.15);}
+  .empty{text-align:center;padding:4.5rem 2rem;background:var(--surf);border:1px solid var(--border);border-radius:14px;}
+  .empty-icon{font-size:2.8rem;margin-bottom:.9rem;}
+  .empty-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.3rem;font-weight:800;color:var(--text);margin-bottom:.45rem;}
+  .empty-sub{font-size:.87rem;color:var(--muted);margin-bottom:1.4rem;}
+  .skeleton{background:linear-gradient(90deg,var(--surf) 25%,var(--surf2) 50%,var(--surf) 75%);background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:13px;height:90px;}
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  @media(max-width:700px){.sim-card{grid-template-columns:1fr}.sim-right{justify-content:flex-start}.stats-grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:420px){.stats-grid{grid-template-columns:1fr}}
+`
+
+const VI: Record<string,string> = {car:'🚗',truck:'🚛',motorcycle:'🏍️',aircraft:'✈️',drone:'🛸',custom:'🔧',default:'🌊'}
 
 export default function Dashboard() {
-  const [user, setUser] = useState<any>(null);
-  const [simulations, setSimulations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAllRecent, setShowAllRecent] = useState(false);
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('theme');
-    return (saved as Theme) || 'light';
-  });
-  const navigate = useNavigate();
+  const navigate = useNavigate()
+  const [sims,    setSims]    = useState<SimulationResult[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search,  setSearch]  = useState('')
+  const [filter,  setFilter]  = useState('all')
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const userStr = localStorage.getItem('user')
+  const user    = userStr ? JSON.parse(userStr) : {first_name:'User'}
 
-  useEffect(() => {
-    localStorage.setItem('theme', theme);
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
+  useEffect(()=>{ fetch() },[])
 
-  const loadData = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        navigate('/login');
-        return;
-      }
-
-      const [userResponse, simulationsResponse] = await Promise.all([
-        authAPI.getCurrentUser(),
-        simulationAPI.getAll(),
-      ]);
-
-      setUser(userResponse.data);
-      setSimulations(simulationsResponse.data);
-    } catch (error: any) {
-      console.error('Error loading data:', error);
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/login');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/login');
-  };
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
-
-  const handleSimulationClick = (simId: number) => {
-    navigate(`/simulation?id=${simId}`);
-  };
-
-  const handleDeleteSimulation = async (simId: number, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card click
-    
-    if (!window.confirm('Are you sure you want to delete this simulation?')) {
-      return;
-    }
-
-    try {
-      await simulationAPI.delete(simId);
-      // Refresh the simulations list
-      setSimulations(prev => prev.filter(s => s.id !== simId));
-    } catch (error: any) {
-      console.error('Error deleting simulation:', error);
-      alert('Failed to delete simulation: ' + (error.response?.data?.detail || error.message));
-    }
-  };
-
-  const recentCount = showAllRecent ? simulations.length : Math.min(4, simulations.length);
-  const simulationsToShow = useMemo(() => {
-    if (showAllRecent) return simulations;
-    return simulations.slice(0, recentCount);
-  }, [recentCount, simulations, showAllRecent]);
-
-  if (loading) {
-    const styles = getStyles(theme);
-    return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.spinner}>
-          <div style={styles.spinnerRing}></div>
-          <div style={styles.spinnerText}>Loading...</div>
-        </div>
-      </div>
-    );
+  const fetch = async () => {
+    try { const r = await simulationAPI.list(); setSims(r.data) }
+    catch { toast.error('Failed to load simulations') }
+    finally { setLoading(false) }
   }
 
-  if (!user) {
-    const styles = getStyles(theme);
-    return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.spinner}>Error loading user data. Please try logging in again.</div>
-      </div>
-    );
+  const handleDelete = async (e: React.MouseEvent, id: number) => {
+    e.preventDefault(); e.stopPropagation()
+    if (!confirm('Delete this simulation?')) return
+    try { await simulationAPI.delete(id); setSims(s=>s.filter(x=>x.id!==id)); toast.success('Deleted') }
+    catch { toast.error('Failed to delete') }
   }
 
-  const styles = getStyles(theme);
+  const filtered = sims.filter(s=>{
+    const ms = s.name.toLowerCase().includes(search.toLowerCase())||s.vehicle_type.toLowerCase().includes(search.toLowerCase())
+    return ms && (filter==='all'||s.status===filter)
+  })
+
+  const completed = sims.filter(s=>s.status==='completed')
+  const avgDrag   = completed.length ? completed.reduce((a,s)=>a+(s.drag_force||0),0)/completed.length : null
+  const avgEff    = completed.length ? completed.reduce((a,s)=>a+(s.efficiency_score||0),0)/completed.length : null
+
+  const statCards = [
+    {icon:'🌊',label:'Total Simulations', val:sims.length.toString(),      sg:'linear-gradient(90deg,#3b6fd4,#5b9bd5)', si:'rgba(59,111,212,.08)'},
+    {icon:'✅',label:'Completed',          val:completed.length.toString(), sg:'linear-gradient(90deg,#2e9e6b,#5b9bd5)', si:'rgba(46,158,107,.08)'},
+    {icon:'💨',label:'Avg Drag (N)',        val:avgDrag!=null?avgDrag.toFixed(1):'—', sg:'linear-gradient(90deg,#5b7fd4,#3b6fd4)', si:'rgba(59,111,212,.08)'},
+    {icon:'⚡',label:'Avg Efficiency',      val:avgEff!=null?avgEff.toFixed(1)+'%':'—', sg:'linear-gradient(90deg,#e8943a,#ffd32a)', si:'rgba(232,148,58,.08)'},
+  ]
+
+  const fmt = (d:string) => new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
 
   return (
-    <div style={styles.container}>
-      <nav style={styles.nav}>
-        <div style={styles.navLeft}>
-          <h1 style={styles.logo}>SmartTracker</h1>
-          <span style={styles.badge}>Dashboard</span>
-        </div>
-        <div style={styles.navRight}>
-          <button onClick={toggleTheme} style={styles.themeToggle} aria-label="Toggle theme">
-            {theme === 'light' ? '🌙' : '☀️'}
-          </button>
-          <span style={styles.username}>Welcome, {user?.username}</span>
-          <button onClick={handleLogout} style={styles.logoutButton}>
-            Logout
-          </button>
-        </div>
-      </nav>
-
-      <main style={styles.main}>
-        <div style={styles.header}>
-          <div>
-            <h2 style={styles.title}>Dashboard</h2>
-            <p style={styles.subtitle}>Monitor and manage your simulations</p>
-          </div>
-          <button style={styles.newButton} onClick={() => navigate('/simulation')}>
-            <span style={styles.buttonIcon}>+</span> New Simulation
-          </button>
-        </div>
-
-        <div style={styles.stats}>
-          <div style={styles.statCard}>
-            <div style={styles.statIconWrapper}>
-              <div style={styles.statIcon}>📊</div>
+    <>
+      <style>{S}</style>
+      <div className="db-bg"><div className="db-grid"/></div>
+      <div className="db-wrap">
+        <Navbar variant="app"/>
+        <main className="db-main">
+          <div className="db-header">
+            <div>
+              <h1 className="db-greeting">Good day, <span>{user.first_name}</span> 👋</h1>
+              <p className="db-sub">Here's an overview of your aerodynamics simulations</p>
             </div>
-            <div style={styles.statContent}>
-              <div style={styles.statValue}>{simulations.length}</div>
-              <div style={styles.statLabel}>Total Simulations</div>
-            </div>
+            <Link to="/simulation/new" className="btn-new">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New Simulation
+            </Link>
           </div>
 
-          <div style={styles.statCard}>
-            <div style={styles.statIconWrapper}>
-              <div style={styles.statIcon}>✅</div>
-            </div>
-            <div style={styles.statContent}>
-              <div style={styles.statValue}>
-                {simulations.filter(s => s.results).length}
+          <div className="stats-grid">
+            {statCards.map(s=>(
+              <div className="stat-card" key={s.label} style={{'--sg':s.sg,'--si':s.si} as React.CSSProperties}>
+                <div className="sc-icon">{s.icon}</div>
+                <div className="sc-val">{s.val}</div>
+                <div className="sc-label">{s.label}</div>
               </div>
-              <div style={styles.statLabel}>Completed</div>
-            </div>
+            ))}
           </div>
 
-          <div style={styles.statCard}>
-            <div style={styles.statIconWrapper}>
-              <div style={styles.statIcon}>⏳</div>
+          <div className="toolbar">
+            <div className="search-wrap">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input className="search-inp" type="text" placeholder="Search simulations…" value={search} onChange={e=>setSearch(e.target.value)}/>
             </div>
-            <div style={styles.statContent}>
-              <div style={styles.statValue}>
-                {simulations.filter(s => !s.results).length}
-              </div>
-              <div style={styles.statLabel}>Pending</div>
-            </div>
-          </div>
-
-          <div style={styles.statCard}>
-            <div style={styles.statIconWrapper}>
-              <div style={styles.statIcon}>👤</div>
-            </div>
-            <div style={styles.statContent}>
-              <div style={styles.statValue}>{user?.purpose || 'N/A'}</div>
-              <div style={styles.statLabel}>Purpose</div>
-            </div>
-          </div>
-        </div>
-
-        <div style={styles.section}>
-          <div style={styles.sectionHeaderRow}>
-            <h3 style={styles.sectionTitle}>Recent Simulations</h3>
-            {simulations.length > 4 && (
-              <button
-                style={styles.toggleButton}
-                onClick={() => setShowAllRecent((v) => !v)}
-                aria-label="Toggle recent simulations list"
-              >
-                {showAllRecent ? 'Show less' : `Show all (${simulations.length})`}
+            {['all','completed','running','pending','failed'].map(f=>(
+              <button key={f} className={`filter-btn${filter===f?' active':''}`} onClick={()=>setFilter(f)}>
+                {f.charAt(0).toUpperCase()+f.slice(1)}
               </button>
-            )}
+            ))}
           </div>
 
-          {simulations.length === 0 ? (
-            <div style={styles.emptyState}>
-              <div style={styles.emptyIcon}>📊</div>
-              <p style={styles.emptyText}>No simulations yet</p>
-              <p style={styles.emptySubtext}>Create your first simulation to get started</p>
-              <button style={styles.emptyButton} onClick={() => navigate('/simulation')}>
-                Create Simulation
-              </button>
+          {loading ? (
+            <div className="sim-grid">{[1,2,3].map(i=><div key={i} className="skeleton"/>)}</div>
+          ) : filtered.length===0 ? (
+            <div className="empty">
+              <div className="empty-icon">🌊</div>
+              <div className="empty-title">{search||filter!=='all'?'No results found':'No simulations yet'}</div>
+              <div className="empty-sub">{search||filter!=='all'?'Try a different search or filter':'Run your first aerodynamics simulation to get started'}</div>
+              {!search&&filter==='all'&&<Link to="/simulation/new" className="btn-new" style={{display:'inline-flex',margin:'0 auto'}}>Create Simulation</Link>}
             </div>
           ) : (
-            <div style={styles.simulationGrid}>
-              {simulationsToShow.map((sim) => (
-                <div 
-                  key={sim.id} 
-                  style={styles.simulationCard}
-                  onClick={() => handleSimulationClick(sim.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      handleSimulationClick(sim.id);
-                    }
-                  }}
-                >
-                  <div style={styles.cardHeader}>
-                    <h4 style={styles.simulationName}>{sim.name}</h4>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={styles.simulationStatus}>
-                        {sim.results ? (
-                          <span style={styles.statusCompleted}>✓ Completed</span>
-                        ) : (
-                          <span style={styles.statusPending}>⏳ Pending</span>
-                        )}
+            <div className="sim-grid">
+              {filtered.map(sim=>(
+                <Link to={`/simulation/${sim.id}`} className="sim-card" key={sim.id}>
+                  <div>
+                    <div className="sim-name">{VI[sim.vehicle_type]||VI.default} {sim.name}</div>
+                    <div className="sim-tags">
+                      <span className="tag tag-v">{sim.vehicle_type}</span>
+                      <span className={`tag tag-${sim.status}`}>{sim.status}</span>
+                    </div>
+                    {sim.description&&<div className="sim-desc">{sim.description}</div>}
+                    {sim.status==='completed'&&(
+                      <div className="sim-kpis">
+                        {[['Drag',sim.drag_force?.toFixed(1)+' N'],['Lift',sim.lift_force?.toFixed(1)+' N'],['Velocity',sim.velocity+' m/s'],['Efficiency',sim.efficiency_score?.toFixed(1)+'%']].map(([l,v])=>(
+                          <div className="kpi-item" key={l}><span className="kpi-val">{v}</span><span className="kpi-lbl">{l}</span></div>
+                        ))}
                       </div>
-                      <button
-                        onClick={(e) => handleDeleteSimulation(sim.id, e)}
-                        style={styles.deleteButton}
-                        aria-label="Delete simulation"
-                        title="Delete simulation"
-                      >
-                        🗑️
-                      </button>
-                    </div>
+                    )}
                   </div>
-                  <p style={styles.simulationDate}>
-                    {new Date(sim.created_at).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                  {sim.results && (
-                    <div style={styles.simulationMeta}>
-                      <span style={styles.metaItem}>
-                        Mean: {Number(sim.results.mean).toFixed(2)}
-                      </span>
-                      <span style={styles.metaItem}>
-                        Median: {Number(sim.results.median).toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                  <div style={styles.cardFooter}>
-                    <span style={styles.viewDetails}>View Details →</span>
+                  <div className="sim-right">
+                    <div className="sim-date">{fmt(sim.created_at)}</div>
+                    <button className="del-btn" title="Delete" onClick={e=>handleDelete(e,sim.id)}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    </button>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
-        </div>
-      </main>
-
-      <footer style={styles.footer}>
-        <div style={styles.footerInner}>
-          <div style={styles.footerSection}>
-            <div style={styles.footerSectionHeader}>
-              <div style={styles.footerSectionTitle}>Simulation (Raw Inputs)</div>
-              <div style={styles.footerSectionSubtitle}>Run simulation using manual/raw parameter values</div>
-            </div>
-            <button onClick={() => navigate('/simulation')} style={styles.footerButton}>
-              Open Simulation
-            </button>
-          </div>
-
-          <div style={styles.footerDivider} />
-
-          <div style={styles.footerSection}>
-            <div style={styles.footerSectionHeader}>
-              <div style={styles.footerSectionTitle}>Live IoT Sensor Data</div>
-              <div style={styles.footerSectionSubtitle}>Use real sensor feed (or paste sensor JSON for now)</div>
-            </div>
-            <button onClick={() => navigate('/iot-live')} style={styles.footerButtonAlt}>
-              Open Live IoT
-            </button>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-function getStyles(theme: Theme): { [key: string]: React.CSSProperties } {
-  const isDark = theme === 'dark';
-  
-  return {
-    container: {
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      backgroundColor: isDark ? '#0f1419' : '#f8f9fa',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-      transition: 'background-color 0.3s ease',
-    },
-    loadingContainer: {
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: isDark ? '#0f1419' : '#f8f9fa',
-    },
-    spinner: {
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: '16px',
-    },
-    spinnerRing: {
-      width: '48px',
-      height: '48px',
-      border: '4px solid',
-      borderColor: isDark ? '#667eea40' : '#667eea20',
-      borderTopColor: '#667eea',
-      borderRadius: '50%',
-      animation: 'spin 1s linear infinite',
-    },
-    spinnerText: {
-      fontSize: '16px',
-      color: isDark ? '#a0aec0' : '#667eea',
-      fontWeight: '600',
-    },
-    nav: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: '20px 40px',
-      backgroundColor: isDark ? '#1a1f2e' : 'white',
-      boxShadow: isDark ? '0 2px 20px rgba(0,0,0,0.3)' : '0 2px 10px rgba(0,0,0,0.05)',
-      borderBottom: isDark ? '1px solid #2d3748' : 'none',
-      transition: 'all 0.3s ease',
-    },
-    navLeft: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '16px',
-    },
-    logo: {
-      fontSize: '26px',
-      fontWeight: '800',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      WebkitBackgroundClip: 'text',
-      WebkitTextFillColor: 'transparent',
-      margin: 0,
-      letterSpacing: '-0.5px',
-    },
-    badge: {
-      fontSize: '12px',
-      padding: '6px 12px',
-      borderRadius: '20px',
-      backgroundColor: isDark ? '#667eea20' : '#eef2ff',
-      color: isDark ? '#a5b4fc' : '#3949ab',
-      fontWeight: '700',
-      border: isDark ? '1px solid #667eea40' : 'none',
-    },
-    navRight: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '16px',
-    },
-    themeToggle: {
-      width: '40px',
-      height: '40px',
-      borderRadius: '50%',
-      border: 'none',
-      backgroundColor: isDark ? '#2d3748' : '#f3f4f6',
-      cursor: 'pointer',
-      fontSize: '18px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      transition: 'all 0.2s ease',
-      boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
-    },
-    username: {
-      fontSize: '15px',
-      color: isDark ? '#e2e8f0' : '#333',
-      fontWeight: '600',
-    },
-    logoutButton: {
-      padding: '10px 20px',
-      backgroundColor: isDark ? '#dc2626' : '#f44336',
-      color: 'white',
-      border: 'none',
-      borderRadius: '10px',
-      cursor: 'pointer',
-      fontSize: '14px',
-      fontWeight: '700',
-      transition: 'all 0.2s ease',
-      boxShadow: '0 2px 8px rgba(244, 67, 54, 0.3)',
-    },
-    main: {
-      flex: 1,
-      padding: '40px',
-      maxWidth: '1400px',
-      margin: '0 auto',
-      width: '100%',
-      paddingBottom: '120px',
-    },
-    header: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginBottom: '32px',
-    },
-    title: {
-      fontSize: '36px',
-      fontWeight: '800',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-      margin: '0 0 8px 0',
-      letterSpacing: '-1px',
-    },
-    subtitle: {
-      fontSize: '16px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      margin: 0,
-    },
-    newButton: {
-      padding: '14px 28px',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      color: 'white',
-      border: 'none',
-      borderRadius: '12px',
-      cursor: 'pointer',
-      fontSize: '16px',
-      fontWeight: '700',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      boxShadow: '0 4px 16px rgba(102, 126, 234, 0.4)',
-      transition: 'all 0.2s ease',
-    },
-    buttonIcon: {
-      fontSize: '20px',
-      fontWeight: '400',
-    },
-    stats: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-      gap: '20px',
-      marginBottom: '40px',
-    },
-    statCard: {
-      backgroundColor: isDark ? '#1a1f2e' : 'white',
-      padding: '24px',
-      borderRadius: '16px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '20px',
-      boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 2px 10px rgba(0,0,0,0.05)',
-      border: isDark ? '1px solid #2d3748' : 'none',
-      transition: 'all 0.3s ease',
-    },
-    statIconWrapper: {
-      width: '56px',
-      height: '56px',
-      borderRadius: '14px',
-      background: isDark 
-        ? 'linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.2) 100%)'
-        : 'linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      border: isDark ? '1px solid #667eea40' : 'none',
-    },
-    statIcon: {
-      fontSize: '28px',
-    },
-    statContent: {
-      flex: 1,
-    },
-    statValue: {
-      fontSize: '32px',
-      fontWeight: '800',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-      lineHeight: 1,
-      marginBottom: '6px',
-    },
-    statLabel: {
-      fontSize: '14px',
-      color: isDark ? '#a0aec0' : '#666',
-      fontWeight: '600',
-    },
-    section: {
-      background: isDark 
-        ? 'linear-gradient(180deg, #1a1f2e 0%, #151a27 100%)'
-        : 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(246,247,255,1) 100%)',
-      padding: '32px',
-      borderRadius: '16px',
-      boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.3)' : '0 2px 10px rgba(0,0,0,0.05)',
-      border: isDark ? '1px solid #2d3748' : 'none',
-    },
-    sectionTitle: {
-      fontSize: '22px',
-      fontWeight: '800',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-      margin: 0,
-    },
-    sectionHeaderRow: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: '24px',
-    },
-    toggleButton: {
-      padding: '10px 16px',
-      background: isDark 
-        ? 'linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.2) 100%)'
-        : 'linear-gradient(135deg, rgba(102,126,234,0.15) 0%, rgba(118,75,162,0.15) 100%)',
-      color: isDark ? '#a5b4fc' : '#3949ab',
-      border: isDark ? '1px solid #667eea40' : '1px solid rgba(102,126,234,0.25)',
-      borderRadius: '999px',
-      fontSize: '13px',
-      fontWeight: '800',
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-    },
-    emptyState: {
-      textAlign: 'center',
-      padding: '80px 20px',
-    },
-    emptyIcon: {
-      fontSize: '64px',
-      marginBottom: '16px',
-      opacity: 0.5,
-    },
-    emptyText: {
-      fontSize: '20px',
-      color: isDark ? '#a0aec0' : '#666',
-      margin: '0 0 8px 0',
-      fontWeight: '600',
-    },
-    emptySubtext: {
-      fontSize: '15px',
-      color: isDark ? '#718096' : '#999',
-      margin: '0 0 24px 0',
-    },
-    emptyButton: {
-      padding: '12px 24px',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      color: 'white',
-      border: 'none',
-      borderRadius: '10px',
-      cursor: 'pointer',
-      fontSize: '15px',
-      fontWeight: '700',
-      boxShadow: '0 4px 16px rgba(102, 126, 234, 0.4)',
-    },
-    simulationGrid: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-      gap: '20px',
-    },
-    simulationCard: {
-      padding: '24px',
-      border: isDark ? '1px solid #2d3748' : '1px solid #e6e9f2',
-      borderRadius: '14px',
-      transition: 'all 0.2s ease',
-      backgroundColor: isDark ? '#1a1f2e' : 'white',
-      cursor: 'pointer',
-      boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.2)' : '0 2px 12px rgba(0,0,0,0.03)',
-    },
-    cardHeader: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginBottom: '12px',
-      gap: '12px',
-    },
-    simulationName: {
-      fontSize: '18px',
-      fontWeight: '700',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-      margin: 0,
-      flex: 1,
-    },
-    deleteButton: {
-      width: '32px',
-      height: '32px',
-      borderRadius: '8px',
-      border: 'none',
-      backgroundColor: isDark ? '#7f1d1d20' : '#ffebee',
-      cursor: 'pointer',
-      fontSize: '14px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      transition: 'all 0.2s ease',
-      flexShrink: 0,
-    } as React.CSSProperties,
-    simulationDate: {
-      fontSize: '13px',
-      color: isDark ? '#a0aec0' : '#666',
-      margin: '0 0 16px 0',
-      fontWeight: '500',
-    },
-    simulationStatus: {
-      flexShrink: 0,
-    },
-    statusCompleted: {
-      padding: '6px 12px',
-      backgroundColor: isDark ? '#065f4620' : '#e8f5e9',
-      color: isDark ? '#34d399' : '#2e7d32',
-      borderRadius: '20px',
-      fontSize: '12px',
-      fontWeight: '700',
-      border: isDark ? '1px solid #065f4640' : 'none',
-    },
-    statusPending: {
-      padding: '6px 12px',
-      backgroundColor: isDark ? '#78350f20' : '#fff3e0',
-      color: isDark ? '#fbbf24' : '#f57c00',
-      borderRadius: '20px',
-      fontSize: '12px',
-      fontWeight: '700',
-      border: isDark ? '1px solid #78350f40' : 'none',
-    },
-    simulationMeta: {
-      display: 'flex',
-      gap: '16px',
-      marginBottom: '12px',
-      paddingTop: '12px',
-      borderTop: isDark ? '1px solid #2d3748' : '1px solid #f0f0f0',
-    },
-    metaItem: {
-      fontSize: '13px',
-      color: isDark ? '#a0aec0' : '#666',
-      fontWeight: '600',
-    },
-    cardFooter: {
-      paddingTop: '12px',
-      borderTop: isDark ? '1px solid #2d3748' : '1px solid #f0f0f0',
-    },
-    viewDetails: {
-      fontSize: '14px',
-      color: '#667eea',
-      fontWeight: '700',
-    },
-    footer: {
-      backgroundColor: isDark ? '#1a1f2e' : 'white',
-      borderTop: isDark ? '1px solid #2d3748' : '1px solid #e9ecef',
-      padding: '24px 40px',
-      boxShadow: isDark ? '0 -2px 20px rgba(0,0,0,0.3)' : 'none',
-    },
-    footerInner: {
-      maxWidth: '1400px',
-      margin: '0 auto',
-      display: 'grid',
-      gridTemplateColumns: '1fr auto 1fr',
-      gap: '32px',
-      alignItems: 'center',
-    },
-    footerDivider: {
-      width: '1px',
-      height: '60px',
-      backgroundColor: isDark ? '#2d3748' : '#e9ecef',
-      justifySelf: 'center',
-    },
-    footerSection: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: '20px',
-    },
-    footerSectionHeader: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '6px',
-    },
-    footerSectionTitle: {
-      fontSize: '15px',
-      fontWeight: '800',
-      color: isDark ? '#f7fafc' : '#1a1a1a',
-    },
-    footerSectionSubtitle: {
-      fontSize: '13px',
-      color: isDark ? '#a0aec0' : '#6c757d',
-      fontWeight: '500',
-    },
-    footerButton: {
-      padding: '12px 20px',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      color: 'white',
-      border: 'none',
-      borderRadius: '10px',
-      cursor: 'pointer',
-      fontSize: '14px',
-      fontWeight: '800',
-      whiteSpace: 'nowrap',
-      boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
-      transition: 'all 0.2s ease',
-    },
-    footerButtonAlt: {
-      padding: '12px 20px',
-      backgroundColor: isDark ? '#2d3748' : '#1a1a1a',
-      color: 'white',
-      border: 'none',
-      borderRadius: '10px',
-      cursor: 'pointer',
-      fontSize: '14px',
-      fontWeight: '800',
-      whiteSpace: 'nowrap',
-      boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.4)' : '0 4px 12px rgba(0,0,0,0.2)',
-      transition: 'all 0.2s ease',
-    },
-  };
+        </main>
+      </div>
+    </>
+  )
 }
