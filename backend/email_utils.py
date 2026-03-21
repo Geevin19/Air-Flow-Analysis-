@@ -4,13 +4,13 @@ import string
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # type: ignore
 
 load_dotenv()
 
 MAIL_USERNAME = os.getenv("MAIL_USERNAME")
 MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
-MAIL_FROM = os.getenv("MAIL_FROM", MAIL_USERNAME)
+MAIL_FROM = os.getenv("MAIL_FROM", MAIL_USERNAME or "noreply@example.com")
 
 def generate_otp() -> str:
     return ''.join(random.choices(string.digits, k=6))
@@ -35,9 +35,16 @@ def send_otp_email(to_email: str, otp: str, subject: str, purpose: str = "verifi
     """
     msg.attach(MIMEText(html, "html"))
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(MAIL_USERNAME, MAIL_PASSWORD)
-        server.sendmail(MAIL_FROM, to_email, msg.as_string())
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        print(f"⚠️ Missing email credentials! OTP for {to_email} is: {otp}")
+        return
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(str(MAIL_USERNAME), str(MAIL_PASSWORD))
+            server.sendmail(str(MAIL_FROM), to_email, msg.as_string())
+    except Exception as e:
+        print(f"Failed to send email: {e}")
 
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
@@ -64,9 +71,13 @@ def send_admin_notification(new_username: str, new_email: str, purpose: str):
     """
     msg.attach(MIMEText(html, "html"))
 
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        print("⚠️ Missing email credentials! Skipping admin notification.")
+        return
+
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(MAIL_USERNAME, MAIL_PASSWORD)
-            server.sendmail(MAIL_FROM, ADMIN_EMAIL, msg.as_string())
+            server.login(str(MAIL_USERNAME), str(MAIL_PASSWORD))
+            server.sendmail(str(MAIL_FROM), str(ADMIN_EMAIL) if ADMIN_EMAIL else "admin@example.com", msg.as_string())
     except Exception as e:
         print(f"Admin notification failed: {e}")
