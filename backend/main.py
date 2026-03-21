@@ -7,7 +7,7 @@ from typing import List
 from pydantic import BaseModel
 
 from database import engine, get_db, Base
-from models import User, Simulation
+from models import User, Simulation, AirflowData   # ✅ added AirflowData
 from schemas import UserCreate, UserResponse, Token, SimulationCreate, SimulationResponse
 from auth import verify_password, get_password_hash, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
 from simulation import run_simulation
@@ -184,3 +184,26 @@ def delete_simulation(simulation_id: int, current_user: User = Depends(get_curre
     db.delete(simulation)
     db.commit()
     return {'message': 'Simulation deleted successfully'}
+
+
+# ✅ UPDATED ENDPOINT (NOW STORES IN DATABASE)
+@app.post("/data")
+async def receive_airflow(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+
+    airflow_value = data.get("airflow")
+
+    # Save to DB
+    new_data = AirflowData(value=airflow_value)
+    db.add(new_data)
+    db.commit()
+
+    print("📥 Stored in DB:", airflow_value)
+
+    return {"status": "saved"}
+
+
+@app.get("/airflow")
+def get_airflow_data(db: Session = Depends(get_db)):
+    data = db.query(AirflowData).order_by(AirflowData.id.desc()).limit(20).all()
+    return data[::-1]  # return in correct order (old → new)
