@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -26,3 +26,12 @@ class Simulation(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship('User', back_populates='simulations')
+
+
+# ✅ NEW TABLE (ONLY ADDITION)
+class AirflowData(Base):
+    __tablename__ = "airflow_data"
+
+    id = Column(Integer, primary_key=True, index=True)
+    value = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)
