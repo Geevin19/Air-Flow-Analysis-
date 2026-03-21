@@ -1,164 +1,152 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
-import { authAPI } from '../services/api'
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { authAPI } from "../services/api";
 
-const S = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap');
-  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  :root{--bg:#eef2f7;--surf:#ffffff;--surf2:#f5f8fc;--border:#dde3ec;--border2:#c5cfdf;--a1:#3b6fd4;--a2:#5b9bd5;--text:#1a2333;--muted:#6b7a90;--label:#44546a;}
-  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;overflow-x:hidden;}
-  .bg-canvas{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
-  .bg-canvas::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 65% 55% at 0% 0%,rgba(91,155,213,.13) 0%,transparent 55%),radial-gradient(ellipse 55% 45% at 100% 100%,rgba(59,111,212,.08) 0%,transparent 50%);}
-  .bg-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(59,111,212,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(59,111,212,.045) 1px,transparent 1px);background-size:36px 36px;}
-  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-  @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-  .page{position:relative;z-index:1;min-height:100vh;display:grid;grid-template-columns:1fr 1fr;align-items:stretch;}
-  .hero{display:flex;flex-direction:column;justify-content:center;padding:clamp(2.5rem,6vw,5rem);border-right:1px solid var(--border);animation:fadeUp .5s cubic-bezier(.22,1,.36,1) both;}
-  .brand{display:flex;align-items:center;gap:.65rem;margin-bottom:3.5rem;text-decoration:none;width:fit-content;}
-  .brand-icon{width:38px;height:38px;background:linear-gradient(135deg,var(--a1),var(--a2));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;box-shadow:0 2px 10px rgba(59,111,212,.22);}
-  .brand-name{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.25rem;font-weight:800;color:var(--a1);letter-spacing:-.01em;}
-  .eyebrow{display:inline-flex;align-items:center;gap:.42rem;background:rgba(59,111,212,.07);border:1px solid rgba(59,111,212,.16);border-radius:100px;padding:.28rem .85rem;font-size:.73rem;font-weight:600;color:var(--a1);letter-spacing:.06em;text-transform:uppercase;width:fit-content;margin-bottom:1.5rem;}
-  .eyebrow::before{content:'';width:6px;height:6px;background:var(--a2);border-radius:50%;animation:blink 2.2s ease-in-out infinite;}
-  .h-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:clamp(1.9rem,3.5vw,3rem);font-weight:800;line-height:1.12;letter-spacing:-.03em;color:var(--text);margin-bottom:1.1rem;}
-  .h-title .ac{color:var(--a1);}
-  .h-sub{font-size:.95rem;color:var(--muted);line-height:1.75;max-width:390px;margin-bottom:2.8rem;}
-  .feat-list{list-style:none;display:flex;flex-direction:column;gap:.8rem;margin-bottom:2.8rem;}
-  .feat-list li{display:flex;align-items:center;gap:.65rem;font-size:.88rem;color:var(--label);}
-  .f-check{width:19px;height:19px;flex-shrink:0;border-radius:50%;background:rgba(59,111,212,.09);border:1px solid rgba(59,111,212,.22);display:flex;align-items:center;justify-content:center;color:var(--a1);font-size:.6rem;font-weight:700;}
-  .stat-row{display:flex;gap:2rem;flex-wrap:wrap;padding-top:2rem;border-top:1px solid var(--border);}
-  .stat{display:flex;flex-direction:column;gap:.12rem;}
-  .s-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.5rem;font-weight:800;color:var(--a1);}
-  .s-lbl{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
-  .form-panel{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:clamp(2rem,5vw,4rem);background:var(--surf2);}
-  .card{width:100%;max-width:420px;background:var(--surf);border:1px solid var(--border);border-radius:18px;padding:clamp(1.75rem,4vw,2.5rem);box-shadow:0 4px 24px rgba(59,111,212,.07),0 1px 3px rgba(0,0,0,.04);animation:fadeUp .5s .1s cubic-bezier(.22,1,.36,1) both;}
-  .c-logo{display:flex;align-items:center;gap:.6rem;margin-bottom:1.8rem;text-decoration:none;}
-  .c-logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--a1),var(--a2));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;box-shadow:0 2px 8px rgba(59,111,212,.2);}
-  .c-logo-name{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.15rem;font-weight:800;color:var(--a1);}
-  .c-title{font-size:1.42rem;font-weight:700;color:var(--text);letter-spacing:-.02em;margin-bottom:.3rem;}
-  .c-sub{font-size:.86rem;color:var(--muted);margin-bottom:1.7rem;}
-  .soc-row{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-bottom:1.4rem;}
-  .soc-btn{display:flex;align-items:center;justify-content:center;gap:.45rem;padding:.62rem;border:1px solid var(--border);border-radius:9px;background:var(--surf);color:var(--label);font-size:.83rem;font-weight:500;font-family:'Inter',sans-serif;cursor:pointer;transition:border-color .18s,background .18s,box-shadow .18s;}
-  .soc-btn:hover{border-color:var(--a2);background:rgba(59,111,212,.04);box-shadow:0 2px 8px rgba(59,111,212,.09);}
-  .sep{display:flex;align-items:center;gap:.85rem;font-size:.77rem;color:var(--muted);margin-bottom:1.4rem;}
-  .sep::before,.sep::after{content:'';flex:1;height:1px;background:var(--border);}
-  .fg{margin-bottom:1rem;}
-  .lbl{display:block;font-size:.79rem;font-weight:600;color:var(--label);margin-bottom:.4rem;letter-spacing:.02em;}
-  .iw{position:relative;}
-  .iw svg.ico{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--border2);pointer-events:none;transition:color .18s;}
-  .iw:focus-within svg.ico{color:var(--a1);}
-  .inp{width:100%;padding:.7rem .7rem .7rem 2.5rem;background:var(--surf2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:.88rem;font-family:'Inter',sans-serif;outline:none;transition:border-color .18s,box-shadow .18s,background .18s;}
-  .inp::placeholder{color:#b8c4d4;}
-  .inp:focus{border-color:var(--a1);background:var(--surf);box-shadow:0 0 0 3px rgba(59,111,212,.09);}
-  .eye{position:absolute;right:11px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--border2);background:none;border:none;padding:0;display:flex;align-items:center;transition:color .18s;}
-  .eye:hover{color:var(--a1);}
-  .opts{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.3rem;flex-wrap:wrap;gap:.4rem;}
-  .chk{display:flex;align-items:center;gap:.4rem;font-size:.81rem;color:var(--muted);cursor:pointer;}
-  .chk input[type=checkbox]{appearance:none;width:15px;height:15px;border:1.5px solid var(--border2);border-radius:4px;background:var(--surf);cursor:pointer;position:relative;transition:all .18s;}
-  .chk input[type=checkbox]:checked{background:var(--a1);border-color:var(--a1);}
-  .chk input[type=checkbox]:checked::after{content:'';position:absolute;top:2px;left:4px;width:5px;height:8px;border:2px solid white;border-top:none;border-left:none;transform:rotate(45deg);}
-  .forgot{font-size:.81rem;color:var(--a1);font-weight:500;text-decoration:none;transition:color .18s;}
-  .forgot:hover{color:var(--a2);}
-  .btn{width:100%;padding:.78rem;background:linear-gradient(135deg,var(--a1),var(--a2));border:none;border-radius:8px;color:#fff;font-size:.9rem;font-weight:600;font-family:'Inter',sans-serif;cursor:pointer;letter-spacing:.02em;transition:transform .15s,box-shadow .18s;box-shadow:0 3px 12px rgba(59,111,212,.28);}
-  .btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 5px 18px rgba(59,111,212,.32);}
-  .btn:active{transform:translateY(0);}
-  .btn:disabled{opacity:.58;cursor:not-allowed;}
-  .c-foot{text-align:center;margin-top:1.3rem;font-size:.82rem;color:var(--muted);}
-  .c-foot a{color:var(--a1);text-decoration:none;font-weight:600;}
-  .c-foot a:hover{text-decoration:underline;}
-  @media(max-width:860px){.page{grid-template-columns:1fr}.hero{border-right:none;border-bottom:1px solid var(--border);padding:2.5rem 1.5rem 2rem}.h-title{font-size:clamp(1.7rem,6vw,2.3rem)}.feat-list{display:none}}
-  @media(max-width:520px){.hero{padding:2rem 1.2rem 1.75rem}.form-panel{padding:1.5rem 1rem}.card{padding:1.5rem 1.2rem;border-radius:14px}.soc-row{grid-template-columns:1fr}}
-`
+const styles = `
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg-deep: #060a12; --bg-card: #0d1525; --bg-input: #111c30;
+    --border: #1e2f4a; --accent1: #2463eb; --accent2: #06d6f5; --accent3: #7c3aed;
+    --text-main: #e8edf5; --text-muted: #6b7fa3; --text-label: #9aaecf;
+  }
+  body { background: var(--bg-deep); color: var(--text-main); font-family: 'Space Grotesk', sans-serif; overflow-x: hidden; }
+  .lp-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .lp-bg::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 80% 60% at 10% 20%, rgba(36,99,235,.18) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 50% at 90% 80%, rgba(124,58,237,.15) 0%, transparent 55%);
+    animation: bgPulse 8s ease-in-out infinite alternate;
+  }
+  @keyframes bgPulse { 0%{opacity:.7;transform:scale(1)} 100%{opacity:1;transform:scale(1.05)} }
+  .lp-grid { position:absolute;inset:0;background-image:linear-gradient(rgba(36,99,235,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(36,99,235,.06) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black 40%,transparent 100%); }
+  .lp-orb { position:absolute;border-radius:50%;filter:blur(80px);animation:floatOrb 12s ease-in-out infinite; }
+  .lp-orb-1 { width:320px;height:320px;background:rgba(36,99,235,.2);top:-80px;left:-80px;animation-delay:0s; }
+  .lp-orb-2 { width:240px;height:240px;background:rgba(124,58,237,.18);bottom:-60px;right:-60px;animation-delay:-4s; }
+  @keyframes floatOrb { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(20px,-20px) scale(1.08)} }
+  @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+  .lp-page { position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem; }
+  .lp-card { width:100%;max-width:440px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;padding:clamp(1.5rem,4vw,2.8rem);position:relative;overflow:hidden;animation:slideUp .7s .15s cubic-bezier(.22,1,.36,1) both; }
+  .lp-card::before { content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent3),var(--accent1),var(--accent2)); }
+  .lp-logo { display:flex;align-items:center;gap:.75rem;margin-bottom:2rem; }
+  .lp-logo-icon { width:40px;height:40px;background:linear-gradient(135deg,var(--accent1),var(--accent2));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem; }
+  .lp-logo-text { font-family:'Syne',sans-serif;font-size:1.3rem;font-weight:800;background:linear-gradient(135deg,var(--accent2),var(--accent1));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+  .lp-card-h { font-size:1.6rem;font-weight:700;margin-bottom:.4rem;letter-spacing:-.02em; }
+  .lp-card-s { font-size:.9rem;color:var(--text-muted);margin-bottom:2rem; }
+  .lp-fg { margin-bottom:1.2rem; }
+  .lp-label { display:block;font-size:.82rem;font-weight:600;color:var(--text-label);margin-bottom:.5rem;letter-spacing:.03em; }
+  .lp-iw { position:relative; }
+  .lp-iw svg.ico { position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none; }
+  .lp-input { width:100%;padding:.75rem .75rem .75rem 2.8rem;background:var(--bg-input);border:1px solid var(--border);border-radius:10px;color:var(--text-main);font-size:.92rem;font-family:'Space Grotesk',sans-serif;outline:none;transition:border-color .2s,box-shadow .2s; }
+  .lp-input::placeholder { color:var(--text-muted); }
+  .lp-input:focus { border-color:var(--accent1);box-shadow:0 0 0 3px rgba(36,99,235,.15); }
+  .lp-eye { position:absolute;right:14px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text-muted);background:none;border:none;padding:0;display:flex;align-items:center;transition:color .2s; }
+  .lp-eye:hover { color:var(--accent2); }
+  .lp-opts { display:flex;align-items:center;justify-content:flex-end;margin-bottom:1.5rem; }
+  .lp-forgot { font-size:.85rem;color:var(--accent2);text-decoration:none;transition:color .2s;cursor:pointer;background:none;border:none;font-family:'Space Grotesk',sans-serif; }
+  .lp-forgot:hover { color:var(--accent1); }
+  .lp-btn { width:100%;padding:.85rem;background:linear-gradient(135deg,var(--accent1),var(--accent2));border:none;border-radius:10px;color:#fff;font-size:.95rem;font-weight:700;font-family:'Space Grotesk',sans-serif;cursor:pointer;letter-spacing:.04em;transition:transform .15s,box-shadow .2s; }
+  .lp-btn:hover { transform:translateY(-2px);box-shadow:0 8px 32px rgba(36,99,235,.4); }
+  .lp-btn:disabled { opacity:.6;cursor:not-allowed;transform:none; }
+  .lp-footer { text-align:center;margin-top:1.5rem;font-size:.87rem;color:var(--text-muted); }
+  .lp-footer a { color:var(--accent2);text-decoration:none;font-weight:600; }
+  .lp-error { padding:.75rem;margin-bottom:1rem;background:rgba(255,79,109,.15);border:1px solid rgba(255,79,109,.3);border-radius:8px;color:#ff4f6d;font-size:.85rem; }
+`;
 
-export default function Login() {
-  const navigate = useNavigate()
-  const [email,    setEmail]    = useState('')
-  const [password, setPassword] = useState('')
-  const [showPass, setShowPass] = useState(false)
-  const [remember, setRemember] = useState(false)
-  const [loading,  setLoading]  = useState(false)
+export default function LoginPage() {
+  const navigate = useNavigate();
+  const [showPass, setShowPass] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!email || !password) { toast.error('Please fill in all fields'); return }
-    setLoading(true)
+    e.preventDefault();
+    setError("");
+    setLoading(true);
     try {
-      const res = await authAPI.login({ email, password })
-      localStorage.setItem('token', res.data.access_token)
-      localStorage.setItem('user', JSON.stringify(res.data.user))
-      toast.success(`Welcome back, ${res.data.user.first_name}!`)
-      navigate('/dashboard')
+      const response = await authAPI.login(username, password);
+      localStorage.setItem("token", response.data.access_token);
+      navigate("/dashboard");
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Invalid email or password')
-    } finally { setLoading(false) }
-  }
+      const detail = err.response?.data?.detail;
+      if (detail === "Please verify your email before logging in") {
+        setError("Please verify your email first. Check your inbox for the OTP.");
+      } else {
+        setError(detail || "Login failed. Please check your credentials.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <>
-      <style>{S}</style>
-      <div className="bg-canvas"><div className="bg-grid"/></div>
-      <div className="page">
-        <section className="hero">
-          <Link to="/" className="brand"><div className="brand-icon">⚡</div><span className="brand-name">AeroFlow</span></Link>
-          <span className="eyebrow">Trusted Platform</span>
-          <h1 className="h-title">Welcome back<br/>to <span className="ac">AeroFlow</span></h1>
-          <p className="h-sub">Sign in to access your simulations, manage projects, and run cloud-based aerodynamic analysis in seconds.</p>
-          <ul className="feat-list">
-            {['Real-time CFD simulations','Drag, lift & pressure analysis','Interactive flow visualisation','Multi-vehicle support'].map(f=>(
-              <li key={f}><span className="f-check">✓</span>{f}</li>
-            ))}
-          </ul>
-          <div className="stat-row">
-            {[['50K+','Active users'],['99.9%','Uptime'],['< 2s','Avg compute']].map(([v,l])=>(
-              <div className="stat" key={l}><span className="s-val">{v}</span><span className="s-lbl">{l}</span></div>
-            ))}
-          </div>
-        </section>
+      <style>{styles}</style>
+      <div className="lp-bg">
+        <div className="lp-grid" />
+        <div className="lp-orb lp-orb-1" />
+        <div className="lp-orb lp-orb-2" />
+      </div>
 
-        <section className="form-panel">
-          <div className="card">
-            <Link to="/" className="c-logo"><div className="c-logo-icon">⚡</div><span className="c-logo-name">AeroFlow</span></Link>
-            <h2 className="c-title">Sign in</h2>
-            <p className="c-sub">Enter your credentials to continue</p>
-            <div className="soc-row">
-              <button className="soc-btn" type="button" onClick={()=>toast('OAuth coming soon!')}>
-                <svg width="17" height="17" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                Google
-              </button>
-              <button className="soc-btn" type="button" onClick={()=>toast('OAuth coming soon!')}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="#1a2333"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                GitHub
+      <div className="lp-page">
+        <div className="lp-card">
+          <div className="lp-logo">
+            <div className="lp-logo-icon">⚡</div>
+            <span className="lp-logo-text">AeroAuth</span>
+          </div>
+          <h2 className="lp-card-h">Sign in</h2>
+          <p className="lp-card-s">Enter your credentials to continue</p>
+
+          <form onSubmit={handleSubmit}>
+            {error && <div className="lp-error">{error}</div>}
+
+            <div className="lp-fg">
+              <label className="lp-label" htmlFor="lp-username">Username</label>
+              <div className="lp-iw">
+                <svg className="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+                <input id="lp-username" className="lp-input" type="text" placeholder="your_username" required
+                  value={username} onChange={e => setUsername(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="lp-fg">
+              <label className="lp-label" htmlFor="lp-pass">Password</label>
+              <div className="lp-iw">
+                <svg className="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+                <input id="lp-pass" className="lp-input" type={showPass ? "text" : "password"}
+                  placeholder="••••••••" required value={password} onChange={e => setPassword(e.target.value)} />
+                <button type="button" className="lp-eye" onClick={() => setShowPass(!showPass)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="lp-opts">
+              <button type="button" className="lp-forgot" onClick={() => navigate("/forgot-password")}>
+                Forgot password?
               </button>
             </div>
-            <div className="sep">or sign in with email</div>
-            <form onSubmit={handleSubmit}>
-              <div className="fg">
-                <label className="lbl" htmlFor="l-email">Email address</label>
-                <div className="iw">
-                  <svg className="ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                  <input id="l-email" className="inp" type="email" placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email"/>
-                </div>
-              </div>
-              <div className="fg">
-                <label className="lbl" htmlFor="l-pass">Password</label>
-                <div className="iw">
-                  <svg className="ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                  <input id="l-pass" className="inp" type={showPass?'text':'password'} placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password"/>
-                  <button type="button" className="eye" onClick={()=>setShowPass(!showPass)}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                  </button>
-                </div>
-              </div>
-              <div className="opts">
-                <label className="chk"><input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)}/> Remember me</label>
-                <a href="#" className="forgot">Forgot password?</a>
-              </div>
-              <button className="btn" type="submit" disabled={loading}>{loading?'Signing in…':'Sign In →'}</button>
-            </form>
-            <div className="c-foot">Don't have an account? <Link to="/register">Create one</Link></div>
+
+            <button className="lp-btn" type="submit" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In →"}
+            </button>
+          </form>
+
+          <div className="lp-footer">
+            Don't have an account? <a href="/register">Create account</a>
           </div>
-        </section>
+        </div>
       </div>
     </>
-  )
+  );
 }
