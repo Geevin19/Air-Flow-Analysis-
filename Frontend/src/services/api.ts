@@ -20,12 +20,27 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 export const authAPI = {
   register: (data: { username: string; email: string; password: string; purpose?: string }) =>
     api.post('/register', data),
-  
+
   login: (username: string, password: string) =>
     api.post('/token', new URLSearchParams({ username, password }), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     }),
-  
+
+  verifyOtp: (email: string, otp: string) =>
+    api.post('/verify-otp', { email, otp }),
+
+  resendOtp: (email: string) =>
+    api.post('/resend-otp', { email }),
+
+  forgotPassword: (email: string) =>
+    api.post('/forgot-password', { email }),
+
+  resetPassword: (email: string, otp: string, new_password: string) =>
+    api.post('/reset-password', { email, otp, new_password }),
+
+  changePassword: (current_password: string, new_password: string) =>
+    api.post('/change-password', { current_password, new_password }),
+
   getCurrentUser: () => api.get('/users/me'),
 };
 

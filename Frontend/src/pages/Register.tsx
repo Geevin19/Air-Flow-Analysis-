@@ -34,8 +34,8 @@ const styles = `
   .rp-orb-3 { width:150px;height:150px;background:rgba(6,214,245,.14);top:50%;left:15%;animation-delay:-9s; }
   @keyframes floatOrb { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-18px,18px) scale(1.07)} }
   @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
-  .rp-page { position:relative;z-index:1;min-height:100vh;display:grid;grid-template-columns:1fr 1fr;align-items:stretch; }
-  .rp-form-panel { display:flex;flex-direction:column;justify-content:center;align-items:center;padding:clamp(2rem,5vw,4rem);border-right:1px solid var(--border); }
+  .rp-page { position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem; }
+  .rp-form-panel { display:flex;flex-direction:column;justify-content:center;align-items:center;padding:clamp(2rem,5vw,4rem); }
   .rp-card { width:100%;max-width:460px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;padding:clamp(1.5rem,4vw,2.6rem);position:relative;overflow:hidden;animation:slideUp .7s cubic-bezier(.22,1,.36,1) both; }
   .rp-card::before { content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent2),var(--accent1),var(--accent3)); }
   .rp-logo { display:flex;align-items:center;gap:.75rem;margin-bottom:1.8rem; }
@@ -138,7 +138,6 @@ export default function RegisterPage() {
   const [purpose, setPurpose] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [terms, setTerms] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -153,11 +152,6 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!terms) {
-      setError("Please accept the terms and conditions");
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -167,11 +161,7 @@ export default function RegisterPage() {
         password,
         purpose: purpose || undefined,
       });
-      
-      // Auto-login after registration
-      const loginResponse = await authAPI.login(username, password);
-      localStorage.setItem("token", loginResponse.data.access_token);
-      navigate("/dashboard");
+      navigate("/verify-otp", { state: { email } });
     } catch (err: any) {
       setError(err.response?.data?.detail || "Registration failed. Please try again.");
     } finally {
@@ -296,12 +286,6 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Checkboxes */}
-              <label className="rp-chk">
-                <input type="checkbox" checked={terms} onChange={e=>setTerms(e.target.checked)} />
-                I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
-              </label>
-
               <button className="rp-btn" type="submit" disabled={loading}>
                 {loading ? "Creating Account..." : "Create Account →"}
               </button>
@@ -313,40 +297,7 @@ export default function RegisterPage() {
           </div>
         </section>
 
-        {/* ── RIGHT HERO ── */}
-        <section className="rp-hero">
-          <span className="rp-badge">Start for Free</span>
-          <h1 className="rp-title">
-            Build.<br />Simulate.<br /><span className="rp-highlight">Dominate.</span>
-          </h1>
-          <p className="rp-sub">
-            Create your free account in under 2 minutes. No credit card required.
-            Access professional-grade tools from day one.
-          </p>
-          <div className="rp-plan-preview">
-            <div className="rp-plan-card">
-              <div>
-                <div className="rp-plan-card-name">Free</div>
-                <div className="rp-plan-card-desc">5 simulations/month</div>
-              </div>
-              <div className="rp-plan-card-price">$0 <sub>/mo</sub></div>
-            </div>
-            <div className="rp-plan-card feat">
-              <div>
-                <div className="rp-plan-card-name">Pro <span className="rp-pop-tag">Popular</span></div>
-                <div className="rp-plan-card-desc">Unlimited simulations</div>
-              </div>
-              <div className="rp-plan-card-price">$29 <sub>/mo</sub></div>
-            </div>
-            <div className="rp-plan-card">
-              <div>
-                <div className="rp-plan-card-name">Enterprise</div>
-                <div className="rp-plan-card-desc">Custom everything</div>
-              </div>
-              <div className="rp-plan-card-price" style={{color:"#a78bfa"}}>Custom</div>
-            </div>
-          </div>
-        </section>
+
       </div>
     </>
   );

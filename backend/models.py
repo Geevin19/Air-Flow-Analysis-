@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -11,6 +11,9 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     purpose = Column(String(100), nullable=True)
+    is_verified = Column(Boolean, default=False)
+    otp_code = Column(String(6), nullable=True)
+    otp_expires = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     simulations = relationship('Simulation', back_populates='user', cascade='all, delete-orphan')
