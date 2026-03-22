@@ -49,3 +49,8 @@ export const simulationAPI = {
   getById: (id: number) => api.get(`/simulations/${id}`),
   delete: (id: number) => api.delete(`/simulations/${id}`),
 };
+
+export const iotAPI = {
+  getLatest: () => api.get('/iot/latest'),
+  getHistory: (limit = 50) => api.get(`/iot/data?limit=${limit}`),
+};

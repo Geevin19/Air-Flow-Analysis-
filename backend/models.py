@@ -18,6 +18,18 @@ class User(Base):
     
     simulations = relationship('Simulation', back_populates='user', cascade='all, delete-orphan')
 
+class SensorReading(Base):
+    __tablename__ = 'sensor_readings'
+
+    id = Column(Integer, primary_key=True, index=True)
+    pressure = Column(String(50), nullable=True)
+    temperature = Column(String(50), nullable=True)
+    flow_rate = Column(String(50), nullable=True)
+    humidity = Column(String(50), nullable=True)
+    raw = Column(JSON, nullable=True)          # store full payload as-is
+    recorded_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 class Simulation(Base):
     __tablename__ = 'simulations'
     

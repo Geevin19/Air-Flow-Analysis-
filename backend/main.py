@@ -1,10 +1,12 @@
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
-from typing import List
-from pydantic import BaseModel   # ✅ ADDED
+from typing import List, Optional, Set
+from pydantic import BaseModel
+import json
+import asyncio
 
 from database import engine, get_db, Base
 from models import User, Simulation
@@ -29,6 +31,68 @@ app.add_middleware(
 )
 
 OTP_EXPIRE_MINUTES = 10
+
+
+# ── WebSocket connection manager ──
+class ConnectionManager:
+    def __init__(self):
+        self.active: Set[WebSocket] = set()
+
+    async def connect(self, ws: WebSocket):
+        await ws.accept()
+        self.active.add(ws)
+
+    def disconnect(self, ws: WebSocket):
+        self.active.discard(ws)
+
+    async def broadcast(self, data: dict):
+        msg = json.dumps(data)
+        dead = set()
+        for ws in self.active:
+            try:
+                await ws.send_text(msg)
+            except Exception:
+                dead.add(ws)
+        self.active -= dead
+
+manager = ConnectionManager()
+
+
+# ── WebSocket: browser connects here to receive live data ──
+@app.websocket("/ws/iot")
+async def iot_websocket(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            await asyncio.sleep(30)   # keep alive
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+
+# ── Arduino POSTs here, data is instantly pushed to all browsers ──
+class SensorPayload(BaseModel):
+    pressure: Optional[float] = None
+    temperature: Optional[float] = None
+    flow_rate: Optional[float] = None
+    humidity: Optional[float] = None
+    airflow: Optional[float] = None
+
+
+@app.post("/iot/data")
+async def receive_iot_data(payload: SensorPayload):
+    data = {k: v for k, v in payload.dict().items() if v is not None}
+    data["timestamp"] = datetime.utcnow().isoformat()
+    await manager.broadcast(data)
+    return {"status": "ok", "clients": len(manager.active)}
+
+
+# legacy endpoint kept for compatibility
+@app.post("/arduino/data")
+async def receive_arduino_data(payload: SensorPayload):
+    data = {k: v for k, v in payload.dict().items() if v is not None}
+    data["timestamp"] = datetime.utcnow().isoformat()
+    await manager.broadcast(data)
+    return {"status": "ok", "clients": len(manager.active)}
 
 
 @app.get('/')
@@ -204,18 +268,3 @@ def delete_simulation(simulation_id: int, current_user: User = Depends(get_curre
     db.delete(simulation)
     db.commit()
     return {'message': 'Simulation deleted successfully'}
-
-
-# ================== ✅ ARDUINO PART (ADDED ONLY) ==================
-
-class ArduinoData(BaseModel):
-    airflow: int
-
-
-@app.post("/arduino/data")
-def receive_arduino_data(data: ArduinoData):
-    print("🔥 Data from Arduino:", data.airflow)
-    return {
-        "status": "success",
-        "received": data.airflow
-    }
