@@ -4,7 +4,10 @@ export default function LandingPage() {
   return (
     <div style={styles.container}>
       <nav style={styles.nav}>
-        <h1 style={styles.logo}>SmartTracker</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <img src="/logo.png" alt="SmartTracker" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
+          <h1 style={styles.logo}>SmartTracker</h1>
+        </div>
         <div style={styles.navLinks}>
           <Link to="/login" style={styles.navLink}>Login</Link>
           <Link to="/register" style={styles.navButton}>Get Started</Link>

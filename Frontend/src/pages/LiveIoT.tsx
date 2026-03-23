@@ -110,7 +110,8 @@ export default function LiveIoT() {
       {/* NAV */}
       <nav style={s.nav}>
         <div style={s.navLeft}>
-          <span style={s.logo}>⚡ AeroAuth</span>
+          <img src="/logo.png" alt="SmartTracker" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
+          <span style={s.logo}>SmartTracker</span>
           <span style={s.badge}>Live IoT</span>
         </div>
         <button onClick={() => navigate('/dashboard')} style={s.backBtn}>← Dashboard</button>

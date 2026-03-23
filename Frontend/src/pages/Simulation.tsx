@@ -206,20 +206,20 @@ function ThreePipeScene(props: SceneProps) {
     }
 
     /* ── Lights ── */
-    const ambient = new THREE.AmbientLight(0x445566, 1.2);
+    const ambient = new THREE.AmbientLight(0x445566, props.isDark ? 1.2 : 2.0);
     scene.add(ambient);
 
-    const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    const mainLight = new THREE.DirectionalLight(0xffffff, props.isDark ? 1.5 : 2.5);
     mainLight.position.set(8, 10, 8);
     mainLight.castShadow = true;
     mainLight.shadow.mapSize.set(2048, 2048);
     scene.add(mainLight);
 
-    const fillLight = new THREE.DirectionalLight(0x6688ff, 0.8);
+    const fillLight = new THREE.DirectionalLight(0x6688ff, props.isDark ? 0.8 : 1.2);
     fillLight.position.set(-5, 3, -5);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xff8844, 0.5);
+    const rimLight = new THREE.DirectionalLight(0xff8844, props.isDark ? 0.5 : 0.8);
     rimLight.position.set(0, -3, 5);
     scene.add(rimLight);
 
@@ -699,9 +699,19 @@ export default function Simulation() {
 
   // ── new 3D UI state ──
   const [pipeShape,   setPipeShape]   = useState<PipeShape>('straight');
-  const [colorMode,   setColorMode]   = useState<'pressure'|'friction'|'velocity'|'material'>('pressure');
-  const [particleColorScheme, setParticleColorScheme] = useState<'rainbow'|'blue'|'fire'|'cyan'|'purple'>('rainbow');
-  const [particleSize, setParticleSize] = useState<'small'|'medium'|'large'>('medium');
+  const [colorMode,   setColorMode]   = useState<'pressure'|'friction'|'velocity'|'material'>('material');
+  const [particleColorScheme, setParticleColorScheme] = useState<'rainbow'|'blue'|'fire'|'cyan'|'purple'>('purple');
+  const [particleSize, setParticleSize] = useState<'small'|'medium'|'large'>('small');
+  
+  // ── theme state ──
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('simulation-theme');
+    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('simulation-theme', theme);
+  }, [theme]);
 
   // ── app state ──
   const [submitting,      setSubmitting]      = useState(false);
@@ -820,9 +830,9 @@ export default function Simulation() {
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         ::-webkit-scrollbar{width:6px;height:6px;}
-        ::-webkit-scrollbar-track{background:rgba(10,20,40,0.3);border-radius:3px;}
-        ::-webkit-scrollbar-thumb{background:rgba(80,120,200,0.4);border-radius:3px;transition:background 0.2s;}
-        ::-webkit-scrollbar-thumb:hover{background:rgba(80,120,200,0.6);}
+        ::-webkit-scrollbar-track{background:${theme === 'dark' ? 'rgba(10,20,40,0.3)' : 'rgba(200,210,230,0.3)'};border-radius:3px;}
+        ::-webkit-scrollbar-thumb{background:${theme === 'dark' ? 'rgba(80,120,200,0.4)' : 'rgba(100,120,160,0.4)'};border-radius:3px;transition:background 0.2s;}
+        ::-webkit-scrollbar-thumb:hover{background:${theme === 'dark' ? 'rgba(80,120,200,0.6)' : 'rgba(100,120,160,0.6)'};}
       `}</style>
       <div style={{ ...C.bg, ...(isDark ? {} : { background: 'radial-gradient(ellipse 80% 60% at 50% -10%,rgba(200,220,255,0.4) 0%,transparent 70%)' }) }}/>
       <div style={{ ...C.gridBg, ...(isDark ? {} : { backgroundImage: 'linear-gradient(rgba(36,99,235,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(36,99,235,0.06) 1px,transparent 1px)' }) }}/>
