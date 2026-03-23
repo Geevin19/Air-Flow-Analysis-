@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Float
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -11,9 +11,24 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     purpose = Column(String(100), nullable=True)
+    is_verified = Column(Boolean, default=False, nullable=False)
+    otp_code = Column(String(6), nullable=True)
+    otp_expires = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     simulations = relationship('Simulation', back_populates='user', cascade='all, delete-orphan')
+
+class SensorReading(Base):
+    __tablename__ = 'sensor_readings'
+
+    id = Column(Integer, primary_key=True, index=True)
+    pressure = Column(String(50), nullable=True)
+    temperature = Column(String(50), nullable=True)
+    flow_rate = Column(String(50), nullable=True)
+    humidity = Column(String(50), nullable=True)
+    raw = Column(JSON, nullable=True)          # store full payload as-is
+    recorded_at = Column(DateTime, default=datetime.utcnow, index=True)
+
 
 class Simulation(Base):
     __tablename__ = 'simulations'
@@ -26,12 +41,3 @@ class Simulation(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship('User', back_populates='simulations')
-
-
-# ✅ NEW TABLE (ONLY ADDITION)
-class AirflowData(Base):
-    __tablename__ = "airflow_data"
-
-    id = Column(Integer, primary_key=True, index=True)
-    value = Column(Float)
-    timestamp = Column(DateTime, default=datetime.utcnow)

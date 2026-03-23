@@ -14,16 +14,32 @@ class LoginRequest(BaseModel):
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
     id: int
     username: str
     email: str
     purpose: Optional[str] = None
+    is_verified: bool = False
     created_at: datetime
 
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class OTPVerify(BaseModel):
+    email: str
+    otp: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    otp: str
+    new_password: str
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
 
 class SimulationCreate(BaseModel):
     name: str
@@ -31,7 +47,6 @@ class SimulationCreate(BaseModel):
 
 class SimulationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
     id: int
     user_id: int
     name: str
