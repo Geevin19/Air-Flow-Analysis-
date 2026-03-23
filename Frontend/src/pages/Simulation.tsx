@@ -133,6 +133,7 @@ interface SceneProps {
   colorMode: 'pressure' | 'friction' | 'velocity' | 'material';
   particleColorScheme: 'rainbow' | 'blue' | 'fire' | 'cyan' | 'purple';
   particleSize: 'small' | 'medium' | 'large';
+  isDark: boolean;
 }
 
 function ThreePipeScene(props: SceneProps) {
@@ -177,7 +178,7 @@ function ThreePipeScene(props: SceneProps) {
 
     /* ── Scene ── */
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x040a18); // Match the dark theme background
+    scene.background = new THREE.Color(props.isDark ? 0x040a18 : 0xdde6f0);
 
     /* ── Camera ── */
     const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
@@ -589,7 +590,7 @@ function ThreePipeScene(props: SceneProps) {
     return () => { sceneRef.current?.dispose(); sceneRef.current = null; };
   }, [threeReady, props.pipeShape, props.pipeRadius, props.pipeLength, props.material,
       props.velocity, props.pressureDrop, props.reynolds,
-      props.flowRegime, props.colorMode, props.particleColorScheme, props.particleSize]);
+      props.flowRegime, props.colorMode, props.particleColorScheme, props.particleSize, props.isDark]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -619,46 +620,46 @@ const overlayTag: React.CSSProperties = {
 
 // ─── Shared UI primitives ─────────────────────────────────────────────────────
 
-function Field({ label, value, unit, onChange, min, max, step, description, readOnly }: {
+function Field({ label, value, unit, onChange, min, max, step, description, readOnly, isDark = true }: {
   label: string; value: number | string; unit?: string; onChange: (v: string) => void;
-  min?: number; max?: number; step?: number; description?: string; readOnly?: boolean;
+  min?: number; max?: number; step?: number; description?: string; readOnly?: boolean; isDark?: boolean;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={fld.label}>{label}</span>
-        {unit && <span style={fld.unit}>{unit}</span>}
+        <span style={{ ...fld.label, color: isDark ? 'rgba(200,210,230,0.7)' : '#374151' }}>{label}</span>
+        {unit && <span style={{ ...fld.unit, color: isDark ? 'rgba(150,180,220,0.5)' : '#6b7280', background: isDark ? 'rgba(100,140,200,0.12)' : '#f3f4f6', border: isDark ? '1px solid rgba(100,140,200,0.2)' : '1px solid #e5e7eb' }}>{unit}</span>}
       </div>
-      {description && <div style={fld.desc}>{description}</div>}
+      {description && <div style={{ ...fld.desc, color: isDark ? 'rgba(150,170,200,0.45)' : '#9ca3af' }}>{description}</div>}
       <input type="number" value={value} min={min} max={max} step={step}
         onChange={e => onChange(e.target.value)} readOnly={readOnly} disabled={readOnly}
-        style={{ ...fld.input, ...(readOnly ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }} />
+        style={{ ...fld.input, background: isDark ? 'rgba(10,20,40,0.6)' : '#ffffff', border: isDark ? '1px solid rgba(80,120,200,0.2)' : '1px solid #d1d5db', color: isDark ? '#e8f0ff' : '#111827', ...(readOnly ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }} />
     </div>
   );
 }
 
 const fld: Record<string, React.CSSProperties> = {
-  label: { fontSize: '10px', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(200,210,230,0.7)', fontFamily: '"IBM Plex Mono",monospace' },
-  unit:  { fontSize: '9px', color: 'rgba(150,180,220,0.5)', fontFamily: '"IBM Plex Mono",monospace', background: 'rgba(100,140,200,0.12)', padding: '1px 5px', borderRadius: '4px', border: '1px solid rgba(100,140,200,0.2)' },
-  desc:  { fontSize: '9px', color: 'rgba(150,170,200,0.45)', fontFamily: '"IBM Plex Mono",monospace', marginBottom: '2px' },
-  input: { width: '100%', padding: '7px 10px', background: 'rgba(10,20,40,0.6)', border: '1px solid rgba(80,120,200,0.2)', borderRadius: '8px', color: '#e8f0ff', fontSize: '13px', fontFamily: '"IBM Plex Mono",monospace', fontWeight: '600', outline: 'none', transition: 'border-color 0.2s', boxSizing: 'border-box' },
+  label: { fontSize: '10px', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: '"IBM Plex Mono",monospace' },
+  unit:  { fontSize: '9px', fontFamily: '"IBM Plex Mono",monospace', padding: '1px 5px', borderRadius: '4px' },
+  desc:  { fontSize: '9px', fontFamily: '"IBM Plex Mono",monospace', marginBottom: '2px' },
+  input: { width: '100%', padding: '7px 10px', borderRadius: '8px', fontSize: '13px', fontFamily: '"IBM Plex Mono",monospace', fontWeight: '600', outline: 'none', transition: 'border-color 0.2s', boxSizing: 'border-box' },
 };
 
-function Metric({ label, value, unit, hi }: { label: string; value: string; unit?: string; hi?: string }) {
+function Metric({ label, value, unit, hi, isDark = true }: { label: string; value: string; unit?: string; hi?: string; isDark?: boolean }) {
   return (
-    <div style={{ background: 'rgba(8,18,40,0.7)', border: `1px solid ${hi ? hi + '40' : 'rgba(80,120,200,0.15)'}`, borderRadius: '8px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '2px', backdropFilter: 'blur(8px)' }}>
-      <div style={{ fontSize: '9px', fontFamily: '"IBM Plex Mono",monospace', fontWeight: '700', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(170,190,230,0.5)' }}>{label}</div>
-      <div style={{ fontSize: '16px', fontFamily: '"Space Grotesk","IBM Plex Mono",sans-serif', fontWeight: '700', color: hi || '#e8f0ff', lineHeight: 1.1 }}>{value}</div>
-      {unit && <div style={{ fontSize: '10px', fontFamily: '"IBM Plex Mono",monospace', color: 'rgba(150,180,230,0.4)' }}>{unit}</div>}
+    <div style={{ background: isDark ? 'rgba(8,18,40,0.7)' : '#f9fafb', border: `1px solid ${hi ? hi + '40' : (isDark ? 'rgba(80,120,200,0.15)' : '#e5e7eb')}`, borderRadius: '8px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '2px', backdropFilter: isDark ? 'blur(8px)' : 'none' }}>
+      <div style={{ fontSize: '9px', fontFamily: '"IBM Plex Mono",monospace', fontWeight: '700', letterSpacing: '0.1em', textTransform: 'uppercase', color: isDark ? 'rgba(170,190,230,0.5)' : '#6b7280' }}>{label}</div>
+      <div style={{ fontSize: '16px', fontFamily: '"Space Grotesk","IBM Plex Mono",sans-serif', fontWeight: '700', color: hi || (isDark ? '#e8f0ff' : '#111827'), lineHeight: 1.1 }}>{value}</div>
+      {unit && <div style={{ fontSize: '10px', fontFamily: '"IBM Plex Mono",monospace', color: isDark ? 'rgba(150,180,230,0.4)' : '#9ca3af' }}>{unit}</div>}
     </div>
   );
 }
 
-function SecHdr({ icon, title }: { icon: string; title: string }) {
+function SecHdr({ icon, title, isDark = true }: { icon: string; title: string; isDark?: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-      <div style={{ width: '26px', height: '26px', background: 'linear-gradient(135deg,rgba(80,140,255,0.2),rgba(120,80,220,0.2))', border: '1px solid rgba(100,160,255,0.25)', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px' }}>{icon}</div>
-      <span style={{ fontSize: '10px', fontFamily: '"IBM Plex Mono",monospace', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(160,200,255,0.7)' }}>{title}</span>
+      <div style={{ width: '26px', height: '26px', background: isDark ? 'linear-gradient(135deg,rgba(80,140,255,0.2),rgba(120,80,220,0.2))' : 'linear-gradient(135deg,rgba(36,99,235,0.1),rgba(99,102,241,0.1))', border: isDark ? '1px solid rgba(100,160,255,0.25)' : '1px solid #e5e7eb', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px' }}>{icon}</div>
+      <span style={{ fontSize: '10px', fontFamily: '"IBM Plex Mono",monospace', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', color: isDark ? 'rgba(160,200,255,0.7)' : '#374151' }}>{title}</span>
     </div>
   );
 }
@@ -669,6 +670,17 @@ export default function Simulation() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const simulationId = searchParams.get('id');
+
+  // ── theme ──
+  const [theme, setTheme] = useState<'dark'|'light'>(() =>
+    (localStorage.getItem('sim-theme') as 'dark'|'light') || 'dark'
+  );
+  const isDark = theme === 'dark';
+  const toggleTheme = () => setTheme(t => {
+    const next = t === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('sim-theme', next);
+    return next;
+  });
 
   // ── form state (names match old Simulation.tsx) ──
   const [name,                   setName]                   = useState('');
@@ -791,10 +803,11 @@ export default function Simulation() {
     material: pipeMaterial, velocity: computed.velocity,
     pressureDrop: computed.pressureDrop, reynolds: computed.reynolds,
     flowRegime: computed.flowRegime, colorMode, particleColorScheme, particleSize,
+    isDark,
   };
 
   return (
-    <div style={C.page}>
+    <div style={{ ...C.page, ...(isDark ? {} : LT.page) }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
         *{box-sizing:border-box;}
@@ -811,20 +824,26 @@ export default function Simulation() {
         ::-webkit-scrollbar-thumb{background:rgba(80,120,200,0.4);border-radius:3px;transition:background 0.2s;}
         ::-webkit-scrollbar-thumb:hover{background:rgba(80,120,200,0.6);}
       `}</style>
-      <div style={C.bg}/><div style={C.gridBg}/>
+      <div style={{ ...C.bg, ...(isDark ? {} : { background: 'radial-gradient(ellipse 80% 60% at 50% -10%,rgba(200,220,255,0.4) 0%,transparent 70%)' }) }}/>
+      <div style={{ ...C.gridBg, ...(isDark ? {} : { backgroundImage: 'linear-gradient(rgba(36,99,235,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(36,99,235,0.06) 1px,transparent 1px)' }) }}/>
 
       {/* ── Nav ── */}
-      <nav style={C.nav}>
+      <nav style={{ ...C.nav, ...(isDark ? {} : LT.nav) }}>
         <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-          <button onClick={() => navigate('/dashboard')} style={C.backBtn}>← Dashboard</button>
+          <button onClick={() => navigate('/dashboard')} style={{ ...C.backBtn, ...(isDark ? {} : LT.backBtn) }}>← Dashboard</button>
           <div style={C.divider}/>
           <div style={{ display:'flex', flexDirection:'column' }}>
-            <span style={C.navTitle}>Cylindrical Air Flow Simulator {isViewing && <span style={{ fontSize:'11px', color:'#a0c4ff', opacity:0.7 }}>(Viewing)</span>}</span>
+            <span style={{ ...C.navTitle, ...(isDark ? {} : LT.navTitle) }}>Cylindrical Air Flow Simulator {isViewing && <span style={{ fontSize:'11px', color:'#a0c4ff', opacity:0.7 }}>(Viewing)</span>}</span>
             <span style={C.navSub}>{isViewing ? 'Read-only · existing simulation' : '3D live simulation · drag to orbit · inputs update instantly'}</span>
           </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
           {loadingExisting && <span style={{ fontSize:'11px', fontFamily:'"IBM Plex Mono"', color:'rgba(160,200,255,0.5)', animation:'pulse 1.5s infinite' }}>Loading…</span>}
+          {/* Theme toggle */}
+          <button onClick={toggleTheme} title="Toggle theme"
+            style={{ width:'34px', height:'34px', borderRadius:'50%', border:`1px solid ${isDark?'rgba(80,120,200,0.3)':'#d1d5db'}`, background: isDark?'rgba(80,120,200,0.1)':'#f3f4f6', cursor:'pointer', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s' }}>
+            {isDark ? '☀️' : '🌙'}
+          </button>
           <div style={{ ...C.regimeBadge, borderColor: reColor+'60', color: reColor }}>
             <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:reColor, animation:'pulse 2s infinite' }}/>
             {computed.flowRegime.charAt(0).toUpperCase()+computed.flowRegime.slice(1)}
@@ -838,11 +857,11 @@ export default function Simulation() {
       </nav>
 
       {/* ── Name bar ── */}
-      <div style={C.nameBar}>
+      <div style={{ ...C.nameBar, ...(isDark ? {} : LT.nameBar) }}>
         <input value={name} onChange={e=>setName(e.target.value)}
           placeholder={isViewing?'Simulation name':'Name this simulation…'}
           readOnly={isViewing} disabled={isViewing}
-          style={{ ...C.nameInput, ...(isViewing?{opacity:0.6,cursor:'default'}:{}) }}/>
+          style={{ ...C.nameInput, ...(isDark ? {} : LT.nameInput), ...(isViewing?{opacity:0.6,cursor:'default'}:{}) }}/>
         {isViewing && <span style={{ fontSize:'11px', fontFamily:'"IBM Plex Mono"', color:'rgba(160,200,255,0.35)', marginLeft:'14px' }}>Go to Dashboard → New Simulation to create a new one</span>}
       </div>
 
@@ -851,18 +870,18 @@ export default function Simulation() {
       )}
 
       {/* ── Main layout: left sidebar + 3D viewport + right metrics ── */}
-      <div style={C.body}>
+      <div style={{ ...C.body, ...(isDark ? {} : LT.body) }}>
 
         {/* ──── LEFT: inputs ──── */}
-        <div style={C.left}>
+        <div style={{ ...C.left, ...(isDark ? {} : LT.left) }}>
 
           {/* Pipe Shape selector */}
-          <div style={C.card}>
-            <SecHdr icon="🔷" title="Pipe Shape"/>
+          <div style={{ ...C.card, ...(isDark ? {} : LT.card) }}>
+            <SecHdr icon="🔷" title="Pipe Shape" isDark={isDark}/>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
               {(Object.entries(PIPE_SHAPES) as [PipeShape, typeof PIPE_SHAPES[PipeShape]][]).map(([key, sh]) => (
                 <button key={key} onClick={()=>setPipeShape(key)} disabled={isViewing}
-                  style={{ padding:'10px 8px', borderRadius:'10px', border:`1px solid ${pipeShape===key?'rgba(100,160,255,0.6)':'rgba(80,120,200,0.2)'}`, background: pipeShape===key?'rgba(80,140,255,0.15)':'rgba(10,20,40,0.4)', color: pipeShape===key?'#a0c4ff':'rgba(160,180,220,0.6)', fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:isViewing?'not-allowed':'pointer', transition:'all 0.2s', display:'flex', flexDirection:'column', alignItems:'center', gap:'4px' }}>
+                  style={{ padding:'10px 8px', borderRadius:'10px', border:`1px solid ${pipeShape===key?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: pipeShape===key?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: pipeShape===key?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:isViewing?'not-allowed':'pointer', transition:'all 0.2s', display:'flex', flexDirection:'column', alignItems:'center', gap:'4px' }}>
                   <span style={{ fontSize:'18px' }}>{sh.icon}</span>
                   <span>{sh.label}</span>
                   <span style={{ fontSize:'9px', opacity:0.6 }}>{sh.description}</span>
@@ -872,12 +891,12 @@ export default function Simulation() {
           </div>
 
           {/* Colour mode */}
-          <div style={C.card}>
-            <SecHdr icon="🎨" title="Visualisation Mode"/>
+          <div style={{ ...C.card, ...(isDark ? {} : LT.card) }}>
+            <SecHdr icon="🎨" title="Visualisation Mode" isDark={isDark}/>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
               {(['pressure','velocity','friction','material'] as const).map(m => (
                 <button key={m} onClick={()=>setColorMode(m)}
-                  style={{ padding:'9px 6px', borderRadius:'9px', border:`1px solid ${colorMode===m?'rgba(100,160,255,0.6)':'rgba(80,120,200,0.2)'}`, background: colorMode===m?'rgba(80,140,255,0.15)':'rgba(10,20,40,0.4)', color: colorMode===m?'#a0c4ff':'rgba(160,180,220,0.6)', fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                  style={{ padding:'9px 6px', borderRadius:'9px', border:`1px solid ${colorMode===m?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: colorMode===m?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: colorMode===m?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
                   {m}
                 </button>
               ))}
@@ -885,26 +904,26 @@ export default function Simulation() {
           </div>
 
           {/* Particle Colors */}
-          <div style={C.card}>
-            <SecHdr icon="✨" title="Particle Effects"/>
+          <div style={{ ...C.card, ...(isDark ? {} : LT.card) }}>
+            <SecHdr icon="✨" title="Particle Effects" isDark={isDark}/>
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
               <div>
-                <span style={{ ...fld.label, display:'block', marginBottom:'6px' }}>Color Scheme</span>
+                <span style={{ fontSize:'10px', fontWeight:'700', letterSpacing:'0.08em', textTransform:'uppercase', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(200,210,230,0.7)':'#374151', display:'block', marginBottom:'6px' }}>Color Scheme</span>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                   {(['rainbow','blue','fire','cyan','purple'] as const).map(scheme => (
                     <button key={scheme} onClick={()=>setParticleColorScheme(scheme)}
-                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleColorScheme===scheme?'rgba(100,160,255,0.6)':'rgba(80,120,200,0.2)'}`, background: particleColorScheme===scheme?'rgba(80,140,255,0.15)':'rgba(10,20,40,0.4)', color: particleColorScheme===scheme?'#a0c4ff':'rgba(160,180,220,0.6)', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleColorScheme===scheme?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: particleColorScheme===scheme?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleColorScheme===scheme?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
                       {scheme}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <span style={{ ...fld.label, display:'block', marginBottom:'6px' }}>Particle Size</span>
+                <span style={{ fontSize:'10px', fontWeight:'700', letterSpacing:'0.08em', textTransform:'uppercase', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(200,210,230,0.7)':'#374151', display:'block', marginBottom:'6px' }}>Particle Size</span>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'6px' }}>
                   {(['small','medium','large'] as const).map(size => (
                     <button key={size} onClick={()=>setParticleSize(size)}
-                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleSize===size?'rgba(100,160,255,0.6)':'rgba(80,120,200,0.2)'}`, background: particleSize===size?'rgba(80,140,255,0.15)':'rgba(10,20,40,0.4)', color: particleSize===size?'#a0c4ff':'rgba(160,180,220,0.6)', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleSize===size?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: particleSize===size?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleSize===size?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
                       {size}
                     </button>
                   ))}
@@ -914,20 +933,20 @@ export default function Simulation() {
           </div>
 
           {/* Pipe Geometry */}
-          <div style={C.card}>
-            <SecHdr icon="⌀" title="Pipe Geometry"/>
+          <div style={{ ...C.card, ...(isDark ? {} : LT.card) }}>
+            <SecHdr icon="⌀" title="Pipe Geometry" isDark={isDark}/>
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-              <Field label="Length" value={pipeLengthM} unit="m" min={0.5} max={1000} step={0.5} onChange={v=>setPipeLengthM(Number(v))} description="Total pipe run" readOnly={isViewing}/>
+              <Field label="Length" value={pipeLengthM} unit="m" min={0.5} max={1000} step={0.5} onChange={v=>setPipeLengthM(Number(v))} description="Total pipe run" readOnly={isViewing} isDark={isDark}/>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                <Field label="Inner Ø" value={pipeInnerDiameterM} unit="m" min={0.001} max={5} step={0.001} onChange={v=>setPipeInnerDiameterM(Number(v))} readOnly={isViewing}/>
-                <Field label="Outer Ø" value={pipeOuterDiameterM} unit="m" min={0.002} max={5.5} step={0.001} onChange={v=>setPipeOuterDiameterM(Number(v))} readOnly={isViewing}/>
+                <Field label="Inner Ø" value={pipeInnerDiameterM} unit="m" min={0.001} max={5} step={0.001} onChange={v=>setPipeInnerDiameterM(Number(v))} readOnly={isViewing} isDark={isDark}/>
+                <Field label="Outer Ø" value={pipeOuterDiameterM} unit="m" min={0.002} max={5.5} step={0.001} onChange={v=>setPipeOuterDiameterM(Number(v))} readOnly={isViewing} isDark={isDark}/>
               </div>
-              <Field label="Roughness ε" value={pipeAbsoluteRoughnessM} unit="m" min={0} max={0.01} step={0.000001} onChange={v=>setPipeAbsoluteRoughnessM(Number(v))} description="Absolute roughness" readOnly={isViewing}/>
+              <Field label="Roughness ε" value={pipeAbsoluteRoughnessM} unit="m" min={0} max={0.01} step={0.000001} onChange={v=>setPipeAbsoluteRoughnessM(Number(v))} description="Absolute roughness" readOnly={isViewing} isDark={isDark}/>
               <div>
-                <span style={{ ...fld.label, display:'block', marginBottom:'4px' }}>Material</span>
+                <span style={{ fontSize:'10px', fontWeight:'700', letterSpacing:'0.08em', textTransform:'uppercase', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(200,210,230,0.7)':'#374151', display:'block', marginBottom:'4px' }}>Material</span>
                 <div style={{ position:'relative' }}>
                   <select value={pipeMaterial} onChange={e=>setPipeMaterial(e.target.value)} disabled={isViewing}
-                    style={{ ...C.sel, ...(isViewing?{opacity:0.5,cursor:'not-allowed'}:{}) }}>
+                    style={{ ...C.sel, background: isDark?'rgba(10,20,40,0.6)':'#ffffff', border: isDark?'1px solid rgba(80,120,200,0.2)':'1px solid #d1d5db', color: isDark?'#e8f0ff':'#111827', ...(isViewing?{opacity:0.5,cursor:'not-allowed'}:{}) }}>
                     {Object.entries(MATERIALS).map(([k,m])=><option key={k} value={k}>{m.label}</option>)}
                   </select>
                   <span style={C.arr}>▾</span>
@@ -937,32 +956,32 @@ export default function Simulation() {
           </div>
 
           {/* Air + Flow */}
-          <div style={C.card}>
-            <SecHdr icon="🌡" title="Air Properties"/>
+          <div style={{ ...C.card, ...(isDark ? {} : LT.card) }}>
+            <SecHdr icon="🌡" title="Air Properties" isDark={isDark}/>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-              <Field label="Temp" value={airTemperatureC} unit="°C" min={-40} max={200} step={1} onChange={v=>setAirTemperatureC(Number(v))} readOnly={isViewing}/>
-              <Field label="Pressure" value={airPressurePa} unit="Pa" min={50000} max={500000} step={100} onChange={v=>setAirPressurePa(Number(v))} readOnly={isViewing}/>
+              <Field label="Temp" value={airTemperatureC} unit="°C" min={-40} max={200} step={1} onChange={v=>setAirTemperatureC(Number(v))} readOnly={isViewing} isDark={isDark}/>
+              <Field label="Pressure" value={airPressurePa} unit="Pa" min={50000} max={500000} step={100} onChange={v=>setAirPressurePa(Number(v))} readOnly={isViewing} isDark={isDark}/>
             </div>
             <div style={{ marginTop:'8px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-              <div style={C.pill}><span style={C.pillL}>Density</span><span style={C.pillV}>{computed.density.toFixed(4)}<small> kg/m³</small></span></div>
-              <div style={C.pill}><span style={C.pillL}>Viscosity</span><span style={C.pillV}>{(computed.viscosity*1e5).toFixed(3)}<small> ×10⁻⁵</small></span></div>
+              <div style={{ ...C.pill, background: isDark?'rgba(0,10,30,0.5)':'#f3f4f6', border: isDark?'1px solid rgba(80,120,200,0.12)':'1px solid #e5e7eb' }}><span style={{ ...C.pillL, color: isDark?'rgba(140,170,220,0.4)':'#6b7280' }}>Density</span><span style={{ ...C.pillV, color: isDark?'rgba(180,210,255,0.7)':'#111827' }}>{computed.density.toFixed(4)}<small> kg/m³</small></span></div>
+              <div style={{ ...C.pill, background: isDark?'rgba(0,10,30,0.5)':'#f3f4f6', border: isDark?'1px solid rgba(80,120,200,0.12)':'1px solid #e5e7eb' }}><span style={{ ...C.pillL, color: isDark?'rgba(140,170,220,0.4)':'#6b7280' }}>Viscosity</span><span style={{ ...C.pillV, color: isDark?'rgba(180,210,255,0.7)':'#111827' }}>{(computed.viscosity*1e5).toFixed(3)}<small> ×10⁻⁵</small></span></div>
             </div>
           </div>
 
-          <div style={C.card}>
-            <SecHdr icon="💨" title="Flow Conditions"/>
+          <div style={{ ...C.card, ...(isDark ? {} : LT.card) }}>
+            <SecHdr icon="💨" title="Flow Conditions" isDark={isDark}/>
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-              <Field label="Flow Rate Q" value={volumetricFlowRateM3S} unit="m³/s" min={0.0001} max={100} step={0.001} onChange={v=>setVolumetricFlowRateM3S(Number(v))} readOnly={isViewing}/>
-              <Field label="Minor Loss K" value={minorLossKTotal} unit="—" min={0} max={10} step={0.1} onChange={v=>setMinorLossKTotal(Number(v))} readOnly={isViewing||!includeMinorLosses}/>
+              <Field label="Flow Rate Q" value={volumetricFlowRateM3S} unit="m³/s" min={0.0001} max={100} step={0.001} onChange={v=>setVolumetricFlowRateM3S(Number(v))} readOnly={isViewing} isDark={isDark}/>
+              <Field label="Minor Loss K" value={minorLossKTotal} unit="—" min={0} max={10} step={0.1} onChange={v=>setMinorLossKTotal(Number(v))} readOnly={isViewing||!includeMinorLosses} isDark={isDark}/>
               <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
                 <input type="checkbox" id="incl" checked={includeMinorLosses} disabled={isViewing} onChange={e=>setIncludeMinorLosses(e.target.checked)} style={{ accentColor:'#667eea', width:'14px', height:'14px' }}/>
-                <label htmlFor="incl" style={{ fontSize:'10px', fontFamily:'"IBM Plex Mono"', color:'rgba(200,210,230,0.6)' }}>Include minor losses</label>
+                <label htmlFor="incl" style={{ fontSize:'10px', fontFamily:'"IBM Plex Mono"', color: isDark?'rgba(200,210,230,0.6)':'#374151' }}>Include minor losses</label>
               </div>
               <div>
-                <span style={{ ...fld.label, display:'block', marginBottom:'4px' }}>Velocity Profile</span>
+                <span style={{ fontSize:'10px', fontWeight:'700', letterSpacing:'0.08em', textTransform:'uppercase', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(200,210,230,0.7)':'#374151', display:'block', marginBottom:'4px' }}>Velocity Profile</span>
                 <div style={{ position:'relative' }}>
                   <select value={velocityProfileMode} onChange={e=>setVelocityProfileMode(e.target.value as any)} disabled={isViewing}
-                    style={{ ...C.sel, ...(isViewing?{opacity:0.5}:{}) }}>
+                    style={{ ...C.sel, background: isDark?'rgba(10,20,40,0.6)':'#ffffff', border: isDark?'1px solid rgba(80,120,200,0.2)':'1px solid #d1d5db', color: isDark?'#e8f0ff':'#111827', ...(isViewing?{opacity:0.5}:{}) }}>
                     <option value="auto_by_re">Auto (by Reynolds)</option>
                     <option value="laminar">Laminar (parabolic)</option>
                     <option value="turbulent">Turbulent (1/7 power)</option>
@@ -970,45 +989,45 @@ export default function Simulation() {
                   <span style={C.arr}>▾</span>
                 </div>
               </div>
-              <Field label="Cross-Section Samples" value={crossSectionSamples} min={10} max={120} step={1} onChange={v=>setCrossSectionSamples(Math.round(Number(v)))} readOnly={isViewing}/>
+              <Field label="Cross-Section Samples" value={crossSectionSamples} min={10} max={120} step={1} onChange={v=>setCrossSectionSamples(Math.round(Number(v)))} readOnly={isViewing} isDark={isDark}/>
             </div>
           </div>
 
         </div>{/* end LEFT */}
 
         {/* ──── CENTRE: 3D viewport ──── */}
-        <div style={C.viewport}>
+        <div style={{ ...C.viewport, background: isDark ? '#040a18' : '#dde6f0' }}>
           <ThreePipeScene {...sceneProps}/>
         </div>
 
         {/* ──── RIGHT: metrics ──── */}
-        <div style={C.right}>
-          <div style={C.card}>
-            <SecHdr icon="⚡" title="Live Metrics"/>
+        <div style={{ ...C.right, ...(isDark ? {} : LT.right) }}>
+          <div style={{ ...C.card, ...(isDark ? {} : LT.card) }}>
+            <SecHdr icon="⚡" title="Live Metrics" isDark={isDark}/>
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-              <Metric label="Avg Velocity" value={computed.velocity.toFixed(3)} unit="m/s" hi="#4fbbf7"/>
+              <Metric label="Avg Velocity" value={computed.velocity.toFixed(3)} unit="m/s" hi="#4fbbf7" isDark={isDark}/>
               <Metric label="Reynolds No."
                 value={computed.reynolds < 1000 ? computed.reynolds.toFixed(1) : (computed.reynolds/1000).toFixed(2)+'k'}
-                hi={reColor}/>
+                hi={reColor} isDark={isDark}/>
               <Metric label="Flow Regime"
                 value={computed.flowRegime.charAt(0).toUpperCase()+computed.flowRegime.slice(1)}
                 unit={computed.selectedProfile==='laminar'?'Parabolic profile':'1/7 Power Law'}
-                hi={reColor}/>
-              <Metric label="Friction Factor f" value={computed.frictionFactor.toFixed(5)} unit="Darcy–Weisbach"/>
-              <Metric label="Total Δp" value={(computed.pressureDrop/1000).toFixed(4)} unit="kPa" hi="#f7614f"/>
-              <Metric label="Friction Δp" value={(computed.frictionDrop/1000).toFixed(4)} unit="kPa"/>
-              <Metric label="Minor Loss Δp" value={(computed.minorDrop/1000).toFixed(4)} unit="kPa"/>
-              <Metric label="Mass Flow ṁ" value={computed.massFlow.toFixed(4)} unit="kg/s"/>
-              <Metric label="Wall Shear τ" value={computed.wallShear.toFixed(4)} unit="Pa"/>
+                hi={reColor} isDark={isDark}/>
+              <Metric label="Friction Factor f" value={computed.frictionFactor.toFixed(5)} unit="Darcy–Weisbach" isDark={isDark}/>
+              <Metric label="Total Δp" value={(computed.pressureDrop/1000).toFixed(4)} unit="kPa" hi="#f7614f" isDark={isDark}/>
+              <Metric label="Friction Δp" value={(computed.frictionDrop/1000).toFixed(4)} unit="kPa" isDark={isDark}/>
+              <Metric label="Minor Loss Δp" value={(computed.minorDrop/1000).toFixed(4)} unit="kPa" isDark={isDark}/>
+              <Metric label="Mass Flow ṁ" value={computed.massFlow.toFixed(4)} unit="kg/s" isDark={isDark}/>
+              <Metric label="Wall Shear τ" value={computed.wallShear.toFixed(4)} unit="Pa" isDark={isDark}/>
             </div>
           </div>
 
           {backendResult?.results && (
-            <div style={C.card}>
-              <SecHdr icon="🖥" title="Backend Output"/>
+            <div style={{ ...C.card, ...(isDark ? {} : LT.card) }}>
+              <SecHdr icon="🖥" title="Backend Output" isDark={isDark}/>
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {typeof backendResult.results.mean !== 'undefined' && <Metric label="Mean" value={Number(backendResult.results.mean).toFixed(4)}/>}
-                {typeof backendResult.results.median !== 'undefined' && <Metric label="Median" value={Number(backendResult.results.median).toFixed(4)}/>}
+                {typeof backendResult.results.mean !== 'undefined' && <Metric label="Mean" value={Number(backendResult.results.mean).toFixed(4)} isDark={isDark}/>}
+                {typeof backendResult.results.median !== 'undefined' && <Metric label="Median" value={Number(backendResult.results.median).toFixed(4)} isDark={isDark}/>}
               </div>
             </div>
           )}
@@ -1047,4 +1066,18 @@ const C: Record<string, React.CSSProperties> = {
   pill:     { background:'rgba(0,10,30,0.5)', border:'1px solid rgba(80,120,200,0.12)', borderRadius:'7px', padding:'7px 10px', display:'flex', flexDirection:'column', gap:'2px' } as React.CSSProperties,
   pillL:    { fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', letterSpacing:'0.1em', textTransform:'uppercase', color:'rgba(140,170,220,0.4)' },
   pillV:    { fontSize:'12px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'600', color:'rgba(180,210,255,0.7)' },
+};
+
+// ─── Light theme overrides ────────────────────────────────────────────────────
+const LT: Record<string, React.CSSProperties> = {
+  page:     { background:'#f1f5f9', color:'#111827' },
+  nav:      { background:'rgba(255,255,255,0.95)', borderBottom:'1px solid #e5e7eb' },
+  backBtn:  { background:'#f3f4f6', border:'1px solid #d1d5db', color:'#374151' },
+  navTitle: { color:'#111827' },
+  nameBar:  { background:'#ffffff', borderBottom:'1px solid #e5e7eb' },
+  nameInput:{ color:'#111827', borderBottom:'1px solid #d1d5db' },
+  body:     { background:'#f1f5f9' },
+  left:     { background:'#ffffff', borderRight:'1px solid #e5e7eb' } as React.CSSProperties,
+  right:    { background:'#ffffff', borderLeft:'1px solid #e5e7eb' } as React.CSSProperties,
+  card:     { background:'#f9fafb', border:'1px solid #e5e7eb', backdropFilter:'none' },
 };
