@@ -133,6 +133,7 @@ interface SceneProps {
   colorMode: 'pressure' | 'friction' | 'velocity' | 'material';
   particleColorScheme: 'rainbow' | 'blue' | 'fire' | 'cyan' | 'purple';
   particleSize: 'small' | 'medium' | 'large';
+  theme: 'dark' | 'light';
 }
 
 function ThreePipeScene(props: SceneProps) {
@@ -177,7 +178,7 @@ function ThreePipeScene(props: SceneProps) {
 
     /* ── Scene ── */
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x040a18); // Match the dark theme background
+    scene.background = new THREE.Color(props.theme === 'dark' ? 0x040a18 : 0xf0f4f8);
 
     /* ── Camera ── */
     const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
@@ -205,20 +206,20 @@ function ThreePipeScene(props: SceneProps) {
     }
 
     /* ── Lights ── */
-    const ambient = new THREE.AmbientLight(0x445566, 1.2);
+    const ambient = new THREE.AmbientLight(0x445566, props.theme === 'dark' ? 1.2 : 2.0);
     scene.add(ambient);
 
-    const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    const mainLight = new THREE.DirectionalLight(0xffffff, props.theme === 'dark' ? 1.5 : 2.5);
     mainLight.position.set(8, 10, 8);
     mainLight.castShadow = true;
     mainLight.shadow.mapSize.set(2048, 2048);
     scene.add(mainLight);
 
-    const fillLight = new THREE.DirectionalLight(0x6688ff, 0.8);
+    const fillLight = new THREE.DirectionalLight(0x6688ff, props.theme === 'dark' ? 0.8 : 1.2);
     fillLight.position.set(-5, 3, -5);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xff8844, 0.5);
+    const rimLight = new THREE.DirectionalLight(0xff8844, props.theme === 'dark' ? 0.5 : 0.8);
     rimLight.position.set(0, -3, 5);
     scene.add(rimLight);
 
@@ -589,7 +590,7 @@ function ThreePipeScene(props: SceneProps) {
     return () => { sceneRef.current?.dispose(); sceneRef.current = null; };
   }, [threeReady, props.pipeShape, props.pipeRadius, props.pipeLength, props.material,
       props.velocity, props.pressureDrop, props.reynolds,
-      props.flowRegime, props.colorMode, props.particleColorScheme, props.particleSize]);
+      props.flowRegime, props.colorMode, props.particleColorScheme, props.particleSize, props.theme]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -687,9 +688,19 @@ export default function Simulation() {
 
   // ── new 3D UI state ──
   const [pipeShape,   setPipeShape]   = useState<PipeShape>('straight');
-  const [colorMode,   setColorMode]   = useState<'pressure'|'friction'|'velocity'|'material'>('pressure');
-  const [particleColorScheme, setParticleColorScheme] = useState<'rainbow'|'blue'|'fire'|'cyan'|'purple'>('rainbow');
-  const [particleSize, setParticleSize] = useState<'small'|'medium'|'large'>('medium');
+  const [colorMode,   setColorMode]   = useState<'pressure'|'friction'|'velocity'|'material'>('material');
+  const [particleColorScheme, setParticleColorScheme] = useState<'rainbow'|'blue'|'fire'|'cyan'|'purple'>('purple');
+  const [particleSize, setParticleSize] = useState<'small'|'medium'|'large'>('small');
+  
+  // ── theme state ──
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('simulation-theme');
+    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('simulation-theme', theme);
+  }, [theme]);
 
   // ── app state ──
   const [submitting,      setSubmitting]      = useState(false);
@@ -791,10 +802,15 @@ export default function Simulation() {
     material: pipeMaterial, velocity: computed.velocity,
     pressureDrop: computed.pressureDrop, reynolds: computed.reynolds,
     flowRegime: computed.flowRegime, colorMode, particleColorScheme, particleSize,
+    theme,
   };
 
   return (
-    <div style={C.page}>
+    <div style={{ 
+      ...C.page, 
+      background: theme === 'dark' ? '#020c1e' : '#f5f7fa',
+      color: theme === 'dark' ? '#e8f0ff' : '#1a2332'
+    }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
         *{box-sizing:border-box;}
@@ -807,11 +823,22 @@ export default function Simulation() {
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
         ::-webkit-scrollbar{width:6px;height:6px;}
-        ::-webkit-scrollbar-track{background:rgba(10,20,40,0.3);border-radius:3px;}
-        ::-webkit-scrollbar-thumb{background:rgba(80,120,200,0.4);border-radius:3px;transition:background 0.2s;}
-        ::-webkit-scrollbar-thumb:hover{background:rgba(80,120,200,0.6);}
+        ::-webkit-scrollbar-track{background:${theme === 'dark' ? 'rgba(10,20,40,0.3)' : 'rgba(200,210,230,0.3)'};border-radius:3px;}
+        ::-webkit-scrollbar-thumb{background:${theme === 'dark' ? 'rgba(80,120,200,0.4)' : 'rgba(100,120,160,0.4)'};border-radius:3px;transition:background 0.2s;}
+        ::-webkit-scrollbar-thumb:hover{background:${theme === 'dark' ? 'rgba(80,120,200,0.6)' : 'rgba(100,120,160,0.6)'};}
       `}</style>
-      <div style={C.bg}/><div style={C.gridBg}/>
+      <div style={{
+        ...C.bg,
+        background: theme === 'dark' 
+          ? 'radial-gradient(ellipse 80% 60% at 50% -10%,rgba(30,80,180,0.25) 0%,transparent 70%),radial-gradient(ellipse 50% 40% at 80% 80%,rgba(80,20,160,0.15) 0%,transparent 60%)'
+          : 'radial-gradient(ellipse 80% 60% at 50% -10%,rgba(100,150,255,0.15) 0%,transparent 70%),radial-gradient(ellipse 50% 40% at 80% 80%,rgba(150,100,255,0.1) 0%,transparent 60%)'
+      }}/>
+      <div style={{
+        ...C.gridBg,
+        backgroundImage: theme === 'dark'
+          ? 'linear-gradient(rgba(80,120,200,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(80,120,200,0.04) 1px,transparent 1px)'
+          : 'linear-gradient(rgba(100,120,150,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(100,120,150,0.06) 1px,transparent 1px)'
+      }}/>
 
       {/* ── Nav ── */}
       <nav style={C.nav}>
@@ -825,6 +852,22 @@ export default function Simulation() {
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
           {loadingExisting && <span style={{ fontSize:'11px', fontFamily:'"IBM Plex Mono"', color:'rgba(160,200,255,0.5)', animation:'pulse 1.5s infinite' }}>Loading…</span>}
+          <button 
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            style={{ 
+              background: 'rgba(80,120,200,0.1)', 
+              border: '1px solid rgba(80,120,200,0.2)', 
+              borderRadius: '8px', 
+              color: 'rgba(160,200,255,0.7)', 
+              fontSize: '16px', 
+              padding: '7px 12px', 
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           <div style={{ ...C.regimeBadge, borderColor: reColor+'60', color: reColor }}>
             <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:reColor, animation:'pulse 2s infinite' }}/>
             {computed.flowRegime.charAt(0).toUpperCase()+computed.flowRegime.slice(1)}
