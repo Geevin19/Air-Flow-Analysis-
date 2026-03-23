@@ -106,7 +106,7 @@ export default function Simulation() {
 
   const set = (k: keyof SimulationPayload) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => {
     const v = e.target.type==='number'||e.target.type==='range' ? Number(e.target.value) : e.target.value
-    setForm(f=>({...f,[k]:v}))
+    setForm((f: SimulationPayload) => ({ ...f, [k]: v }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

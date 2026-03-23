@@ -1,4 +1,4 @@
-import axios, { InternalAxiosRequestConfig } from 'axios';
+﻿import axios, { InternalAxiosRequestConfig } from 'axios';
 
 const API_URL = 'http://localhost:8000';
 
@@ -42,8 +42,71 @@ export const authAPI = {
   getCurrentUser: () => api.get('/users/me'),
 };
 
+export interface FlowDataPoint {
+  x: number;
+  velocity: number;
+  pressure: number;
+  turbulence: number;
+}
+
+export interface PressurePoint {
+  position: number;
+  upper: number;
+  lower: number;
+}
+
+export interface SimulationResult {
+  id: number;
+  name: string;
+  description?: string;
+  vehicle_type: string;
+  velocity: number;
+  air_density: number;
+  frontal_area: number;
+  drag_coefficient: number;
+  lift_coefficient: number;
+  reynolds_number?: number;
+  angle_of_attack: number;
+  drag_force?: number;
+  lift_force?: number;
+  dynamic_pressure?: number;
+  power_required?: number;
+  efficiency_score?: number;
+  flow_data?: FlowDataPoint[];
+  pressure_distribution?: PressurePoint[];
+  status?: 'pending' | 'running' | 'completed' | 'failed';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SimulationPayload {
+  name: string;
+  description?: string;
+  vehicle_type: string;
+  velocity: number;
+  air_density: number;
+  frontal_area: number;
+  drag_coefficient: number;
+  lift_coefficient: number;
+  angle_of_attack: number;
+}
+
+export interface SimulationCreatePayload {
+  name: string;
+  parameters: {
+    vehicle_type: string;
+    description?: string;
+    velocity: number;
+    air_density: number;
+    frontal_area: number;
+    drag_coefficient: number;
+    lift_coefficient: number;
+    angle_of_attack: number;
+  };
+}
+
 export const simulationAPI = {
-  create: (data: { name: string; parameters: any }) =>
+  create: (data: SimulationCreatePayload) =>
     api.post('/simulations', data),
   getAll: () => api.get('/simulations'),
   getById: (id: number) => api.get(`/simulations/${id}`),
