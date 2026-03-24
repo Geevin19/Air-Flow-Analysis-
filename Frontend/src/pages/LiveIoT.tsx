@@ -1,291 +1,132 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react'
+import Navbar from '../components/Navbar'
+import { iotAPI } from '../services/api'
 
-const WS_URL = 'ws://localhost:8000/ws/iot';
-const MAX_HISTORY = 40;
+const S = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap');
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#eef2f7;--surf:#ffffff;--surf2:#f5f8fc;--border:#dde3ec;--a1:#3b6fd4;--a2:#5b9bd5;--text:#1a2333;--muted:#6b7a90;--success:#2e9e6b;--danger:#d95f5f;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
+  .iot-bg{position:fixed;inset:0;z-index:0;pointer-events:none;}
+  .iot-bg::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 55% 40% at 5% 10%,rgba(59,111,212,.07) 0%,transparent 50%);}
+  .iot-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(59,111,212,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(59,111,212,.035) 1px,transparent 1px);background-size:36px 36px;}
+  .iot-wrap{position:relative;z-index:1;min-height:100vh;}
+  .iot-main{max-width:1100px;margin:0 auto;padding:2.5rem clamp(1rem,4vw,3rem);}
+  .iot-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:2rem;}
+  .iot-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:clamp(1.5rem,3vw,2rem);font-weight:800;letter-spacing:-.02em;color:var(--text);}
+  .iot-title span{color:var(--a1);}
+  .live-badge{display:inline-flex;align-items:center;gap:.45rem;padding:.3rem .8rem;background:rgba(46,158,107,.1);border:1px solid rgba(46,158,107,.25);border-radius:100px;font-size:.75rem;font-weight:700;color:var(--success);}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--success);animation:blink 1.5s ease-in-out infinite;}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;margin-bottom:1.8rem;}
+  .kpi-card{background:var(--surf);border:1px solid var(--border);border-radius:13px;padding:1.3rem;box-shadow:0 1px 4px rgba(59,111,212,.04);position:relative;overflow:hidden;}
+  .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--a1),var(--a2));}
+  .kpi-icon{font-size:1.4rem;margin-bottom:.6rem;}
+  .kpi-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.6rem;font-weight:800;color:var(--a1);}
+  .kpi-lbl{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:.15rem;}
+  .card{background:var(--surf);border:1px solid var(--border);border-radius:14px;padding:1.6rem;box-shadow:0 1px 4px rgba(59,111,212,.04);}
+  .card-title{font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1.2rem;}
+  .hist-table{width:100%;border-collapse:collapse;font-size:.84rem;}
+  .hist-table th{text-align:left;padding:.55rem .75rem;font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);}
+  .hist-table td{padding:.6rem .75rem;border-bottom:1px solid var(--surf2);color:var(--text);}
+  .hist-table tr:last-child td{border-bottom:none;}
+  .hist-table tr:hover td{background:var(--surf2);}
+  .empty{text-align:center;padding:3rem;color:var(--muted);font-size:.88rem;}
+  .refresh-btn{padding:.45rem 1rem;background:var(--surf);border:1px solid var(--border);border-radius:8px;color:var(--label);font-size:.83rem;font-family:'Inter',sans-serif;cursor:pointer;transition:border-color .18s,color .18s;}
+  .refresh-btn:hover{border-color:var(--a1);color:var(--a1);}
+`
 
-interface Reading {
-  pressure?: number;
-  temperature?: number;
-  flow_rate?: number;
-  humidity?: number;
-  airflow?: number;
-  timestamp?: string;
-}
-
-interface HistoryEntry {
-  time: string;
-  values: Record<string, number>;
-}
+interface IoTReading { id?: number; velocity?: number; pressure?: number; temperature?: number; timestamp?: string }
 
 export default function LiveIoT() {
-  const navigate = useNavigate();
-  const [latest, setLatest] = useState<Reading | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [connected, setConnected] = useState(false);
-  const [lastTime, setLastTime] = useState('');
-  const wsRef = useRef<WebSocket | null>(null);
+  const [latest,  setLatest]  = useState<IoTReading | null>(null)
+  const [history, setHistory] = useState<IoTReading[]>([])
+  const [loading, setLoading] = useState(true)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchData = async () => {
+    try {
+      const [latRes, histRes] = await Promise.all([iotAPI.getLatest(), iotAPI.getHistory(20)])
+      setLatest(latRes.data)
+      setHistory(histRes.data)
+    } catch { /* backend may not be running */ }
+    finally { setLoading(false) }
+  }
 
   useEffect(() => {
-    let reconnectTimer: ReturnType<typeof setTimeout>;
+    fetchData()
+    intervalRef.current = setInterval(fetchData, 5000)
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+  }, [])
 
-    function connect() {
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
-
-      ws.onopen = () => setConnected(true);
-
-      ws.onmessage = (e) => {
-        try {
-          const data: Reading = JSON.parse(e.data);
-          const time = new Date().toLocaleTimeString();
-          setLatest(data);
-          setLastTime(time);
-          // extract only numeric sensor values
-          const values: Record<string, number> = {};
-          for (const [k, v] of Object.entries(data)) {
-            if (k !== 'timestamp' && typeof v === 'number') values[k] = v;
-          }
-          setHistory(prev => {
-            const entry: HistoryEntry = { time, values };
-            const next = [...prev, entry];
-            return next.length > MAX_HISTORY ? next.slice(-MAX_HISTORY) : next;
-          });
-        } catch { /* ignore bad frames */ }
-      };
-
-      ws.onclose = () => {
-        setConnected(false);
-        reconnectTimer = setTimeout(connect, 3000); // auto-reconnect
-      };
-
-      ws.onerror = () => ws.close();
-    }
-
-    connect();
-    return () => {
-      clearTimeout(reconnectTimer);
-      wsRef.current?.close();
-    };
-  }, []);
-
-  // All numeric keys except timestamp
-  const sensorKeys = latest
-    ? Object.keys(latest).filter(k => k !== 'timestamp' && typeof (latest as any)[k] === 'number')
-    : [];
-
-  const COLORS: Record<string, string> = {
-    pressure: '#2463eb',
-    temperature: '#f97316',
-    flow_rate: '#06d6f5',
-    humidity: '#8b5cf6',
-    airflow: '#22c55e',
-  };
-  const UNITS: Record<string, string> = {
-    pressure: 'hPa',
-    temperature: '°C',
-    flow_rate: 'm/s',
-    humidity: '%',
-    airflow: '',
-  };
-  const ICONS: Record<string, string> = {
-    pressure: '🌡️',
-    temperature: '🌡️',
-    flow_rate: '💨',
-    humidity: '💧',
-    airflow: '📡',
-  };
+  const fmt = (d?: string) => d ? new Date(d).toLocaleTimeString() : '—'
 
   return (
-    <div style={s.page}>
-      {/* NAV */}
-      <nav style={s.nav}>
-        <div style={s.navLeft}>
-          <span style={s.logo}>⚡ AeroAuth</span>
-          <span style={s.badge}>Live IoT</span>
-        </div>
-        <button onClick={() => navigate('/dashboard')} style={s.backBtn}>← Dashboard</button>
-      </nav>
+    <>
+      <style>{S}</style>
+      <div className="iot-bg"><div className="iot-grid"/></div>
+      <div className="iot-wrap">
+        <Navbar variant="app"/>
+        <main className="iot-main">
+          <div className="iot-header">
+            <div>
+              <h1 className="iot-title">Live <span>IoT Feed</span></h1>
+              <p style={{fontSize:'.88rem',color:'var(--muted)',marginTop:'.3rem'}}>Real-time sensor data — refreshes every 5 seconds</p>
+            </div>
+            <div style={{display:'flex',gap:'.75rem',alignItems:'center'}}>
+              <span className="live-badge"><span className="live-dot"/>LIVE</span>
+              <button className="refresh-btn" onClick={fetchData}>↻ Refresh</button>
+            </div>
+          </div>
 
-      <main style={s.main}>
-        {/* Status */}
-        <div style={s.statusBar}>
-          <span style={{ ...s.dot, background: connected ? '#22c55e' : '#ef4444',
-            boxShadow: connected ? '0 0 8px #22c55e' : 'none' }} />
-          <span style={s.statusTxt}>
-            {connected ? 'Connected — waiting for data' : 'Connecting...'}
-          </span>
-          {lastTime && <span style={s.updatedTxt}>Last reading: {lastTime}</span>}
-        </div>
-
-        {/* Metric cards */}
-        {sensorKeys.length > 0 ? (
-          <div style={s.cards}>
-            {sensorKeys.map(k => (
-              <MetricCard
-                key={k}
-                label={k.replace(/_/g, ' ')}
-                value={(latest as any)[k] as number}
-                unit={UNITS[k] ?? ''}
-                color={COLORS[k] ?? '#6b7280'}
-                icon={ICONS[k] ?? '📡'}
-              />
+          <div className="kpi-grid">
+            {[
+              { icon: '💨', label: 'Velocity (m/s)',    val: latest?.velocity?.toFixed(2)    ?? '—' },
+              { icon: '🔵', label: 'Pressure (Pa)',     val: latest?.pressure?.toFixed(2)    ?? '—' },
+              { icon: '🌡️', label: 'Temperature (°C)',  val: latest?.temperature?.toFixed(1) ?? '—' },
+              { icon: '🕐', label: 'Last Reading',      val: fmt(latest?.timestamp) },
+            ].map(k => (
+              <div className="kpi-card" key={k.label}>
+                <div className="kpi-icon">{k.icon}</div>
+                <div className="kpi-val">{k.val}</div>
+                <div className="kpi-lbl">{k.label}</div>
+              </div>
             ))}
           </div>
-        ) : (
-          <div style={s.waiting}>
-            <div style={s.pulse} />
-            <p style={s.waitingTxt}>Waiting for Arduino data...</p>
-            <p style={s.waitingHint}>
-              Make sure your Arduino/ESP is sending POST to:<br />
-              <code style={s.code}>http://&lt;your-pc-ip&gt;:8000/iot/data</code>
-            </p>
-            <pre style={s.pre}>{`// Arduino JSON body:
-{
-  "pressure": 101.3,
-  "temperature": 25.0,
-  "flow_rate": 1.2,
-  "humidity": 60.0
-}`}</pre>
-          </div>
-        )}
 
-        {/* Live charts */}
-        {history.length > 1 && (
-          <div style={s.chartsGrid}>
-            {sensorKeys.map(k => (
-              <MiniChart
-                key={k}
-                label={`${k.replace(/_/g, ' ')} ${UNITS[k] ? `(${UNITS[k]})` : ''}`}
-                color={COLORS[k] ?? '#6b7280'}
-                data={history.map(r => ({ t: r.time, v: r.values[k] ?? 0 }))}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Live table */}
-        {history.length > 0 && (
-          <div style={s.tableCard}>
-            <h3 style={s.tableTitle}>Live Feed <span style={s.count}>{history.length} readings</span></h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={s.table}>
+          <div className="card">
+            <div className="card-title">Recent Readings</div>
+            {loading ? (
+              <div className="empty">Loading sensor data...</div>
+            ) : history.length === 0 ? (
+              <div className="empty">No IoT data available. Connect a sensor to start streaming.</div>
+            ) : (
+              <table className="hist-table">
                 <thead>
                   <tr>
-                    <th style={s.th}>Time</th>
-                    {sensorKeys.map(k => <th key={k} style={s.th}>{k.replace(/_/g, ' ')}</th>)}
+                    <th>#</th>
+                    <th>Velocity (m/s)</th>
+                    <th>Pressure (Pa)</th>
+                    <th>Temperature (°C)</th>
+                    <th>Time</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[...history].reverse().map((r, i) => (
-                    <tr key={i} style={{ ...s.tr, background: i === 0 ? '#f0f7ff' : 'transparent' }}>
-                      <td style={s.td}>{r.time}</td>
-                      {sensorKeys.map(k => (
-                        <td key={k} style={{ ...s.td, fontWeight: i === 0 ? 700 : 400 }}>
-                          {r.values[k] != null ? Number(r.values[k]).toFixed(2) : '—'}
-                        </td>
-                      ))}
+                  {history.map((r, i) => (
+                    <tr key={r.id ?? i}>
+                      <td>{i + 1}</td>
+                      <td>{r.velocity?.toFixed(2) ?? '—'}</td>
+                      <td>{r.pressure?.toFixed(2) ?? '—'}</td>
+                      <td>{r.temperature?.toFixed(1) ?? '—'}</td>
+                      <td>{fmt(r.timestamp)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            )}
           </div>
-        )}
-      </main>
-    </div>
-  );
-}
-
-// ── Metric card ──
-function MetricCard({ label, value, unit, color, icon }: {
-  label: string; value: number; unit: string; color: string; icon: string;
-}) {
-  return (
-    <div style={{ ...s.metricCard, borderTop: `3px solid ${color}` }}>
-      <div style={s.metricIcon}>{icon}</div>
-      <div style={{ ...s.metricValue, color }}>{Number(value).toFixed(2)}</div>
-      {unit && <div style={{ ...s.metricUnit, color }}>{unit}</div>}
-      <div style={s.metricLabel}>{label}</div>
-    </div>
-  );
-}
-
-// ── SVG sparkline chart ──
-function MiniChart({ label, color, data }: {
-  label: string; color: string; data: { t: string; v: number }[];
-}) {
-  if (data.length < 2) return null;
-  const W = 300, H = 80, P = 8;
-  const vals = data.map(d => d.v);
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const range = max - min || 1;
-  const x = (i: number) => P + (i / (data.length - 1)) * (W - P * 2);
-  const y = (v: number) => P + (1 - (v - min) / range) * (H - P * 2);
-  const path = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.v).toFixed(1)}`).join(' ');
-  const area = `${path} L${x(data.length - 1).toFixed(1)},${H} L${P},${H} Z`;
-  const last = data[data.length - 1];
-
-  return (
-    <div style={s.chartCard}>
-      <div style={s.chartHeader}>
-        <span style={s.chartLabel}>{label}</span>
-        <span style={{ ...s.chartCurrent, color }}>{last.v.toFixed(2)}</span>
+        </main>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 72 }}>
-        <defs>
-          <linearGradient id={`g${label}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-            <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
-        <path d={area} fill={`url(#g${label})`} />
-        <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={x(data.length - 1)} cy={y(last.v)} r="3.5" fill={color} />
-      </svg>
-      <div style={s.chartRange}>
-        <span>{min.toFixed(1)}</span><span>{max.toFixed(1)}</span>
-      </div>
-    </div>
-  );
+    </>
+  )
 }
-
-// ── Styles ──
-const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', background: '#f1f5f9', fontFamily: 'Arial, sans-serif' },
-  nav: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 32px', background: '#fff', boxShadow: '0 1px 8px rgba(0,0,0,.07)' },
-  navLeft: { display: 'flex', alignItems: 'center', gap: 12 },
-  logo: { fontSize: 20, fontWeight: 800, color: '#1e3a8a' },
-  badge: { fontSize: 12, padding: '4px 10px', borderRadius: 999, background: '#dbeafe', color: '#1d4ed8', fontWeight: 700 },
-  backBtn: { padding: '8px 16px', background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 },
-  main: { maxWidth: 1100, margin: '0 auto', padding: '28px 24px' },
-  statusBar: { display: 'flex', alignItems: 'center', gap: 10, background: '#fff', padding: '10px 16px', borderRadius: 10, marginBottom: 24, boxShadow: '0 1px 6px rgba(0,0,0,.06)', flexWrap: 'wrap' as const },
-  dot: { width: 10, height: 10, borderRadius: '50%', flexShrink: 0, transition: 'background .3s' },
-  statusTxt: { fontSize: 13, fontWeight: 700, color: '#111827' },
-  updatedTxt: { fontSize: 12, color: '#6b7280', marginLeft: 'auto' },
-  cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16, marginBottom: 28 },
-  metricCard: { background: '#fff', borderRadius: 12, padding: '20px 16px', boxShadow: '0 2px 10px rgba(0,0,0,.06)', textAlign: 'center' as const },
-  metricIcon: { fontSize: 26, marginBottom: 8 },
-  metricValue: { fontSize: 28, fontWeight: 800, lineHeight: 1 },
-  metricUnit: { fontSize: 13, fontWeight: 600, marginTop: 2 },
-  metricLabel: { fontSize: 11, color: '#6b7280', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: 1, marginTop: 6 },
-  chartsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16, marginBottom: 28 },
-  chartCard: { background: '#fff', borderRadius: 12, padding: '14px 16px', boxShadow: '0 2px 10px rgba(0,0,0,.06)' },
-  chartHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  chartLabel: { fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase' as const, letterSpacing: 1 },
-  chartCurrent: { fontSize: 16, fontWeight: 800 },
-  chartRange: { display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9ca3af', marginTop: 2 },
-  tableCard: { background: '#fff', borderRadius: 12, padding: '20px 24px', boxShadow: '0 2px 10px rgba(0,0,0,.06)' },
-  tableTitle: { fontSize: 16, fontWeight: 800, color: '#111827', margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 10 },
-  count: { fontSize: 12, background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: 999, fontWeight: 600 },
-  table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: 13 },
-  th: { textAlign: 'left' as const, padding: '8px 12px', background: '#f9fafb', color: '#6b7280', fontWeight: 700, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 1, borderBottom: '1px solid #e5e7eb' },
-  tr: { borderBottom: '1px solid #f3f4f6', transition: 'background .2s' },
-  td: { padding: '7px 12px', color: '#111827' },
-  waiting: { textAlign: 'center' as const, padding: '60px 20px', background: '#fff', borderRadius: 12, boxShadow: '0 2px 10px rgba(0,0,0,.06)', marginBottom: 24 },
-  pulse: { width: 48, height: 48, borderRadius: '50%', background: '#dbeafe', margin: '0 auto 16px', animation: 'pulse 1.5s ease-in-out infinite' },
-  waitingTxt: { fontSize: 18, fontWeight: 700, color: '#111827', margin: '0 0 8px' },
-  waitingHint: { fontSize: 13, color: '#6b7280', lineHeight: 1.8, margin: '0 0 12px' },
-  code: { display: 'inline-block', background: '#f1f5f9', padding: '2px 8px', borderRadius: 6, color: '#1d4ed8', fontSize: 13 },
-  pre: { background: '#0f172a', color: '#e2e8f0', padding: '12px 16px', borderRadius: 8, fontSize: 12, textAlign: 'left' as const, display: 'inline-block', marginTop: 8 },
-};

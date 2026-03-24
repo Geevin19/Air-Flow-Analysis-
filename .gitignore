@@ -48,7 +48,3 @@ node_modules/
 # Build files
 dist/
 build/
-node_modules/
-dist/
-.env
-.vite/

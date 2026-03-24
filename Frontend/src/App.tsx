@@ -7,6 +7,7 @@ import VerifyOTP from "./pages/VerifyOTP";
 import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard";
 import Simulation from "./pages/Simulation";
+// Simulation page handles both /simulation and /simulation/new
 import LiveIoT from "./pages/LiveIoT";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
         <Route path="/simulation" element={<PrivateRoute><Simulation /></PrivateRoute>} />
+        <Route path="/simulation/new" element={<PrivateRoute><Simulation /></PrivateRoute>} />
         <Route path="/iot-live" element={<PrivateRoute><LiveIoT /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

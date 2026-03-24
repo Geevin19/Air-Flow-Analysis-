@@ -1,313 +1,264 @@
-import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import toast from 'react-hot-toast'
+import { useState } from 'react'
 import Navbar from '../components/Navbar'
-import { FlowVelocityChart, PressureDistributionChart, DynamicPressureChart, VelocityProfileChart } from '../components/SimulationChart'
-import { simulationAPI, type SimulationResult, type SimulationPayload } from '../services/api'
 
 const S = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  :root{--bg:#eef2f7;--surf:#ffffff;--surf2:#f5f8fc;--border:#dde3ec;--border2:#c5cfdf;--a1:#3b6fd4;--a2:#5b9bd5;--text:#1a2333;--muted:#6b7a90;--label:#44546a;--success:#2e9e6b;--danger:#d95f5f;}
+  :root{--bg:#eef2f7;--surf:#ffffff;--surf2:#f5f8fc;--border:#dde3ec;--a1:#3b6fd4;--a2:#5b9bd5;--text:#1a2333;--muted:#6b7a90;--label:#44546a;--success:#2e9e6b;--danger:#d95f5f;}
   body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
-  .sp-bg{position:fixed;inset:0;z-index:0;pointer-events:none;}
-  .sp-bg::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 50% 40% at 0% 0%,rgba(59,111,212,.07) 0%,transparent 50%);}
-  .sp-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(59,111,212,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(59,111,212,.035) 1px,transparent 1px);background-size:36px 36px;}
-  .sp-wrap{position:relative;z-index:1;min-height:100vh;}
-  .sp-main{max-width:1280px;margin:0 auto;padding:2.5rem clamp(1rem,4vw,3rem);}
-  .breadcrumb{display:flex;align-items:center;gap:.45rem;font-size:.81rem;color:var(--muted);margin-bottom:1.8rem;}
-  .breadcrumb a{color:var(--muted);text-decoration:none;transition:color .18s;}
-  .breadcrumb a:hover{color:var(--a1);}
-  .breadcrumb span{color:var(--text);}
-  .sp-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:clamp(1.5rem,3vw,2rem);font-weight:800;letter-spacing:-.02em;color:var(--text);margin-bottom:.35rem;}
-  .sp-title .ac{color:var(--a1);}
-  .sp-sub{font-size:.87rem;color:var(--muted);margin-bottom:2rem;}
-  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.75rem;align-items:start;}
-  .fc{background:var(--surf);border:1px solid var(--border);border-radius:14px;padding:1.75rem;position:relative;overflow:hidden;box-shadow:0 1px 4px rgba(59,111,212,.04);margin-bottom:1.25rem;}
-  .fc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--a1),var(--a2));}
-  .fc-title{font-size:.92rem;font-weight:700;color:var(--text);margin-bottom:1.3rem;display:flex;align-items:center;gap:.5rem;}
-  .fc-icon{width:26px;height:26px;background:rgba(59,111,212,.08);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.85rem;}
-  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:.85rem;}
-  .fg{margin-bottom:1rem;}
-  .lbl{display:block;font-size:.78rem;font-weight:600;color:var(--label);margin-bottom:.38rem;letter-spacing:.02em;}
-  .inp-bare{width:100%;padding:.68rem .75rem;background:var(--surf2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:.87rem;font-family:'Inter',sans-serif;outline:none;transition:border-color .18s;}
-  .inp-bare:focus{border-color:var(--a1);}
-  select.inp-bare{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7a90' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;}
-  textarea.inp-bare{resize:vertical;min-height:65px;}
-  .vt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.55rem;margin-bottom:1rem;}
-  .vt{cursor:pointer;padding:.58rem .35rem;border:1px solid var(--border);border-radius:8px;text-align:center;font-size:.8rem;transition:all .18s;background:var(--surf2);}
-  .vt:hover{border-color:rgba(59,111,212,.35);background:rgba(59,111,212,.04);}
-  .vt.sel{border-color:var(--a1);background:rgba(59,111,212,.07);color:var(--a1);font-weight:700;}
-  .vt-icon{font-size:1.2rem;display:block;margin-bottom:.18rem;}
-  .range-wrap{position:relative;margin-top:.3rem;}
-  .range-val{position:absolute;right:0;top:-20px;font-size:.72rem;color:var(--a1);font-weight:600;}
-  .range-inp{-webkit-appearance:none;appearance:none;width:100%;height:4px;background:var(--border);border-radius:4px;outline:none;cursor:pointer;}
-  .range-inp::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:linear-gradient(135deg,var(--a1),var(--a2));border-radius:50%;cursor:pointer;}
-  .btn-run{width:100%;padding:.85rem;background:linear-gradient(135deg,var(--a1),var(--a2));border:none;border-radius:9px;color:#fff;font-size:.92rem;font-weight:600;font-family:'Inter',sans-serif;cursor:pointer;letter-spacing:.02em;transition:transform .15s,box-shadow .18s;box-shadow:0 3px 12px rgba(59,111,212,.28);margin-top:.5rem;display:flex;align-items:center;justify-content:center;gap:.5rem;}
-  .btn-run:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 5px 18px rgba(59,111,212,.32);}
-  .btn-run:disabled{opacity:.58;cursor:not-allowed;}
-  .results-section{margin-top:2.2rem;}
-  .res-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.4rem;flex-wrap:wrap;gap:1rem;}
-  .res-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.3rem;font-weight:800;color:var(--text);}
-  .status-badge{display:inline-flex;align-items:center;gap:.38rem;padding:.3rem .85rem;border-radius:100px;font-size:.78rem;font-weight:600;}
-  .sb-completed{background:rgba(46,158,107,.08);color:var(--success);border:1px solid rgba(46,158,107,.2);}
-  .sb-running{background:rgba(59,111,212,.08);color:var(--a1);border:1px solid rgba(59,111,212,.2);animation:pulse 1.5s ease-in-out infinite;}
-  .sb-failed{background:rgba(217,95,95,.08);color:var(--danger);border:1px solid rgba(217,95,95,.2);}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-  .info-panel{background:var(--surf);border:1px solid var(--border);border-radius:13px;padding:1.3rem;margin-bottom:1.4rem;box-shadow:0 1px 4px rgba(59,111,212,.04);}
-  .info-label{font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.85rem;}
-  .info-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.65rem;}
-  .info-item{display:flex;flex-direction:column;gap:.12rem;}
-  .info-key{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
-  .info-val{font-size:.88rem;font-weight:600;color:var(--text);}
-  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:1rem;margin-bottom:1.75rem;}
-  .kpi{background:var(--surf);border:1px solid var(--border);border-radius:12px;padding:1.1rem;position:relative;overflow:hidden;box-shadow:0 1px 4px rgba(59,111,212,.04);}
-  .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--kg,linear-gradient(90deg,var(--a1),var(--a2)));}
+  .sim-bg{position:fixed;inset:0;z-index:0;pointer-events:none;}
+  .sim-bg::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 55% 40% at 5% 10%,rgba(59,111,212,.07) 0%,transparent 50%),radial-gradient(ellipse 45% 35% at 95% 90%,rgba(91,155,213,.05) 0%,transparent 50%);}
+  .sim-grid-bg{position:absolute;inset:0;background-image:linear-gradient(rgba(59,111,212,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(59,111,212,.035) 1px,transparent 1px);background-size:36px 36px;}
+  .sim-wrap{position:relative;z-index:1;min-height:100vh;}
+  .sim-main{max-width:1100px;margin:0 auto;padding:2.5rem clamp(1rem,4vw,3rem);}
+  .sim-header{margin-bottom:2rem;}
+  .sim-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:clamp(1.6rem,3vw,2.2rem);font-weight:800;letter-spacing:-.02em;color:var(--text);}
+  .sim-title span{color:var(--a1);}
+  .sim-sub{font-size:.88rem;color:var(--muted);margin-top:.35rem;}
+  .sim-layout{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start;}
+  @media(max-width:800px){.sim-layout{grid-template-columns:1fr}}
+  .card{background:var(--surf);border:1px solid var(--border);border-radius:14px;padding:1.6rem;box-shadow:0 1px 4px rgba(59,111,212,.04);}
+  .card-title{font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1.2rem;}
+  .fg{margin-bottom:1.1rem;}
+  .fg label{display:block;font-size:.82rem;font-weight:600;color:var(--label);margin-bottom:.4rem;}
+  .fg input,.fg select{width:100%;padding:.68rem .85rem;background:var(--surf2);border:1.5px solid var(--border);border-radius:9px;color:var(--text);font-size:.9rem;font-family:'Inter',sans-serif;outline:none;transition:border-color .18s,box-shadow .18s;appearance:none;}
+  .fg input:focus,.fg select:focus{border-color:var(--a1);box-shadow:0 0 0 3px rgba(59,111,212,.1);background:#fff;}
+  .fg .hint{font-size:.74rem;color:var(--muted);margin-top:.3rem;}
+  .select-wrap{position:relative;}
+  .select-wrap::after{content:'▾';position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:.85rem;}
+  .pipe-preview{margin-bottom:1.2rem;border-radius:10px;padding:1rem 1.2rem;border:1.5px solid var(--border);display:flex;align-items:center;gap:1rem;transition:all .3s;}
+  .pipe-tube{height:28px;border-radius:6px;flex:1;transition:background .4s,box-shadow .4s;}
+  .pipe-label{font-size:.8rem;font-weight:600;color:var(--label);white-space:nowrap;}
+  .mat-plastic .pipe-tube{background:linear-gradient(90deg,#3b82f6,#60a5fa,#3b82f6);box-shadow:0 2px 10px rgba(59,130,246,.3);}
+  .mat-plastic{border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.04);}
+  .mat-steel .pipe-tube{background:linear-gradient(90deg,#6b7280,#9ca3af,#6b7280);box-shadow:0 2px 10px rgba(107,114,128,.3);}
+  .mat-steel{border-color:rgba(107,114,128,.3);background:rgba(107,114,128,.04);}
+  .mat-glass .pipe-tube{background:linear-gradient(90deg,rgba(186,230,253,.6),rgba(224,242,254,.9),rgba(186,230,253,.6));box-shadow:0 2px 10px rgba(14,165,233,.2);border:1px solid rgba(14,165,233,.25);}
+  .mat-glass{border-color:rgba(14,165,233,.25);background:rgba(14,165,233,.03);}
+  .run-btn{width:100%;padding:.85rem;background:linear-gradient(135deg,var(--a1),var(--a2));border:none;border-radius:10px;color:#fff;font-size:.95rem;font-weight:700;font-family:'Inter',sans-serif;cursor:pointer;transition:transform .15s,box-shadow .2s;box-shadow:0 3px 12px rgba(59,111,212,.28);margin-top:.4rem;}
+  .run-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(59,111,212,.35);}
+  .run-btn:active{transform:translateY(0);}
+  .results-section{display:flex;flex-direction:column;gap:1.2rem;}
+  .result-placeholder{text-align:center;padding:3rem 1.5rem;color:var(--muted);}
+  .result-placeholder .icon{font-size:2.5rem;margin-bottom:.7rem;}
+  .result-placeholder p{font-size:.88rem;}
+  .res-mat-badge{display:inline-flex;align-items:center;gap:.5rem;padding:.45rem 1rem;border-radius:8px;font-size:.85rem;font-weight:700;margin-bottom:1.2rem;}
+  .res-mat-plastic{background:rgba(59,130,246,.1);color:#2563eb;border:1px solid rgba(59,130,246,.2);}
+  .res-mat-steel{background:rgba(107,114,128,.1);color:#374151;border:1px solid rgba(107,114,128,.2);}
+  .res-mat-glass{background:rgba(14,165,233,.08);color:#0369a1;border:1px solid rgba(14,165,233,.2);}
+  .kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:.85rem;margin-bottom:1.2rem;}
+  .kpi-card{background:var(--surf2);border:1px solid var(--border);border-radius:11px;padding:1rem 1.1rem;}
   .kpi-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.5rem;font-weight:800;color:var(--a1);}
-  .kpi-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:.18rem;}
-  .charts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:1.3rem;}
-  .loading-state{text-align:center;padding:4rem 2rem;}
-  .spinner{width:44px;height:44px;border:3px solid var(--border);border-top-color:var(--a1);border-radius:50%;animation:spin .75s linear infinite;margin:0 auto 1.3rem;}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  @media(max-width:860px){.form-grid{grid-template-columns:1fr}.charts-grid{grid-template-columns:1fr}.two-col{grid-template-columns:1fr}}
-  @media(max-width:480px){.vt-grid{grid-template-columns:repeat(2,1fr)}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+  .kpi-lbl{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:.15rem;}
+  .kpi-sub{font-size:.75rem;color:var(--muted);margin-top:.2rem;}
+  .flow-type-badge{display:inline-block;padding:.2rem .6rem;border-radius:5px;font-size:.72rem;font-weight:700;margin-top:.3rem;}
+  .flow-laminar{background:rgba(46,158,107,.1);color:var(--success);}
+  .flow-transitional{background:rgba(232,148,58,.1);color:#e8943a;}
+  .flow-turbulent{background:rgba(217,95,95,.1);color:var(--danger);}
+  .roughness-bar-wrap{margin-bottom:1.2rem;}
+  .roughness-bar-wrap .rb-label{font-size:.78rem;font-weight:600;color:var(--label);margin-bottom:.5rem;}
+  .roughness-bar{height:8px;border-radius:4px;background:var(--border);overflow:hidden;}
+  .roughness-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--a1),var(--a2));transition:width .5s cubic-bezier(.22,1,.36,1);}
+  .cmp-table{width:100%;border-collapse:collapse;font-size:.84rem;}
+  .cmp-table th{text-align:left;padding:.55rem .75rem;font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);}
+  .cmp-table td{padding:.6rem .75rem;border-bottom:1px solid var(--surf2);color:var(--text);}
+  .cmp-table tr:last-child td{border-bottom:none;}
+  .cmp-table tr.active-row td{background:rgba(59,111,212,.05);font-weight:600;}
+  .cmp-table tr.active-row td:first-child{color:var(--a1);}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;}
+  .dot-plastic{background:#3b82f6;}
+  .dot-steel{background:#6b7280;}
+  .dot-glass{background:#0ea5e9;}
+  .drop-low{color:var(--success);}
+  .drop-med{color:#e8943a;}
+  .drop-high{color:var(--danger);}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  .fade-in{animation:fadeIn .35s cubic-bezier(.22,1,.36,1) both;}
 `
 
-const VEHICLES = [
-  {id:'car',label:'Car',icon:'🚗'},{id:'truck',label:'Truck',icon:'🚛'},
-  {id:'motorcycle',label:'Moto',icon:'🏍️'},{id:'aircraft',label:'Aircraft',icon:'✈️'},
-  {id:'drone',label:'Drone',icon:'🛸'},{id:'custom',label:'Custom',icon:'🔧'},
-]
+const materialData = {
+  plastic: { roughness: 0.0015, label: 'Plastic', color: 'plastic', dot: 'dot-plastic', emoji: '🔵' },
+  steel:   { roughness: 0.045,  label: 'Steel',   color: 'steel',   dot: 'dot-steel',   emoji: '⚙️' },
+  glass:   { roughness: 0.0005, label: 'Glass',   color: 'glass',   dot: 'dot-glass',   emoji: '🔷' },
+}
 
-const DEFAULT: SimulationPayload = {
-  name:'',description:'',vehicle_type:'car',
-  velocity:30,air_density:1.225,frontal_area:2.2,
-  drag_coefficient:0.30,lift_coefficient:-0.1,angle_of_attack:0,
+type Material = keyof typeof materialData
+
+function calcFrictionFactor(Re: number, roughness: number, diameter: number) {
+  if (Re < 2300) return 64 / Re
+  const relRough = roughness / diameter
+  return 0.25 / Math.pow(Math.log10(relRough / 3.7 + 5.74 / Math.pow(Re, 0.9)), 2)
+}
+
+function runCalc(material: Material, radius: number, length: number, velocity: number) {
+  const mat = materialData[material]
+  const diameter = radius * 2
+  const area = Math.PI * radius * radius
+  const flowRate = area * velocity
+  const density = 1.225
+  const viscosity = 1.81e-5
+  const Re = (density * velocity * diameter) / viscosity
+  const f = calcFrictionFactor(Re, mat.roughness / 1000, diameter)
+  const pressureDrop = f * (length / diameter) * 0.5 * density * velocity * velocity
+  let flowType = Re > 4000 ? 'Turbulent' : Re > 2300 ? 'Transitional' : 'Laminar'
+  return { flowRate, Re, pressureDrop, f, flowType }
+}
+
+function dropLabel(pd: number) {
+  if (pd < 50)  return { text: 'Very Low', cls: 'drop-low' }
+  if (pd < 200) return { text: 'Low',      cls: 'drop-low' }
+  if (pd < 800) return { text: 'Medium',   cls: 'drop-med' }
+  return              { text: 'High',      cls: 'drop-high' }
 }
 
 export default function Simulation() {
-  const {id}     = useParams()
-  const navigate = useNavigate()
-  const isNew    = !id || id==='new'
+  const [material, setMaterial] = useState<Material>('plastic')
+  const [radius,   setRadius]   = useState('0.05')
+  const [length,   setLength]   = useState('10')
+  const [velocity, setVelocity] = useState('5')
+  const [result,   setResult]   = useState<ReturnType<typeof runCalc> | null>(null)
+  const [cmpRows,  setCmpRows]  = useState<Array<{ mat: Material } & ReturnType<typeof runCalc>> | null>(null)
 
-  const [form,       setForm]       = useState<SimulationPayload>(DEFAULT)
-  const [result,     setResult]     = useState<SimulationResult|null>(null)
-  const [loading,    setLoading]    = useState(!isNew)
-  const [submitting, setSubmitting] = useState(false)
-
-  useEffect(()=>{
-    if (!isNew && id) {
-      simulationAPI.getById(Number(id))
-        .then(r=>{ setResult(r.data); setForm(r.data as any) })
-        .catch(()=>{ toast.error('Simulation not found'); navigate('/dashboard') })
-        .finally(()=>setLoading(false))
-    }
-  },[id])
-
-  const set = (k: keyof SimulationPayload) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => {
-    const v = e.target.type==='number'||e.target.type==='range' ? Number(e.target.value) : e.target.value
-    setForm((f: SimulationPayload) => ({ ...f, [k]: v }))
+  const handleRun = () => {
+    const r = parseFloat(radius), l = parseFloat(length), v = parseFloat(velocity)
+    if (!r || !l || !v || r <= 0 || l <= 0 || v <= 0) return
+    setResult(runCalc(material, r, l, v))
+    setCmpRows((Object.keys(materialData) as Material[]).map(m => ({ mat: m, ...runCalc(m, r, l, v) })))
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.name){toast.error('Please enter a simulation name');return}
-    setSubmitting(true)
-    try {
-      const r = await simulationAPI.create({
-  name: form.name,
-  parameters: {
-    velocity: form.velocity,
-    air_density: form.air_density,
-    frontal_area: form.frontal_area,
-    drag_coefficient: form.drag_coefficient,
-    lift_coefficient: form.lift_coefficient,
-    angle_of_attack: form.angle_of_attack,
-    vehicle_type: form.vehicle_type,
-    description: form.description
-  }
-})
-      toast.success('Simulation complete!')
-      setResult(r.data)
-      navigate(`/simulation/${r.data.id}`,{replace:true})
-    } catch(err:any){
-      toast.error(err.response?.data?.detail||'Simulation failed')
-    } finally { setSubmitting(false) }
-  }
-
-  const kpis = result ? [
-    {label:'Drag Force',       val:`${result.drag_force?.toFixed(2)} N`,       kg:'linear-gradient(90deg,#3b6fd4,#5b9bd5)'},
-    {label:'Lift Force',       val:`${result.lift_force?.toFixed(2)} N`,       kg:'linear-gradient(90deg,#5b7fd4,#5b9bd5)'},
-    {label:'Dynamic Pressure', val:`${result.dynamic_pressure?.toFixed(1)} Pa`,kg:'linear-gradient(90deg,#2e9e6b,#5b9bd5)'},
-    {label:'Power Required',   val:`${result.power_required?.toFixed(1)} W`,   kg:'linear-gradient(90deg,#e8943a,#ffd32a)'},
-    {label:'Reynolds Number',  val:result.reynolds_number?.toExponential(2),   kg:'linear-gradient(90deg,#3b6fd4,#5b7fd4)'},
-    {label:'Efficiency Score', val:`${result.efficiency_score?.toFixed(1)}%`,  kg:'linear-gradient(90deg,#2e9e6b,#3b6fd4)'},
-  ] : []
-
-  if (loading) return (
-    <>
-      <style>{S}</style>
-      <div className="sp-wrap"><Navbar variant="app"/>
-        <div className="loading-state"><div className="spinner"/><p style={{color:'var(--muted)'}}>Loading simulation…</p></div>
-      </div>
-    </>
-  )
+  const mat = materialData[material]
+  const maxRoughness = materialData.steel.roughness
 
   return (
     <>
       <style>{S}</style>
-      <div className="sp-bg"><div className="sp-grid"/></div>
-      <div className="sp-wrap">
+      <div className="sim-bg"><div className="sim-grid-bg"/></div>
+      <div className="sim-wrap">
         <Navbar variant="app"/>
-        <main className="sp-main">
-          <div className="breadcrumb">
-            <Link to="/dashboard">Dashboard</Link>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-            <span>{isNew?'New Simulation':result?.name||'Simulation'}</span>
+        <main className="sim-main">
+          <div className="sim-header">
+            <h1 className="sim-title">Pipe Flow <span>Simulation</span></h1>
+            <p className="sim-sub">Select a pipe material and configure parameters to compute flow characteristics</p>
           </div>
 
-          <h1 className="sp-title">{isNew?<>Run a <span className="ac">New Simulation</span></>:<><span className="ac">{result?.name}</span></>}</h1>
-          <p className="sp-sub">{isNew?'Configure aerodynamic parameters and run a CFD simulation':`Vehicle: ${result?.vehicle_type} · ${new Date(result?.created_at||'').toLocaleDateString()}`}</p>
+          <div className="sim-layout">
+            {/* Inputs */}
+            <div style={{display:'flex',flexDirection:'column',gap:'1.2rem'}}>
+              <div className="card">
+                <div className="card-title">Pipe Configuration</div>
 
-          <form onSubmit={handleSubmit}>
-            <div className="form-grid">
-              <div>
-                <div className="fc">
-                  <div className="fc-title"><div className="fc-icon">📋</div> Simulation Info</div>
-                  <div className="fg">
-                    <label className="lbl">Simulation Name *</label>
-                    <input className="inp-bare" type="text" placeholder="e.g. Sports Car Baseline" value={form.name} onChange={set('name')}/>
+                <div className="fg">
+                  <label htmlFor="material">Pipe Material</label>
+                  <div className="select-wrap">
+                    <select id="material" value={material} onChange={e => setMaterial(e.target.value as Material)}>
+                      <option value="plastic">🔵 Plastic</option>
+                      <option value="steel">⚙️ Steel</option>
+                      <option value="glass">🔷 Glass</option>
+                    </select>
                   </div>
-                  <div className="fg">
-                    <label className="lbl">Description <span style={{fontWeight:400,color:'var(--muted)'}}>— optional</span></label>
-                    <textarea className="inp-bare" placeholder="Notes about this configuration…" value={form.description||''} onChange={set('description')}/>
-                  </div>
-                  <div className="fg" style={{marginBottom:0}}>
-                    <label className="lbl">Vehicle Type</label>
-                    <div className="vt-grid">
-                      {VEHICLES.map(v=>(
-                        <div key={v.id} className={`vt${form.vehicle_type===v.id?' sel':''}`} onClick={()=>setForm(f=>({...f,vehicle_type:v.id}))}>
-                          <span className="vt-icon">{v.icon}</span>{v.label}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <div className="hint">Surface roughness: {mat.roughness} mm</div>
                 </div>
 
-                <div className="fc">
-                  <div className="fc-title"><div className="fc-icon">💨</div> Flow Parameters</div>
-                  <div className="two-col">
-                    <div className="fg">
-                      <label className="lbl">Velocity (m/s)</label>
-                      <div className="range-wrap">
-                        <span className="range-val">{form.velocity} m/s</span>
-                        <input className="range-inp" type="range" min="1" max="340" step="1" value={form.velocity} onChange={set('velocity')}/>
-                      </div>
-                    </div>
-                    <div className="fg">
-                      <label className="lbl">Angle of Attack (°)</label>
-                      <div className="range-wrap">
-                        <span className="range-val">{form.angle_of_attack}°</span>
-                        <input className="range-inp" type="range" min="-20" max="20" step="0.5" value={form.angle_of_attack} onChange={set('angle_of_attack')}/>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="fg">
-                    <label className="lbl">Air Density (kg/m³)</label>
-                    <input className="inp-bare" type="number" step="0.001" value={form.air_density} onChange={set('air_density')}/>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div className="fc">
-                  <div className="fc-title"><div className="fc-icon">📐</div> Geometry</div>
-                  <div className="fg">
-                    <label className="lbl">Frontal Area (m²)</label>
-                    <input className="inp-bare" type="number" step="0.01" value={form.frontal_area} onChange={set('frontal_area')}/>
-                  </div>
+                <div className={`pipe-preview mat-${mat.color}`}>
+                  <span className="pipe-label">{mat.emoji} {mat.label} Pipe</span>
+                  <div className="pipe-tube"/>
                 </div>
 
-                <div className="fc">
-                  <div className="fc-title"><div className="fc-icon">⚡</div> Aerodynamic Coefficients</div>
-                  <div className="fg">
-                    <label className="lbl">Drag Coefficient (Cd)</label>
-                    <div className="range-wrap">
-                      <span className="range-val">{form.drag_coefficient.toFixed(2)}</span>
-                      <input className="range-inp" type="range" min="0.01" max="2.0" step="0.01" value={form.drag_coefficient} onChange={set('drag_coefficient')}/>
-                    </div>
-                  </div>
-                  <div className="fg" style={{marginBottom:0}}>
-                    <label className="lbl">Lift Coefficient (Cl)</label>
-                    <div className="range-wrap">
-                      <span className="range-val">{form.lift_coefficient.toFixed(2)}</span>
-                      <input className="range-inp" type="range" min="-2.0" max="2.0" step="0.01" value={form.lift_coefficient} onChange={set('lift_coefficient')}/>
-                    </div>
-                  </div>
+                <div className="fg">
+                  <label htmlFor="radius">Pipe Radius (m)</label>
+                  <input id="radius" type="number" min="0.001" step="0.001" value={radius} onChange={e => setRadius(e.target.value)} placeholder="e.g. 0.05"/>
+                </div>
+                <div className="fg">
+                  <label htmlFor="length">Pipe Length (m)</label>
+                  <input id="length" type="number" min="0.1" step="0.1" value={length} onChange={e => setLength(e.target.value)} placeholder="e.g. 10"/>
+                </div>
+                <div className="fg">
+                  <label htmlFor="velocity">Flow Velocity (m/s)</label>
+                  <input id="velocity" type="number" min="0.01" step="0.1" value={velocity} onChange={e => setVelocity(e.target.value)} placeholder="e.g. 5"/>
                 </div>
 
-                {isNew&&(
-                  <button className="btn-run" type="submit" disabled={submitting}>
-                    {submitting
-                      ? <><div style={{width:16,height:16,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'white',borderRadius:'50%',animation:'spin .7s linear infinite'}}/> Running…</>
-                      : <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run Simulation</>
-                    }
-                  </button>
-                )}
+                <button className="run-btn" onClick={handleRun}>▶ Run Simulation</button>
               </div>
             </div>
-          </form>
 
-          {result&&result.status==='completed'&&(
+            {/* Results */}
             <div className="results-section">
-              <div className="res-header">
-                <h2 className="res-title">Simulation Results</h2>
-                <span className="status-badge sb-completed">✓ Completed</span>
-              </div>
-
-              <div className="info-panel">
-                <div className="info-label">Input Parameters</div>
-                <div className="info-grid">
-                  {[['Vehicle',result.vehicle_type],['Velocity',`${result.velocity} m/s`],['Air Density',`${result.air_density} kg/m³`],
-                    ['Frontal Area',`${result.frontal_area} m²`],['Cd',result.drag_coefficient],['Cl',result.lift_coefficient],
-                    ['Angle of Attack',`${result.angle_of_attack}°`]].map(([k,v])=>(
-                    <div className="info-item" key={String(k)}>
-                      <span className="info-key">{k}</span>
-                      <span className="info-val">{String(v)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="kpi-grid">
-                {kpis.map(k=>(
-                  <div className="kpi" key={k.label} style={{'--kg':k.kg} as React.CSSProperties}>
-                    <div className="kpi-val">{k.val}</div>
-                    <div className="kpi-label">{k.label}</div>
+              {!result ? (
+                <div className="card">
+                  <div className="result-placeholder">
+                    <div className="icon">🌊</div>
+                    <p>Configure parameters and run the simulation to see results</p>
                   </div>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <>
+                  <div className="card fade-in">
+                    <div className="card-title">Simulation Results</div>
+                    <div className={`res-mat-badge res-mat-${material}`}>
+                      {mat.emoji} Material: {mat.label}
+                    </div>
+                    <div className="kpi-grid">
+                      <div className="kpi-card">
+                        <div className="kpi-val">{result.flowRate.toFixed(4)}</div>
+                        <div className="kpi-lbl">Flow Rate (m³/s)</div>
+                      </div>
+                      <div className="kpi-card">
+                        <div className="kpi-val">{result.Re.toFixed(0)}</div>
+                        <div className="kpi-lbl">Reynolds Number</div>
+                        <span className={`flow-type-badge flow-${result.flowType.toLowerCase()}`}>{result.flowType}</span>
+                      </div>
+                      <div className="kpi-card">
+                        <div className="kpi-val">{result.pressureDrop.toFixed(2)}</div>
+                        <div className="kpi-lbl">Pressure Drop (Pa)</div>
+                        <div className={`kpi-sub ${dropLabel(result.pressureDrop).cls}`}>{dropLabel(result.pressureDrop).text}</div>
+                      </div>
+                      <div className="kpi-card">
+                        <div className="kpi-val">{result.f.toFixed(5)}</div>
+                        <div className="kpi-lbl">Friction Factor</div>
+                      </div>
+                    </div>
+                    <div className="roughness-bar-wrap">
+                      <div className="rb-label">Surface Roughness — {mat.roughness} mm</div>
+                      <div className="roughness-bar">
+                        <div className="roughness-fill" style={{width:`${(mat.roughness/maxRoughness)*100}%`}}/>
+                      </div>
+                    </div>
+                  </div>
 
-              {(result?.flow_data?.length ?? 0) > 0 && (
-  <div className="charts-grid">
-    <FlowVelocityChart data={result.flow_data ?? []} />
-    <DynamicPressureChart data={result.flow_data ?? []} />
-    {((result?.pressure_distribution?.length ?? 0) > 0) && (
-  <PressureDistributionChart data={result.pressure_distribution ?? []} />
-)}
-    <VelocityProfileChart data={result.flow_data ?? []} />
-  </div>
-)} 
+                  {cmpRows && (
+                    <div className="card fade-in">
+                      <div className="card-title">Material Comparison</div>
+                      <table className="cmp-table">
+                        <thead>
+                          <tr>
+                            <th>Material</th>
+                            <th>Roughness (mm)</th>
+                            <th>Pressure Drop (Pa)</th>
+                            <th>Friction Factor</th>
+                            <th>Drop Level</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cmpRows.map(row => {
+                            const dl = dropLabel(row.pressureDrop)
+                            return (
+                              <tr key={row.mat} className={row.mat === material ? 'active-row' : ''}>
+                                <td><span className={`dot dot-${row.mat}`}/>{materialData[row.mat].label}{row.mat === material ? ' ✓' : ''}</td>
+                                <td>{materialData[row.mat].roughness}</td>
+                                <td>{row.pressureDrop.toFixed(2)}</td>
+                                <td>{row.f.toFixed(5)}</td>
+                                <td><span className={dl.cls}>{dl.text}</span></td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-          )}
-
-          {result&&result.status==='running'&&(
-            <div className="loading-state">
-              <div className="spinner"/>
-              <p style={{color:'var(--label)',fontWeight:600}}>Simulation running…</p>
-              <p style={{color:'var(--muted)',fontSize:'.84rem',marginTop:'.45rem'}}>This usually takes a few seconds</p>
-            </div>
-          )}
+          </div>
         </main>
       </div>
     </>

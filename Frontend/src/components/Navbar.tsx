@@ -58,7 +58,7 @@ export default function Navbar({ variant = 'app' }: { variant?: 'landing' | 'app
           {variant === 'app' && user && (
             <div className="nav-links">
               <Link to="/dashboard"      className={`nav-link${active('/dashboard')}`}>Dashboard</Link>
-              <Link to="/simulation/new" className={`nav-link${active('/simulation')}`}>New Simulation</Link>
+              <Link to="/simulation"     className={`nav-link${active('/simulation')}`}>Simulation</Link>
             </div>
           )}
           {variant === 'landing' && (
@@ -100,7 +100,7 @@ export default function Navbar({ variant = 'app' }: { variant?: 'landing' | 'app
             {user ? (
               <>
                 <Link to="/dashboard"      className="nav-link" onClick={() => setOpen(false)}>Dashboard</Link>
-                <Link to="/simulation/new" className="nav-link" onClick={() => setOpen(false)}>New Simulation</Link>
+                <Link to="/simulation"     className="nav-link" onClick={() => setOpen(false)}>Simulation</Link>
                 <button className="nav-btn nav-btn-danger" style={{width:'fit-content'}} onClick={logout}>Logout</button>
               </>
             ) : (
