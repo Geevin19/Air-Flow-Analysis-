@@ -702,16 +702,6 @@ export default function Simulation() {
   const [colorMode,   setColorMode]   = useState<'pressure'|'friction'|'velocity'|'material'>('material');
   const [particleColorScheme, setParticleColorScheme] = useState<'rainbow'|'blue'|'fire'|'cyan'|'purple'>('purple');
   const [particleSize, setParticleSize] = useState<'small'|'medium'|'large'>('small');
-  
-  // ── theme state ──
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    const saved = localStorage.getItem('simulation-theme');
-    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('simulation-theme', theme);
-  }, [theme]);
 
   // ── app state ──
   const [submitting,      setSubmitting]      = useState(false);
