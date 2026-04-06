@@ -19,7 +19,7 @@ const styles = `
   }
   @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
   .auth-logo { display:flex;align-items:center;gap:.6rem;margin-bottom:2rem;justify-content:center; }
-  .auth-logo-icon { width:38px;height:38px;background:linear-gradient(135deg,#2463eb,#06d6f5);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem; }
+  .auth-logo-icon { width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden; }
   .auth-logo-text { font-size:1.25rem;font-weight:700;color:#1e3a8a; }
   .auth-title { font-size:1.5rem;font-weight:700;color:#111827;text-align:center;margin-bottom:.35rem; }
   .auth-sub { font-size:.88rem;color:#6b7280;text-align:center;margin-bottom:2rem;line-height:1.6; }
@@ -115,8 +115,8 @@ export default function ForgotPasswordPage() {
       <div className="auth-page">
         <div className="auth-card">
           <div className="auth-logo">
-            <div className="auth-logo-icon">&#9889;</div>
-            <span className="auth-logo-text">AeroAuth</span>
+            <div className="auth-logo-icon"><img src="/logo.png" alt="SmartTracker logo" style={{width:'38px',height:'38px',objectFit:'contain'}} /></div>
+            <span className="auth-logo-text">SmartTracker</span>
           </div>
 
           {step === "email" && (

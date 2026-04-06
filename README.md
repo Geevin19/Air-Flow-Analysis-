@@ -1,199 +1,144 @@
-# SmartTracker - Air Flow Analysis Platform
+# Air Flow Analysis Platform
 
-Advanced simulation platform for cylindrical air flow analysis using vector calculus and computational fluid dynamics.
+Advanced simulation platform for cylindrical air flow analysis using computational fluid dynamics.
 
-## 🌟 Features
+## Features
 
-- **Premium UI** with Dark/Light mode toggle
-- **Real-time Simulations** with live preview
-- **Interactive Dashboard** with clickable simulation cards
+- **Real-time 3D Simulations** with interactive visualization
+- **Dark/Light Mode** toggle with persistent theme
 - **User Authentication** with JWT tokens
-- **Database Integration** with Supabase/PostgreSQL
-- **Responsive Design** with smooth animations
-- **Delete & Manage** simulations easily
+- **Interactive Dashboard** for managing simulations
+- **Multiple Pipe Shapes** (Straight, L-Shaped, S-Curve, U-Bend, Helix)
+- **Visualization Modes** (Pressure, Velocity, Friction, Material)
+- **Particle Effects** with customizable colors and sizes
 
-## 🚀 Quick Start with Supabase
-
-### 1. Get Supabase Credentials
-- Go to your Supabase project dashboard
-- Copy **Connection String** from Settings → Database
-- Copy **Project URL** and **Anon Key** from Settings → API
-
-### 2. Configure Backend
-Edit `backend/.env`:
-```env
-SUPABASE_URL=https://xxxxxxxxxxxxx.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.xxxxxxxxxxxxx.supabase.co:5432/postgres
-```
-
-### 3. Install & Run
-```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-python setup_supabase.py
-python main.py
-
-# Frontend (new terminal)
-cd Frontend
-npm install
-npm run dev
-```
-
-### 4. Open Browser
-Visit `http://localhost:5173` 🎉
-
-📖 **Detailed Setup**: See [QUICK_SUPABASE_SETUP.md](QUICK_SUPABASE_SETUP.md)
-
-## 📁 Project Structure
-
-```
-smarttracker/
-│
-├── Frontend/                    # React + TypeScript Frontend
-│   ├── src/
-│   │   ├── pages/
-│   │   │   ├── LandingPage.tsx
-│   │   │   ├── Login.tsx
-│   │   │   ├── Register.tsx
-│   │   │   ├── Dashboard.tsx    # Premium UI with dark mode
-│   │   │   ├── Simulation.tsx   # Real-time simulation
-│   │   │   └── LiveIoT.tsx
-│   │   ├── components/
-│   │   │   ├── Navbar.tsx
-│   │   │   └── SimulationChart.tsx
-│   │   ├── services/
-│   │   │   └── api.ts
-│   │   └── App.tsx
-│   └── package.json
-│
-├── backend/                     # Python Backend (FastAPI)
-│   ├── main.py                  # FastAPI entry
-│   ├── models.py                # Database models
-│   ├── schemas.py               # Request/response schemas
-│   ├── auth.py                  # Authentication logic
-│   ├── simulation.py            # Air flow calculations
-│   ├── database.py              # Database connection
-│   ├── setup_supabase.py        # Database setup script
-│   └── requirements.txt
-│
-├── SUPABASE_SETUP.md           # Detailed Supabase guide
-├── QUICK_SUPABASE_SETUP.md     # Quick setup guide
-└── README.md
-```
-
-## 🛠️ Technologies
+## Tech Stack
 
 ### Frontend
-- React 18 with TypeScript
-- Vite for fast development
-- Axios for API calls
-- React Router for navigation
-- Custom CSS with dark mode support
+- React 18 + TypeScript
+- Vite
+- Three.js for 3D visualization
+- React Router
 
 ### Backend
 - FastAPI (Python)
 - SQLAlchemy ORM
 - PostgreSQL/Supabase
 - JWT Authentication
-- Pydantic for validation
 
-### Database
-- Supabase (PostgreSQL)
-- User management
-- Simulation data storage
-- Real-time capabilities
+## Quick Start
 
-## 🎨 UI Features
+### Prerequisites
+- Python 3.8+
+- Node.js 16+
+- Supabase account
 
-- **Dark/Light Mode**: Toggle between themes with persistent storage
-- **Responsive Design**: Works on all screen sizes
-- **Smooth Animations**: Professional transitions and hover effects
-- **Interactive Cards**: Click to view simulation details
-- **Delete Functionality**: Remove simulations with confirmation
-- **Error Boundaries**: Graceful error handling
+### Setup
 
-## 📊 Simulation Features
+1. **Clone the repository**
+```bash
+git clone https://github.com/Geevin19/Air-Flow-Analysis-.git
+cd Air-Flow-Analysis-
+```
 
-- Cylindrical air flow analysis
-- Real-time velocity profile visualization
+2. **Configure Backend**
+
+Create `backend/.env`:
+```env
+PROJECT_URL=https://your-project.supabase.co
+PROJECT_ANON_KEY=your-anon-key
+DATABASE_URL=postgresql://postgres:password@host:port/postgres
+SECRET_KEY=your-secret-key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+```
+
+3. **Install Dependencies**
+
+Backend:
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+Frontend:
+```bash
+cd Frontend
+npm install
+```
+
+4. **Run the Application**
+
+Backend:
+```bash
+cd backend
+python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Frontend:
+```bash
+cd Frontend
+npm run dev
+```
+
+5. **Access the Application**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+## Project Structure
+
+```
+├── Frontend/              # React frontend
+│   ├── src/
+│   │   ├── pages/        # Page components
+│   │   ├── components/   # Reusable components
+│   │   └── services/     # API services
+│   └── package.json
+│
+├── backend/              # FastAPI backend
+│   ├── main.py          # Application entry
+│   ├── models.py        # Database models
+│   ├── auth.py          # Authentication
+│   ├── simulation.py    # Simulation logic
+│   └── requirements.txt
+│
+└── README.md
+```
+
+## API Endpoints
+
+### Authentication
+- `POST /register` - Register new user
+- `POST /token` - Login
+- `GET /users/me` - Get current user
+
+### Simulations
+- `POST /simulations` - Create simulation
+- `GET /simulations` - List user simulations
+- `GET /simulations/{id}` - Get simulation details
+- `DELETE /simulations/{id}` - Delete simulation
+
+## Simulation Features
+
 - Reynolds number calculation
 - Pressure drop analysis
 - Friction factor computation
-- Laminar/Turbulent flow detection
-- Interactive parameter controls
+- Flow regime detection (Laminar/Turbulent)
+- Velocity profile visualization
+- Multiple material support (Steel, Copper, PVC, etc.)
+- Real-time parameter updates
 
-## 🔐 Authentication
+## License
 
-- User registration with email validation
-- Secure password hashing (bcrypt)
-- JWT token-based authentication
-- Protected API endpoints
-- Session persistence
+MIT License
 
-## 📝 API Endpoints
-
-### Authentication
-- `POST /register` - Create new user
-- `POST /token` - Login and get JWT token
-- `GET /users/me` - Get current user info
-
-### Simulations
-- `POST /simulations` - Create new simulation
-- `GET /simulations` - Get all user simulations
-- `GET /simulations/{id}` - Get specific simulation
-- `DELETE /simulations/{id}` - Delete simulation
-
-## 🐛 Troubleshooting
-
-### Connection Issues
-- Verify DATABASE_URL in `backend/.env`
-- Check Supabase password
-- Add `?sslmode=require` to DATABASE_URL if needed
-
-### Frontend Issues
-- Clear browser cache
-- Delete `node_modules` and run `npm install` again
-- Check if backend is running on port 8000
-
-### Backend Issues
-- Ensure all dependencies are installed
-- Check Python version (3.8+ required)
-- Verify database tables are created
-
-## 📚 Documentation
-
-- [Quick Supabase Setup](QUICK_SUPABASE_SETUP.md)
-- [Detailed Supabase Guide](SUPABASE_SETUP.md)
-- [Quick Start Guide](QUICK_START.md)
-- [Database Access](DATABASE_ACCESS.md)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 👥 Team
-
-- Frontend & Backend Development
-- UI/UX Design
-- Database Architecture
-- Simulation Engine
-
-## 🔗 Links
+## Links
 
 - [GitHub Repository](https://github.com/Geevin19/Air-Flow-Analysis-.git)
 - [Supabase](https://supabase.com)
-- [FastAPI Documentation](https://fastapi.tiangolo.com)
-- [React Documentation](https://react.dev)
+- [FastAPI](https://fastapi.tiangolo.com)
+- [React](https://react.dev)
 
 ---
 
