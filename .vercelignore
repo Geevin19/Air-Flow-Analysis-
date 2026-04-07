@@ -1,0 +1,8 @@
+backend/
+database/
+*.md
+.git/
+.vscode/
+Login.tsx
+Register.tsx
+.env
