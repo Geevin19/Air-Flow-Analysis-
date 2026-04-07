@@ -58,17 +58,16 @@ export default function RegisterPage() {
         {error && <div style={s.errorBox}>{error}</div>}
 
         <form onSubmit={handleSubmit}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
-            <div>
-              <label style={s.label}>Username</label>
-              <input style={s.input} className="fi" type="text" placeholder="username"
-                required value={username} onChange={e => setUsername(e.target.value)} />
-            </div>
-            <div>
-              <label style={s.label}>Purpose</label>
-              <input style={s.input} className="fi" type="text" placeholder="Research…"
-                value={purpose} onChange={e => setPurpose(e.target.value)} />
-            </div>
+          <div style={s.field}>
+            <label style={s.label}>Username</label>
+            <input style={s.input} className="fi" type="text" placeholder="username"
+              required value={username} onChange={e => setUsername(e.target.value)} />
+          </div>
+
+          <div style={s.field}>
+            <label style={s.label}>Purpose <span style={{ color:'#94a3b8', fontWeight:400 }}>(optional)</span></label>
+            <input style={s.input} className="fi" type="text" placeholder="Research, Education, etc."
+              value={purpose} onChange={e => setPurpose(e.target.value)} />
           </div>
 
           <div style={s.field}>
