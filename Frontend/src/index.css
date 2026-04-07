@@ -115,6 +115,20 @@ a:hover {
   100% { transform: rotate(360deg); }
 }
 
+@keyframes grid-scroll {
+  to { background-position: 0 40px; }
+}
+
+@keyframes scan-line {
+  0% { top: -10%; }
+  100% { top: 110%; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 /* Fade In Animation */
 .fade-in {
   animation: fadeIn 0.5s ease-in;
