@@ -41,7 +41,7 @@ git clone https://github.com/Geevin19/Air-Flow-Analysis-.git
 cd Air-Flow-Analysis-
 ```
 
-2. ***Configure Backend***
+2. **Configure Backend**
 
 Create `backend/.env`:
 ```env
