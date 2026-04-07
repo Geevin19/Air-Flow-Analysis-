@@ -45,8 +45,10 @@ export const authAPI = {
 export const simulationAPI = {
   create: (data: { name: string; parameters: any }) =>
     api.post('/simulations', data),
+  getSimulations: () => api.get('/simulations'),
   getAll: () => api.get('/simulations'),
   getById: (id: number) => api.get(`/simulations/${id}`),
+  deleteSimulation: (id: number) => api.delete(`/simulations/${id}`),
   delete: (id: number) => api.delete(`/simulations/${id}`),
 };
 
