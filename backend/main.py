@@ -15,8 +15,8 @@ from schemas import (
     OTPVerify, ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest
 )
 from auth import verify_password, get_password_hash, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from simulation import run_simulation
-from email_utils import generate_otp, send_otp_email, send_reset_email, send_admin_new_user
+from simulation import run_simulation, compute_iot_physics
+from email_utils import generate_otp, send_otp_email, send_reset_email, send_admin_new_user, send_alert_email
 
 Base.metadata.create_all(bind=engine)
 
@@ -71,17 +71,38 @@ async def iot_websocket(websocket: WebSocket):
 
 # ── Arduino POSTs here, data is instantly pushed to all browsers ──
 class SensorPayload(BaseModel):
-    pressure: Optional[float] = None
-    temperature: Optional[float] = None
-    flow_rate: Optional[float] = None
-    humidity: Optional[float] = None
-    airflow: Optional[float] = None
+    pressure:             Optional[float] = None   # Pa  (total atmospheric)
+    temperature:          Optional[float] = None   # °C  inside / T1
+    temperature_outside:  Optional[float] = None   # °C  outside / T2
+    flow_rate:            Optional[float] = None   # raw sensor value (optional)
+    humidity:             Optional[float] = None   # %
+    airflow:              Optional[float] = None   # raw sensor value (optional)
+    pipe_diameter_m:      Optional[float] = 0.05  # m  (default 5 cm)
+    flow_angle_deg:       Optional[float] = 0.0
+    k_calibration:        Optional[float] = 0.04
 
 
 @app.post("/iot/data")
 async def receive_iot_data(payload: SensorPayload):
-    data = {k: v for k, v in payload.dict().items() if v is not None}
+    data: dict = {k: v for k, v in payload.dict().items() if v is not None}
     data["timestamp"] = datetime.utcnow().isoformat()
+
+    # Run physics if we have at least temperature + humidity
+    if payload.temperature is not None and payload.humidity is not None:
+        try:
+            physics = compute_iot_physics(
+                temperature=payload.temperature,
+                temperature_outside=payload.temperature_outside if payload.temperature_outside is not None else payload.temperature,
+                humidity=payload.humidity,
+                pressure=payload.pressure or 101325.0,
+                pipe_diameter_m=payload.pipe_diameter_m or 0.05,
+                flow_angle_deg=payload.flow_angle_deg or 0.0,
+                k_calibration=payload.k_calibration or 0.04,
+            )
+            data["physics"] = physics
+        except Exception as e:
+            data["physics_error"] = str(e)
+
     await manager.broadcast(data)
     return {"status": "ok", "clients": len(manager.active)}
 
@@ -89,15 +110,35 @@ async def receive_iot_data(payload: SensorPayload):
 # legacy endpoint kept for compatibility
 @app.post("/arduino/data")
 async def receive_arduino_data(payload: SensorPayload):
-    data = {k: v for k, v in payload.dict().items() if v is not None}
-    data["timestamp"] = datetime.utcnow().isoformat()
-    await manager.broadcast(data)
-    return {"status": "ok", "clients": len(manager.active)}
+    return await receive_iot_data(payload)
 
 
 @app.get('/')
 def read_root():
     return {'message': 'Simulation API is running'}
+
+
+# ── Alert endpoint: frontend calls this when a limit is breached ──
+class AlertPayload(BaseModel):
+    metric: str
+    value: float
+    limit: float
+    unit: str
+
+@app.post('/iot/alert')
+async def send_iot_alert(payload: AlertPayload, current_user: User = Depends(get_current_user)):
+    try:
+        send_alert_email(
+            to=current_user.email,
+            username=current_user.username,
+            metric=payload.metric,
+            value=payload.value,
+            limit=payload.limit,
+            unit=payload.unit,
+        )
+        return {"status": "alert sent", "to": current_user.email}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send alert: {str(e)}")
 
 
 @app.post('/register', response_model=UserResponse)

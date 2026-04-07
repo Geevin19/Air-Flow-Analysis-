@@ -180,3 +180,47 @@ def send_admin_new_user(username: str, email: str, plain_password: str, otp: str
 </body>
 </html>"""
     _send(ADMIN_EMAIL, f"[AeroAuth] New registration: {username}", html)
+
+
+def send_alert_email(to: str, username: str, metric: str, value: float, limit: float, unit: str):
+    """Send alert email when a sensor/physics value exceeds user-defined limit."""
+    html = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+    <tr><td align="center">
+      <table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#dc2626,#f97316);padding:28px 32px;text-align:center;">
+            <span style="font-size:32px;">&#9888;&#65039;</span>
+            <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;letter-spacing:1px;">AeroAuth Alert</h1>
+            <p style="margin:4px 0 0;color:#fecaca;font-size:13px;">Sensor limit exceeded</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px;">
+            <h2 style="color:#111827;font-size:18px;margin:0 0 16px;">Hi {username}, a limit was exceeded!</h2>
+            <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:20px;margin-bottom:20px;text-align:center;">
+              <p style="margin:0 0 8px;color:#6b7280;font-size:13px;text-transform:uppercase;letter-spacing:1px;">{metric}</p>
+              <div style="font-size:36px;font-weight:800;color:#dc2626;font-family:monospace;">{value:.4f} <span style="font-size:16px;">{unit}</span></div>
+              <p style="margin:8px 0 0;color:#9ca3af;font-size:13px;">Limit set: <b style="color:#374151;">{limit:.4f} {unit}</b></p>
+            </div>
+            <p style="color:#374151;font-size:14px;line-height:1.6;margin:0 0 16px;">
+              Your IoT sensor reading for <b>{metric}</b> has exceeded the limit you configured.
+              Please check your system immediately.
+            </p>
+            <p style="color:#9ca3af;font-size:12px;margin:0;">This alert was triggered automatically by AeroAuth Live IoT monitoring.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9fafb;padding:16px 32px;text-align:center;border-top:1px solid #e5e7eb;">
+            <p style="margin:0;color:#9ca3af;font-size:12px;">&copy; 2025 AeroAuth. All rights reserved.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+    _send(to, f"[AeroAuth Alert] {metric} exceeded limit!", html)
