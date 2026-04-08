@@ -27,13 +27,22 @@ def _send(to: str, subject: str, html: str):
         msg["From"] = formataddr((SENDER_NAME, SMTP_USER))
         msg["To"] = to
         msg.attach(MIMEText(html, "html"))
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.starttls()
-            s.login(SMTP_USER, SMTP_PASS)
-            s.sendmail(SMTP_USER, to, msg.as_string())
+        # Try port 587 (STARTTLS) first, fall back to 465 (SSL)
+        try:
+            with smtplib.SMTP(SMTP_HOST, 587, timeout=10) as s:
+                s.ehlo()
+                s.starttls()
+                s.ehlo()
+                s.login(SMTP_USER, SMTP_PASS)
+                s.sendmail(SMTP_USER, to, msg.as_string())
+        except Exception as e587:
+            print(f"[EMAIL] Port 587 failed ({e587}), trying 465...")
+            with smtplib.SMTP_SSL(SMTP_HOST, 465, timeout=10) as s:
+                s.login(SMTP_USER, SMTP_PASS)
+                s.sendmail(SMTP_USER, to, msg.as_string())
         print(f"[EMAIL] Sent '{subject}' to {to}")
     except Exception as e:
-        print(f"[EMAIL ERROR] Failed to send '{subject}' to {to}: {e}")
+        print(f"[EMAIL ERROR] Failed to send '{subject}' to {to}: {type(e).__name__}: {e}")
 
 
 def send_otp_email(to: str, otp: str, username: str):
