@@ -1,10 +1,10 @@
 # FastAPI and server
 fastapi==0.115.0
-uvicorn==0.32.1
+uvicorn[standard]==0.32.1
 
 # Database
 sqlalchemy==2.0.36
-psycopg2-binary==2.9.11
+psycopg2-binary==2.9.9
 
 # Authentication and security
 python-jose[cryptography]==3.3.0
@@ -12,12 +12,12 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.2.1
 
 # Data validation
-pydantic==2.10.5
+pydantic==2.9.2
 email-validator==2.2.0
 
 # Utilities
 python-multipart==0.0.20
 python-dotenv==1.0.1
 
-# Optional: For testing and development
+# HTTP
 requests==2.32.3
