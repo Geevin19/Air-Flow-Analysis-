@@ -21,15 +21,19 @@ def generate_otp() -> str:
 
 
 def _send(to: str, subject: str, html: str):
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = formataddr((SENDER_NAME, SMTP_USER))
-    msg["To"] = to
-    msg.attach(MIMEText(html, "html"))
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-        s.starttls()
-        s.login(SMTP_USER, SMTP_PASS)
-        s.sendmail(SMTP_USER, to, msg.as_string())
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = formataddr((SENDER_NAME, SMTP_USER))
+        msg["To"] = to
+        msg.attach(MIMEText(html, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+            s.starttls()
+            s.login(SMTP_USER, SMTP_PASS)
+            s.sendmail(SMTP_USER, to, msg.as_string())
+        print(f"[EMAIL] Sent '{subject}' to {to}")
+    except Exception as e:
+        print(f"[EMAIL ERROR] Failed to send '{subject}' to {to}: {e}")
 
 
 def send_otp_email(to: str, otp: str, username: str):
