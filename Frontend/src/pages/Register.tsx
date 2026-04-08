@@ -29,7 +29,10 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await authAPI.register({ username, email, password, purpose: purpose || undefined });
-      navigate("/login");
+      // Auto-login after registration
+      const loginRes = await authAPI.login(username, password);
+      localStorage.setItem("token", loginRes.data.access_token);
+      navigate("/dashboard");
     } catch (err: any) {
       setError(err.response?.data?.detail || "Registration failed");
     } finally { setLoading(false); }
