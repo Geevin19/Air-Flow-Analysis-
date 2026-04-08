@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const WS_URL  = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/^http/, 'ws') + '/ws/iot';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const WS_URL  = (import.meta.env.VITE_API_URL || 'https://air-flow-analysis.onrender.com').replace(/^http/, 'ws') + '/ws/iot';
+const API_URL = import.meta.env.VITE_API_URL || 'https://air-flow-analysis.onrender.com';
 const MAX_HIST = 50;
 const PIPE_D = 0.05;
 const K_CAL  = 0.04;

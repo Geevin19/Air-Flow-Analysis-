@@ -24,7 +24,14 @@ app = FastAPI(title='Simulation API')
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
+    allow_origins=[
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'https://smarttracker.vercel.app',
+        'https://air-flow-analysis.vercel.app',
+        'https://*.vercel.app',
+    ],
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
