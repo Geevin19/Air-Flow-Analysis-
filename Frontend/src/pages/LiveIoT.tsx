@@ -115,15 +115,6 @@ export default function LiveIoT() {
         const id = ++toastId.current;
         setToasts(p => [...p, { id, msg: `${key} exceeded limit — ${val.toFixed(4)} ${unit} (limit: ${lim} ${unit})`, metric: key }]);
         setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 8000);
-        // fire email
-        const token = localStorage.getItem('token');
-        if (token) {
-          fetch(`${API_URL}/iot/alert`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ metric: key, value: val, limit: lim, unit }),
-          }).catch(() => {});
-        }
       } else if (val <= lim && currentAlerted.has(key)) {
         currentAlerted.delete(key);
         changed = true;
@@ -199,23 +190,21 @@ export default function LiveIoT() {
         @keyframes slideOut{to{opacity:0;transform:translateX(40px)}}
       `}</style>
 
-      {/* Toast notifications */}
-      <div style={{ position:'fixed', top:20, right:20, zIndex:1000, display:'flex', flexDirection:'column', gap:10, maxWidth:380 }}>
-        {toasts.map(t => (
-          <div key={t.id} style={{ background:'#fff', border:'1.5px solid #fca5a5', borderLeft:'4px solid #ef4444', borderRadius:12, padding:'14px 18px', boxShadow:'0 8px 24px rgba(0,0,0,.12)', animation:'slideIn .3s ease', display:'flex', alignItems:'flex-start', gap:12 }}>
-            <div style={{ width:32, height:32, borderRadius:8, background:'#fef2f2', border:'1px solid #fecaca', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <div style={{ width:10, height:10, borderRadius:'50%', background:'#ef4444', animation:'pulse 1s infinite' }} />
-            </div>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:'#dc2626', marginBottom:3 }}>Limit Exceeded</div>
-              <div style={{ fontSize:12, color:'#374151', lineHeight:1.5 }}>{t.msg}</div>
-              <div style={{ fontSize:11, color:'#9ca3af', marginTop:4 }}>Alert email sent to your inbox</div>
-            </div>
-            <button onClick={() => setToasts(p => p.filter(x => x.id !== t.id))}
-              style={{ background:'none', border:'none', cursor:'pointer', color:'#9ca3af', fontSize:16, padding:0, flexShrink:0 }}>×</button>
+          <div style={{ position:'fixed', top:20, right:20, zIndex:1000, display:'flex', flexDirection:'column', gap:10, maxWidth:380 }}>
+            {toasts.map(t => (
+              <div key={t.id} style={{ background:'#fff', border:'1.5px solid #fca5a5', borderLeft:'4px solid #ef4444', borderRadius:12, padding:'14px 18px', boxShadow:'0 8px 24px rgba(0,0,0,.12)', animation:'slideIn .3s ease', display:'flex', alignItems:'flex-start', gap:12 }}>
+                <div style={{ width:32, height:32, borderRadius:8, background:'#fef2f2', border:'1px solid #fecaca', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                  <div style={{ width:10, height:10, borderRadius:'50%', background:'#ef4444', animation:'pulse 1s infinite' }} />
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:'#dc2626', marginBottom:3 }}>Limit Exceeded</div>
+                  <div style={{ fontSize:12, color:'#374151', lineHeight:1.5 }}>{t.msg}</div>
+                </div>
+                <button onClick={() => setToasts(p => p.filter(x => x.id !== t.id))}
+                  style={{ background:'none', border:'none', cursor:'pointer', color:'#9ca3af', fontSize:16, padding:0, flexShrink:0 }}>×</button>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
       {/* NAV */}
       <nav style={s.nav}>
@@ -285,13 +274,37 @@ export default function LiveIoT() {
               <button style={s.disconnectBtn} onClick={disconnect}>Disconnect</button>
             </div>
 
+            {/* Inline active alerts on page */}
+            {alertedKeys.size > 0 && (
+              <div style={{ background:'#fef2f2', border:'1.5px solid #fca5a5', borderRadius:12, padding:'14px 20px', marginBottom:16 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'#dc2626', marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ width:8, height:8, borderRadius:'50%', background:'#ef4444', display:'inline-block', animation:'pulse 1s infinite' }} />
+                  {alertedKeys.size} Active Alert{alertedKeys.size > 1 ? 's' : ''}
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                  {Array.from(alertedKeys).map(key => {
+                    const lim = parseFloat(limits[key] ?? '0');
+                    const meta = SENSOR_META[key] ?? PHYS_META.find(m => m.key === key);
+                    const unit = (meta as any)?.unit ?? '';
+                    return (
+                      <div key={key} style={{ fontSize:12, color:'#374151', background:'#fff', borderRadius:8, padding:'8px 12px', border:'1px solid #fecaca', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <span><strong>{key}</strong> exceeded limit of <strong>{lim} {unit}</strong></span>
+                        <button onClick={() => { const n = new Set(alertedRef.current); n.delete(key); alertedRef.current = n; setAlertedKeys(new Set(n)); }}
+                          style={{ background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:14 }}>×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Limits panel */}
             {showLimits && (
               <div style={s.limitsCard}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
                   <div>
                     <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Alert Limits</div>
-                    <div style={{ fontSize:12, color:'#94a3b8', marginTop:2 }}>Set max values — beep + email alert when exceeded</div>
+                    <div style={{ fontSize:12, color:'#94a3b8', marginTop:2 }}>Set max values — beep + on-page alert when exceeded</div>
                   </div>
                   <button onClick={() => { beep(); const id = ++toastId.current; setToasts(p => [...p, { id, msg: 'Test alert — beep and toast are working!', metric: 'test' }]); setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 5000); }}
                     style={{ fontSize:11, color:'#3b82f6', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'5px 12px', cursor:'pointer' }}>
