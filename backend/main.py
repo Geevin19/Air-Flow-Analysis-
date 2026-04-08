@@ -117,9 +117,29 @@ async def receive_arduino_data(payload: SensorPayload):
 def read_root():
     return {'message': 'Simulation API is running'}
 
-@app.head('/')
-def head_root():
-    return {}
+
+@app.get('/test-email')
+def test_email():
+    from email_utils import _send, RESEND_KEY, SMTP_USER
+    try:
+        _send(SMTP_USER, "[AeroAuth] Test email", "<h1>Email working!</h1>")
+        return {"status": "sent", "resend_key_set": bool(RESEND_KEY), "to": SMTP_USER}
+    except Exception as e:
+        return {"status": "failed", "error": str(e)}
+
+@app.get('/test-email')
+def test_email():
+    """Test endpoint to verify email sending works."""
+    from email_utils import _send, RESEND_KEY, SMTP_USER
+    try:
+        _send(
+            to=SMTP_USER,
+            subject="[AeroAuth] Test email",
+            html="<h1>Email is working!</h1><p>Resend API is configured correctly.</p>"
+        )
+        return {"status": "sent", "resend_key_set": bool(RESEND_KEY), "to": SMTP_USER}
+    except Exception as e:
+        return {"status": "failed", "error": str(e)}
 
 
 # ── Alert endpoint: frontend calls this when a limit is breached ──
