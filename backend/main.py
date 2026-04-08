@@ -117,6 +117,10 @@ async def receive_arduino_data(payload: SensorPayload):
 def read_root():
     return {'message': 'Simulation API is running'}
 
+@app.head('/')
+def head_root():
+    return {}
+
 
 # ── Alert endpoint: frontend calls this when a limit is breached ──
 class AlertPayload(BaseModel):
