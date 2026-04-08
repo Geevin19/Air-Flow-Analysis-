@@ -1,8 +1,7 @@
 backend/
 database/
-*.md
+docker-compose.yml
+*.bat
 .git/
 .vscode/
-Login.tsx
-Register.tsx
-.env
+*.md
