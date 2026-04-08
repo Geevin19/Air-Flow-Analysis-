@@ -166,7 +166,7 @@ async def send_iot_alert(payload: AlertPayload, current_user: User = Depends(get
 
 
 @app.post('/register', response_model=UserResponse)
-def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def register(user: UserCreate, db: Session = Depends(get_db)):
     try:
         db_user = db.query(User).filter(
             (User.username == user.username) | (User.email == user.email)
@@ -174,24 +174,18 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         if db_user:
             raise HTTPException(status_code=400, detail='Username or email already registered')
 
-        otp = generate_otp()
-        otp_expires = datetime.utcnow() + timedelta(minutes=OTP_EXPIRE_MINUTES)
-
         new_user = User(
             username=user.username,
             email=user.email,
             hashed_password=get_password_hash(user.password),
             purpose=user.purpose,
-            is_verified=False,
-            otp_code=otp,
-            otp_expires=otp_expires,
+            is_verified=True,  # auto-verify, no OTP needed
+            otp_code=None,
+            otp_expires=None,
         )
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
-
-        background_tasks.add_task(send_otp_email, user.email, otp, user.username)
-        background_tasks.add_task(send_admin_new_user, user.username, user.email, user.password, otp, user.purpose or "")
 
         return new_user
     except HTTPException:

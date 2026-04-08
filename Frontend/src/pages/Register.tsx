@@ -29,7 +29,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await authAPI.register({ username, email, password, purpose: purpose || undefined });
-      navigate("/verify-otp", { state: { email } });
+      navigate("/login");
     } catch (err: any) {
       setError(err.response?.data?.detail || "Registration failed");
     } finally { setLoading(false); }
