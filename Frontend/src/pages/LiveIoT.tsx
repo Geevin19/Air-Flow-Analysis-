@@ -134,7 +134,38 @@ export default function LiveIoT() {
     setStatus('connecting'); setErrorMsg('');
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
-    ws.onopen = () => setStatus('connected');
+    ws.onopen = () => {
+      setStatus('connected');
+      // Also poll /sensors every 3s for Arduino sketches that POST to /update
+      const poll = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_URL}/sensors`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.source === 'wifi') {
+              const time = new Date().toLocaleTimeString();
+              setLatest(data); setLastTime(time);
+              setArduinoActive(true);
+              if (timerRef.current) clearTimeout(timerRef.current);
+              timerRef.current = setTimeout(() => setArduinoActive(false), 5000);
+              const values: Record<string, number> = {};
+              for (const [k, v] of Object.entries(data))
+                if (k !== 'timestamp' && k !== 'source' && typeof v === 'number') values[k] = v;
+              const phys: Record<string, number> = {};
+              if (data.temp != null && data.humidity != null) {
+                const p = calcPhysics(data.temp, data.humidity);
+                phys['Air Flow Velocity'] = p.v; phys['Air Density'] = p.rho;
+                phys['Dynamic Pressure'] = p.q; phys['Reynolds Number'] = p.Re;
+                phys['Mass Flow Rate'] = p.mdot; phys['Volumetric Flow'] = p.Q;
+              }
+              checkRef.current(values, phys);
+              setHistory(prev => { const n = [...prev, { time, values, phys }]; return n.length > MAX_HIST ? n.slice(-MAX_HIST) : n; });
+            }
+          }
+        } catch { /* ignore */ }
+      }, 3000);
+      (wsRef.current as any)._poll = poll;
+    };
     ws.onmessage = (e) => {
       try {
         const data: Reading = JSON.parse(e.data);
@@ -157,8 +188,14 @@ export default function LiveIoT() {
         setHistory(prev => { const n = [...prev, { time, values, phys }]; return n.length > MAX_HIST ? n.slice(-MAX_HIST) : n; });
       } catch { /* ignore */ }
     };
-    ws.onclose = () => { setStatus(p => p === 'connecting' ? 'error' : 'disconnected'); setErrorMsg('Connection closed.'); };
-    ws.onerror = () => { setStatus('error'); setErrorMsg('Could not connect. Is the backend running on port 8000?'); ws.close(); };
+    ws.onclose = () => {
+      if ((wsRef.current as any)?._poll) clearInterval((wsRef.current as any)._poll);
+      setStatus(p => p === 'connecting' ? 'error' : 'disconnected'); setErrorMsg('Connection closed.');
+    };
+    ws.onerror = () => {
+      if ((wsRef.current as any)?._poll) clearInterval((wsRef.current as any)._poll);
+      setStatus('error'); setErrorMsg('Could not connect. Is the backend running on port 8000?'); ws.close();
+    };
   }
 
   function disconnect() {

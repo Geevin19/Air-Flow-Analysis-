@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -118,14 +118,91 @@ def read_root():
     return {'message': 'Simulation API is running'}
 
 
-@app.get('/test-email')
-def test_email():
-    from email_utils import _send, RESEND_KEY, SMTP_USER
+# ── Arduino polling endpoints (compatible with Flask-style sketch) ──
+_latest_arduino: dict = {}
+_current_command: str = "NONE"
+_arduino_limits: dict = {"temp": 50, "gas": 350, "distance": 10, "humidity": 80}
+
+
+class ArduinoData(BaseModel):
+    temp:     Optional[float] = None
+    humidity: Optional[float] = None
+    distance: Optional[float] = None
+    gas:      Optional[float] = None
+
+
+@app.post("/update")
+async def arduino_update(request: Request):
+    """Arduino POSTs sensor data here (same as Flask /update)."""
+    global _latest_arduino
     try:
-        _send(SMTP_USER, "[AeroAuth] Test email", "<h1>Email working!</h1>")
-        return {"status": "sent", "resend_key_set": bool(RESEND_KEY), "to": SMTP_USER}
-    except Exception as e:
-        return {"status": "failed", "error": str(e)}
+        data = await request.json()
+    except Exception:
+        raw = await request.body()
+        import json as _json
+        data = _json.loads(raw)
+    _latest_arduino = data
+    print(f"[Arduino] Data received: {data}")
+    # Also broadcast via WebSocket so live page updates instantly
+    payload = {**data, "timestamp": datetime.utcnow().isoformat()}
+    await manager.broadcast(payload)
+    return {"status": "ok"}
+
+
+@app.get("/sensors")
+def get_sensors():
+    """Website polls this to get latest sensor values."""
+    global _current_command
+    d = _latest_arduino
+    result = {
+        "temp":     d.get("temp"),
+        "humidity": d.get("humidity"),
+        "distance": d.get("distance"),
+        "gas":      d.get("gas"),
+        "source":   "wifi" if d else "no_data",
+    }
+    # Check limits
+    breached = []
+    if result["temp"]     is not None and result["temp"]     > _arduino_limits["temp"]:     breached.append(f"TEMP:{result['temp']}")
+    if result["gas"]      is not None and result["gas"]      > _arduino_limits["gas"]:      breached.append(f"GAS:{result['gas']}")
+    if result["distance"] is not None and result["distance"] < _arduino_limits["distance"]: breached.append(f"DIST:{result['distance']}")
+    if result["humidity"] is not None and result["humidity"] > _arduino_limits["humidity"]: breached.append(f"HUM:{result['humidity']}")
+    if breached:
+        _current_command = "ALERT:" + ",".join(breached)
+    else:
+        _current_command = "CLEAR"
+    return result
+
+
+@app.get("/get-command")
+def get_command():
+    """Arduino polls this to receive commands."""
+    global _current_command
+    cmd = _current_command
+    _current_command = "NONE"
+    return cmd
+
+
+@app.post("/set-command")
+def set_command(data: dict):
+    global _current_command
+    _current_command = data.get("command", "NONE")
+    return {"status": "updated"}
+
+
+@app.get("/get-limits")
+def get_limits():
+    return _arduino_limits
+
+
+@app.post("/set-limits")
+def set_limits(data: dict):
+    global _arduino_limits
+    for k in ["temp", "gas", "distance", "humidity"]:
+        if k in data:
+            _arduino_limits[k] = data[k]
+    print(f"[Limits] Updated: {_arduino_limits}")
+    return {"status": "updated", "limits": _arduino_limits}
 
 @app.get('/test-email')
 def test_email():
