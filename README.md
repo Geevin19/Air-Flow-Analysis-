@@ -1,145 +1,164 @@
-# Air Flow Analysis Platform
+# 🌊 AirFlow Analysis - Production SaaS Platform
 
-Advanced simulation platform for cylindrical air flow analysis using computational fluid dynamics.
-# trigger deploy
-## Features
+Production-grade air flow simulation and IoT monitoring platform deployed on OVHcloud.
 
-- **Real-time 3D Simulations** with interactive visualization
-- **Dark/Light Mode** toggle with persistent theme
-- **User Authentication** with JWT tokens
-- **Interactive Dashboard** for managing simulations
-- **Multiple Pipe Shapes** (Straight, L-Shaped, S-Curve, U-Bend, Helix)
-- **Visualization Modes** (Pressure, Velocity, Friction, Material)
-- **Particle Effects** with customizable colors and sizes
+## 🎯 Features
 
-## Tech Stack
+- **Real-time IoT Monitoring**: Live sensor data streaming via WebSocket
+- **Air Flow Simulation**: Advanced CFD-based pipe flow analysis
+- **User Management**: Secure authentication with email verification
+- **3D Visualization**: Interactive Three.js-powered simulations
+- **Production Ready**: Docker-based deployment with Nginx reverse proxy
 
-### Frontend
-- React 18 + TypeScript
-- Vite
-- Three.js for 3D visualization
-- React Router
+## 🏗️ Architecture
 
-### Backend
-- FastAPI (Python)
-- SQLAlchemy ORM
-- PostgreSQL/Supabase
-- JWT Authentication
+```
+Frontend (React + Vite + Nginx)
+    ↓
+Nginx Reverse Proxy
+    ↓
+Backend (FastAPI + Gunicorn)
+    ↓
+PostgreSQL Database
+```
 
-## Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.8+
-- Node.js 16+
-- Supabase account
 
-### Setup
+- Docker & Docker Compose
+- Domain pointed to your server
+- 2GB+ RAM, 20GB+ storage
 
-1. **Clone the repository**
+### Deployment
+
 ```bash
-git clone https://github.com/Geevin19/Air-Flow-Analysis-.git
-cd Air-Flow-Analysis-
+# Clone repository
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+cd YOUR_REPO
+
+# Configure environment
+cp .env.example .env
+nano .env  # Edit with your values
+
+# Deploy
+chmod +x deploy.sh
+./deploy.sh
 ```
 
-2. **Configure Backend**
+### Access
 
-Create `backend/.env`:
-```env
-PROJECT_URL=https://your-project.supabase.co
-PROJECT_ANON_KEY=your-anon-key
-DATABASE_URL=postgresql://postgres:password@host:port/postgres
-SECRET_KEY=your-secret-key
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-```
+- **Frontend**: https://airflowanalysis.xyz
+- **API**: https://airflowanalysis.xyz/api
+- **API Docs**: https://airflowanalysis.xyz/api/docs
 
-3. **Install Dependencies**
+## 📖 Documentation
 
-Backend:
+- [Deployment Guide](DEPLOYMENT.md) - Complete production setup
+- [API Documentation](https://airflowanalysis.xyz/api/docs) - Interactive API docs
+
+## 🛠️ Development
+
+### Local Development
+
 ```bash
+# Backend
 cd backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-```
+uvicorn main:app --reload
 
-Frontend:
-```bash
+# Frontend
 cd Frontend
 npm install
-```
-
-4. **Run the Application**
-
-Backend:
-```bash
-cd backend
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Frontend:
-```bash
-cd Frontend
 npm run dev
 ```
 
-5. **Access the Application**
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+### Environment Variables
 
-## Project Structure
+See `.env.example` for all required configuration.
 
+## 🔒 Security
+
+- HTTPS with Let's Encrypt
+- JWT-based authentication
+- Rate limiting
+- CORS protection
+- Security headers
+- Non-root containers
+
+## 📊 Monitoring
+
+```bash
+# View logs
+docker-compose logs -f
+
+# Health check
+curl https://airflowanalysis.xyz/health
+
+# Service status
+docker-compose ps
 ```
-├── Frontend/              # React frontend
-│   ├── src/
-│   │   ├── pages/        # Page components
-│   │   ├── components/   # Reusable components
-│   │   └── services/     # API services
-│   └── package.json
-│
-├── backend/              # FastAPI backend
-│   ├── main.py          # Application entry
-│   ├── models.py        # Database models
-│   ├── auth.py          # Authentication
-│   ├── simulation.py    # Simulation logic
-│   └── requirements.txt
-│
-└── README.md
+
+## 🔧 Maintenance
+
+```bash
+# Update application
+git pull origin main
+docker-compose down
+docker-compose build
+docker-compose up -d
+
+# Backup database
+docker-compose exec db pg_dump -U airflow airflow_db > backup.sql
+
+# Restart services
+docker-compose restart
 ```
 
-## API Endpoints
+## 📝 Tech Stack
 
-### Authentication
-- `POST /register` - Register new user
-- `POST /token` - Login
-- `GET /users/me` - Get current user
+### Frontend
+- React 18
+- TypeScript
+- Vite
+- Three.js
+- Recharts
+- Axios
 
-### Simulations
-- `POST /simulations` - Create simulation
-- `GET /simulations` - List user simulations
-- `GET /simulations/{id}` - Get simulation details
-- `DELETE /simulations/{id}` - Delete simulation
+### Backend
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- Gunicorn + Uvicorn
+- JWT Authentication
 
-## Simulation Features
+### Infrastructure
+- Docker & Docker Compose
+- Nginx (Reverse Proxy)
+- Let's Encrypt (SSL)
+- OVHcloud (Hosting)
 
-- Reynolds number calculation
-- Pressure drop analysis
-- Friction factor computation
-- Flow regime detection (Laminar/Turbulent)
-- Velocity profile visualization
-- Multiple material support (Steel, Copper, PVC, etc.)
-- Real-time parameter updates
+## 🤝 Contributing
 
-## License
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
 
-MIT License
+## 📄 License
 
-## Links
+This project is licensed under the MIT License.
 
-- [GitHub Repository](https://github.com/Geevin19/Air-Flow-Analysis-.git)
-- [Supabase](https://supabase.com)
-- [FastAPI](https://fastapi.tiangolo.com)
-- [React](https://react.dev)
+## 📞 Support
+
+For issues or questions:
+- Open an issue on GitHub
+- Check [DEPLOYMENT.md](DEPLOYMENT.md)
+- Review API docs at `/api/docs`
 
 ---
 
-Made with ❤️ by the SmartTracker Team
+**Status**: ✅ Production Ready | **Version**: 1.0.0

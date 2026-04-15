@@ -1,14 +1,17 @@
 from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
 from typing import List, Optional, Set
 from pydantic import BaseModel
 import json
 import asyncio
+import os
 
-from database import engine, get_db, Base
+from database import engine, get_db, Base, check_db_health
 from models import User, Simulation
 from schemas import (
     UserCreate, UserResponse, Token, SimulationCreate, SimulationResponse,
@@ -18,16 +21,38 @@ from auth import verify_password, get_password_hash, create_access_token, get_cu
 from simulation import run_simulation, compute_iot_physics
 from email_utils import generate_otp, send_otp_email, send_reset_email, send_admin_new_user, send_alert_email
 
+# Initialize database tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title='Simulation API')
+# FastAPI app with production settings
+app = FastAPI(
+    title='AirFlow Analysis API',
+    description='Production API for Air Flow Analysis SaaS',
+    version='1.0.0',
+    docs_url='/api/docs',
+    redoc_url='/api/redoc',
+    openapi_url='/api/openapi.json'
+)
 
+# Get allowed origins from environment
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'https://airflowanalysis.xyz,http://localhost:3000').split(',')
+
+# CORS Middleware - Production configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
+)
+
+# GZip compression for responses
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Trusted host middleware for security
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=['airflowanalysis.xyz', 'www.airflowanalysis.xyz', 'localhost', '127.0.0.1']
 )
 
 OTP_EXPIRE_MINUTES = 10
@@ -115,7 +140,18 @@ async def receive_arduino_data(payload: SensorPayload):
 
 @app.get('/')
 def read_root():
-    return {'message': 'Simulation API is running'}
+    return {'message': 'AirFlow Analysis API is running', 'version': '1.0.0', 'status': 'healthy'}
+
+
+@app.get('/health')
+def health_check():
+    """Health check endpoint for Docker and monitoring"""
+    db_healthy = check_db_health()
+    return {
+        'status': 'healthy' if db_healthy else 'unhealthy',
+        'database': 'connected' if db_healthy else 'disconnected',
+        'timestamp': datetime.utcnow().isoformat()
+    }
 
 
 # ── Alert endpoint: frontend calls this when a limit is breached ──
