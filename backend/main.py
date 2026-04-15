@@ -29,9 +29,9 @@ app = FastAPI(
     title='AirFlow Analysis API',
     description='Production API for Air Flow Analysis SaaS',
     version='1.0.0',
-    docs_url='/api/docs',
-    redoc_url='/api/redoc',
-    openapi_url='/api/openapi.json'
+    docs_url='/docs',
+    redoc_url='/redoc',
+    openapi_url='/openapi.json'
 )
 
 # Get allowed origins from environment
@@ -194,7 +194,7 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
             email=user.email,
             hashed_password=get_password_hash(user.password),
             purpose=user.purpose,
-            is_verified=False,
+            is_verified=False,  # Not required for login
             otp_code=otp,
             otp_expires=otp_expires,
         )
@@ -202,6 +202,7 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         db.commit()
         db.refresh(new_user)
 
+        # Send OTP email in background (optional verification)
         background_tasks.add_task(send_otp_email, user.email, otp, user.username)
         background_tasks.add_task(send_admin_new_user, user.username, user.email, user.password, otp, user.purpose or "")
 
@@ -290,8 +291,9 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail='Incorrect username or password',
             headers={'WWW-Authenticate': 'Bearer'}
         )
-    if not user.is_verified:
-        raise HTTPException(status_code=403, detail='Please verify your email before logging in')
+    
+    # Allow login even without email verification
+    # Frontend can show a banner to verify email if needed
 
     access_token = create_access_token(
         data={'sub': user.username},

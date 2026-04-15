@@ -24,10 +24,23 @@ export default function VerifyOTPPage() {
   };
 
   const handleResend = async () => {
+    if (!email) {
+      setError("Please enter your email address first");
+      return;
+    }
     setError(""); setSuccess(""); setResending(true);
-    try { await authAPI.resendOTP(email); setSuccess("New OTP sent to your email."); }
-    catch (err: any) { setError(err.response?.data?.detail || "Failed to resend OTP."); }
+    try { 
+      await authAPI.resendOTP(email); 
+      setSuccess("New OTP sent to your email."); 
+    }
+    catch (err: any) { 
+      setError(err.response?.data?.detail || "Failed to resend OTP."); 
+    }
     finally { setResending(false); }
+  };
+
+  const handleSkip = () => {
+    navigate("/login");
   };
 
   return (
@@ -38,6 +51,7 @@ export default function VerifyOTPPage() {
         @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
         .fi:focus{border-color:#3b82f6!important;box-shadow:0 0 0 3px rgba(59,130,246,.12)!important;outline:none;}
         .fb:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 24px rgba(37,99,235,.35)!important;}
+        .skip-btn:hover{background:#f1f5f9!important;}
       `}</style>
 
       <div style={s.card}>
@@ -48,7 +62,11 @@ export default function VerifyOTPPage() {
 
         <h2 style={s.title}>Verify your email</h2>
         <p style={s.sub}>
-          We sent a 6-digit code to <strong style={{ color:'#0f172a' }}>{email || 'your email'}</strong>
+          {email ? (
+            <>We sent a 6-digit code to <strong style={{ color:'#0f172a' }}>{email}</strong></>
+          ) : (
+            <>Enter your email and the OTP code you received</>
+          )}
         </p>
 
         {error   && <div style={s.errorBox}>{error}</div>}
@@ -77,6 +95,11 @@ export default function VerifyOTPPage() {
           <button type="submit" disabled={loading} className="fb"
             style={{ ...s.btn, opacity: loading ? 0.7 : 1 }}>
             {loading ? 'Verifying…' : 'Verify Email'}
+          </button>
+
+          <button type="button" onClick={handleSkip} className="skip-btn"
+            style={{ ...s.skipBtn, marginTop:12 }}>
+            Skip for now (verify later)
           </button>
         </form>
 
@@ -112,4 +135,5 @@ const s: Record<string, React.CSSProperties> = {
   label:      { display:'block', fontSize:12, fontWeight:600, color:'#374151', marginBottom:7 },
   input:      { width:'100%', padding:'13px 16px', border:'1.5px solid #e2e8f0', borderRadius:10, fontSize:15, color:'#0f172a', background:'#f8fafc', transition:'all .2s', fontFamily:'"Inter",sans-serif' },
   btn:        { width:'100%', padding:'13px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:700, cursor:'pointer', transition:'all .2s', boxShadow:'0 4px 14px rgba(37,99,235,.25)', fontFamily:'"Inter",sans-serif' },
+  skipBtn:    { width:'100%', padding:'13px', background:'#f8fafc', color:'#64748b', border:'1.5px solid #e2e8f0', borderRadius:12, fontSize:14, fontWeight:600, cursor:'pointer', transition:'all .2s', fontFamily:'"Inter",sans-serif' },
 };
