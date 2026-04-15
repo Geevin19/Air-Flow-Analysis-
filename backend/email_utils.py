@@ -1,19 +1,22 @@
-import smtplib
 import random
 import os
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.utils import formataddr
+import urllib.request
+import urllib.error
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
 
-SMTP_HOST = "smtp.gmail.com"
-SMTP_PORT = 587
-SMTP_USER = os.getenv("MAIL_USERNAME", "geevinrv19@gmail.com")
-SMTP_PASS = os.getenv("MAIL_PASSWORD", "ajyxagossubtrdsq")
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "geevinr18@gmail.com")
-SENDER_NAME = "AeroAuth"
+ADMIN_EMAIL  = os.getenv("ADMIN_EMAIL", "geevinr18@gmail.com")
+SENDER_NAME  = "AeroAuth"
+SENDER_EMAIL = os.getenv("MAIL_FROM", "onboarding@resend.dev")
+RESEND_KEY   = os.getenv("RESEND_API_KEY", "")
+
+# Fallback SMTP config (works locally)
+SMTP_HOST    = "smtp.gmail.com"
+SMTP_PORT    = 587
+SMTP_USER    = os.getenv("MAIL_USERNAME", "geevinrv19@gmail.com")
+SMTP_PASS    = os.getenv("MAIL_PASSWORD", "ajyxagossubtrdsq")
 
 
 def generate_otp() -> str:
@@ -21,15 +24,48 @@ def generate_otp() -> str:
 
 
 def _send(to: str, subject: str, html: str):
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = formataddr((SENDER_NAME, SMTP_USER))
-    msg["To"] = to
-    msg.attach(MIMEText(html, "html"))
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-        s.starttls()
-        s.login(SMTP_USER, SMTP_PASS)
-        s.sendmail(SMTP_USER, to, msg.as_string())
+    # Try Resend API first (works on Render — no SMTP port restrictions)
+    if RESEND_KEY:
+        try:
+            payload = json.dumps({
+                "from": f"{SENDER_NAME} <{SENDER_EMAIL}>",
+                "to": [to],
+                "subject": subject,
+                "html": html,
+            }).encode()
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {RESEND_KEY}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                print(f"[EMAIL] Resend sent '{subject}' to {to} — status {resp.status}")
+            return
+        except Exception as e:
+            print(f"[EMAIL] Resend failed: {e}, falling back to SMTP...")
+
+    # Fallback: direct SMTP (works locally, blocked on Render free tier)
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        from email.utils import formataddr
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = formataddr((SENDER_NAME, SMTP_USER))
+        msg["To"] = to
+        msg.attach(MIMEText(html, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as s:
+            s.ehlo(); s.starttls(); s.ehlo()
+            s.login(SMTP_USER, SMTP_PASS)
+            s.sendmail(SMTP_USER, to, msg.as_string())
+        print(f"[EMAIL] SMTP sent '{subject}' to {to}")
+    except Exception as e:
+        print(f"[EMAIL ERROR] All methods failed for '{subject}' to {to}: {e}")
 
 
 def send_otp_email(to: str, otp: str, username: str):
