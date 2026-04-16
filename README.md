@@ -24,38 +24,47 @@ PostgreSQL Database
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- Docker & Docker Compose
-- Domain pointed to your server
-- 2GB+ RAM, 20GB+ storage
-
-### Deployment
+### One-Command Deployment
 
 ```bash
-# Clone repository
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
-cd YOUR_REPO
-
-# Configure environment
-cp .env.example .env
-nano .env  # Edit with your values
-
-# Deploy
-chmod +x deploy.sh
-./deploy.sh
+docker-compose up -d --build
 ```
 
-### Access
+That's it! No configuration needed. The application will:
+1. ✅ Build all containers automatically
+2. ✅ Start PostgreSQL with pre-configured credentials
+3. ✅ Start FastAPI backend with 4 workers
+4. ✅ Start React frontend with Nginx
+5. ✅ Start Nginx reverse proxy
 
-- **Frontend**: https://airflowanalysis.xyz
-- **API**: https://airflowanalysis.xyz/api
-- **API Docs**: https://airflowanalysis.xyz/api/docs
+### Access the Application
+
+- **Frontend**: http://localhost
+- **Backend API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+- **Health Check**: http://localhost/health
+
+### Prerequisites
+
+- Docker & Docker Compose installed
+- Ports 80, 443, 5432, 8000 available
+- 2GB+ RAM recommended
+
+### Verify Setup (Optional)
+
+```bash
+# Linux/Mac
+./verify-setup.sh
+
+# Windows PowerShell
+.\verify-setup.ps1
+```
 
 ## 📖 Documentation
 
-- [Deployment Guide](DEPLOYMENT.md) - Complete production setup
-- [API Documentation](https://airflowanalysis.xyz/api/docs) - Interactive API docs
+- [Docker Quick Start](DOCKER_QUICK_START.md) - Zero-config deployment guide
+- [Deployment Guide](DEPLOYMENT.md) - Production setup with HTTPS
+- [API Documentation](http://localhost:8000/docs) - Interactive API docs (after starting)
 
 ## 🛠️ Development
 

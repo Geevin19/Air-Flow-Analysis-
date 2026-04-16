@@ -13,8 +13,11 @@ load_dotenv()
 # Declarative base for models
 Base = declarative_base()
 
-# Get database URL from environment
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Get database URL from environment with fallback
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://airflow:strongpassword123@db:5432/airflowdb"
+)
 
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is required")

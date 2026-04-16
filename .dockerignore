@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Environment files (use docker-compose env instead)
+.env.example
+
+# Node modules
+node_modules
+npm-debug.log
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+venv
+env
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs
+
+# Test files
+test-*.md
+test-*.ps1
+
+# Deployment configs for other platforms
+netlify.toml
+vercel.json
+render.yaml
+VERCEL_DEPLOYMENT.md

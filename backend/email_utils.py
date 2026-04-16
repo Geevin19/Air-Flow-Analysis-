@@ -7,16 +7,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ADMIN_EMAIL  = os.getenv("ADMIN_EMAIL", "geevinr18@gmail.com")
+ADMIN_EMAIL  = os.getenv("ADMIN_EMAIL", "admin@example.com")
 SENDER_NAME  = "AeroAuth"
-SENDER_EMAIL = os.getenv("MAIL_FROM", "onboarding@resend.dev")
+SENDER_EMAIL = os.getenv("MAIL_FROM", "noreply@example.com")
 RESEND_KEY   = os.getenv("RESEND_API_KEY", "")
 
 # Fallback SMTP config (works locally)
 SMTP_HOST    = "smtp.gmail.com"
 SMTP_PORT    = 587
-SMTP_USER    = os.getenv("MAIL_USERNAME", "geevinrv19@gmail.com")
-SMTP_PASS    = os.getenv("MAIL_PASSWORD", "ajyxagossubtrdsq")
+SMTP_USER    = os.getenv("MAIL_USERNAME", "noreply@example.com")
+SMTP_PASS    = os.getenv("MAIL_PASSWORD", "dummy-password")
 
 
 def generate_otp() -> str:
