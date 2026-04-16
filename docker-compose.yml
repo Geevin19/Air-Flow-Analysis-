@@ -96,12 +96,6 @@ services:
       - certbot_www:/var/www/certbot
     networks:
       - airflow_network
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
   # Certbot for SSL (optional, run manually)
   # certbot:
