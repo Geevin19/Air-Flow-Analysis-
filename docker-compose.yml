@@ -1,11 +1,11 @@
-# ── Production Docker Compose Configuration ──────────────────────────────────
+# ── Production Docker Compose - Backend + Database Only ──────────────────────
 
 services:
   # PostgreSQL Database
   db:
     image: postgres:15-alpine
     container_name: airflow-postgres
-    restart: unless-stopped
+    restart: always
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: strongpassword123
@@ -14,7 +14,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U airflow"]
       interval: 10s
@@ -29,7 +29,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: airflow-backend
-    restart: unless-stopped
+    restart: always
     depends_on:
       db:
         condition: service_healthy
@@ -46,7 +46,7 @@ services:
     volumes:
       - ./backend:/app
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -56,56 +56,8 @@ services:
     networks:
       - airflow_network
 
-  # React Frontend with Nginx
-  frontend:
-    build:
-      context: ./Frontend
-      dockerfile: Dockerfile
-    container_name: airflow-frontend
-    restart: unless-stopped
-    depends_on:
-      - backend
-    expose:
-      - "80"
-    networks:
-      - airflow_network
-
-  # Nginx Reverse Proxy
-  nginx:
-    image: nginx:alpine
-    container_name: airflow-nginx
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
-      frontend:
-        condition: service_started
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/logs:/var/log/nginx
-      - certbot_data:/etc/letsencrypt
-      - certbot_www:/var/www/certbot
-    networks:
-      - airflow_network
-
-  # Certbot for SSL (optional, run manually)
-  # certbot:
-  #   image: certbot/certbot
-  #   container_name: airflow-certbot
-  #   volumes:
-  #     - certbot_data:/etc/letsencrypt
-  #     - certbot_www:/var/www/certbot
-  #   entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-
 volumes:
   postgres_data:
-    driver: local
-  certbot_data:
-    driver: local
-  certbot_www:
     driver: local
 
 networks:

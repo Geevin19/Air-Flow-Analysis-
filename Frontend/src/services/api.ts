@@ -1,7 +1,7 @@
 import axios, { InternalAxiosRequestConfig } from 'axios';
 
-// Use api subdomain for production
-const API_BASE = 'http://api.airflowanalysis.xyz';
+// Use relative path - nginx will proxy /api to backend
+const API_BASE = '/api';
 
 export const api = axios.create({
   baseURL: API_BASE,
