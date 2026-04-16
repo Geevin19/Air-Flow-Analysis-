@@ -1,6 +1,6 @@
 import axios, { InternalAxiosRequestConfig } from 'axios';
 
-// Use relative path - nginx will proxy /api to backend
+// Use relative path - VM nginx will proxy /api to backend
 const API_BASE = '/api';
 
 export const api = axios.create({
