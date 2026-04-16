@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     container_name: airflow-postgres
@@ -17,7 +16,6 @@ services:
     networks:
       - airflow_network
 
-  # FastAPI Backend
   backend:
     build:
       context: ./backend
@@ -41,7 +39,6 @@ services:
     networks:
       - airflow_network
 
-  # React Frontend
   frontend:
     build:
       context: ./Frontend
