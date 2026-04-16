@@ -1,7 +1,0 @@
-backend/
-database/
-docker-compose.yml
-*.bat
-.git/
-.vscode/
-*.md

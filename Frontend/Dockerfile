@@ -1,4 +1,4 @@
-# Build stage only - nginx will be handled by main nginx container
+# Multi-stage build
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -6,30 +6,28 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install ALL dependencies (including devDependencies needed for build)
+# Install dependencies
 RUN npm ci
 
 # Copy source code
 COPY . .
 
-# Build for production - outputs to /app/dist
+# Build for production
 RUN npm run build
 
-# Verify build output exists
+# Verify build output
 RUN ls -la /app/dist && \
     test -f /app/dist/index.html || (echo "ERROR: index.html not found in dist!" && exit 1)
 
-# Final stage - just hold the built files
-FROM node:20-alpine
+# Production stage - serve with nginx
+FROM nginx:alpine
 
-WORKDIR /app
+# Copy built files to nginx html directory
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy built files from builder
-COPY --from=builder /app/dist ./dist
+# Copy nginx config for SPA routing
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Verify files are in place
-RUN ls -la /app/dist && \
-    test -f /app/dist/index.html || (echo "ERROR: index.html not found!" && exit 1)
+EXPOSE 80
 
-# Keep container running
-CMD ["tail", "-f", "/dev/null"]
+CMD ["nginx", "-g", "daemon off;"]
