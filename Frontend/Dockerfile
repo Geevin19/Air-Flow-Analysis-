@@ -25,15 +25,8 @@ FROM nginx:alpine
 # Copy built files to nginx html directory
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Create simple nginx config for frontend container
-RUN echo 'server { \
-    listen 80; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+# Copy nginx configuration
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 
 # Verify files are in place
 RUN ls -la /usr/share/nginx/html && \
