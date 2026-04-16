@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
@@ -46,11 +45,7 @@ app.add_middleware(
 # GZip compression for responses
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Trusted host middleware - Allow all hosts for domain flexibility
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["*"]
-)
+# TrustedHostMiddleware REMOVED - causes "Invalid host header" issues during development
 
 OTP_EXPIRE_MINUTES = 10
 

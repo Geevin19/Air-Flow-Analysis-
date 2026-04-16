@@ -1,5 +1,3 @@
-# ── Production Frontend Dockerfile (Multi-stage) ─────────────────────────────
-
 # Stage 1: Build
 FROM node:20-alpine AS builder
 
@@ -14,10 +12,7 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build for production
-ARG VITE_API_URL=https://airflowanalysis.xyz/api
-ENV VITE_API_URL=$VITE_API_URL
-
+# Build for production - no build args needed, uses relative /api path
 RUN npm run build
 
 # Stage 2: Serve with Nginx

@@ -1,6 +1,7 @@
 import axios, { InternalAxiosRequestConfig } from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://api.airflowanalysis.xyz';
+// Use relative path /api for all environments
+const API_BASE = '/api';
 
 export const api = axios.create({
   baseURL: API_BASE,
