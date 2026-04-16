@@ -13,16 +13,35 @@ Production-grade air flow simulation and IoT monitoring platform deployed on OVH
 ## 🏗️ Architecture
 
 ```
-Frontend (React + Vite + Nginx)
+Frontend Domain: airflowanalysis.xyz
     ↓
 Nginx Reverse Proxy
     ↓
-Backend (FastAPI + Gunicorn)
+React Frontend (port 80)
+
+API Domain: api.airflowanalysis.xyz
     ↓
-PostgreSQL Database
+Nginx Reverse Proxy
+    ↓
+FastAPI Backend (port 8000)
+    ↓
+PostgreSQL Database (port 5432)
 ```
 
+### Domain Routing
+
+- **airflowanalysis.xyz** → Frontend (React + Vite + Nginx)
+- **api.airflowanalysis.xyz** → Backend (FastAPI + Gunicorn)
+- **WebSocket**: `ws://api.airflowanalysis.xyz/ws/`
+
 ## 🚀 Quick Start
+
+### Prerequisites
+
+- Docker & Docker Compose installed
+- Domain DNS configured (see [Domain Setup](DOMAIN_SETUP.md))
+- Ports 80, 443, 5432, 8000 available
+- 2GB+ RAM recommended
 
 ### One-Command Deployment
 
@@ -30,21 +49,47 @@ PostgreSQL Database
 docker-compose up -d --build
 ```
 
-That's it! No configuration needed. The application will:
+That's it! The application will:
 1. ✅ Build all containers automatically
 2. ✅ Start PostgreSQL with pre-configured credentials
-3. ✅ Start FastAPI backend with 4 workers
+3. ✅ Start FastAPI backend on port 8000
 4. ✅ Start React frontend with Nginx
-5. ✅ Start Nginx reverse proxy
+5. ✅ Configure domain-based routing
 
 ### Access the Application
 
-- **Frontend**: http://localhost
-- **Backend API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
-- **Health Check**: http://localhost/health
+**Production (with domain):**
+- **Frontend**: http://airflowanalysis.xyz
+- **API**: http://api.airflowanalysis.xyz
+- **API Docs**: http://api.airflowanalysis.xyz/docs
+- **Health**: http://api.airflowanalysis.xyz/health
 
-### Prerequisites
+**Local Testing (without domain):**
+- **Frontend**: http://localhost
+- **Backend**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+
+### DNS Configuration
+
+Point these DNS A records to your server IP:
+
+```
+A     airflowanalysis.xyz        → YOUR_SERVER_IP
+A     www.airflowanalysis.xyz    → YOUR_SERVER_IP
+A     api.airflowanalysis.xyz    → YOUR_SERVER_IP
+```
+
+See [DOMAIN_SETUP.md](DOMAIN_SETUP.md) for detailed instructions.
+
+### Verify Setup (Optional)
+
+```bash
+# Linux/Mac
+./verify-setup.sh
+
+# Windows PowerShell
+.\verify-setup.ps1
+```
 
 - Docker & Docker Compose installed
 - Ports 80, 443, 5432, 8000 available
@@ -62,9 +107,10 @@ That's it! No configuration needed. The application will:
 
 ## 📖 Documentation
 
+- [Domain Setup Guide](DOMAIN_SETUP.md) - DNS and domain configuration
 - [Docker Quick Start](DOCKER_QUICK_START.md) - Zero-config deployment guide
 - [Deployment Guide](DEPLOYMENT.md) - Production setup with HTTPS
-- [API Documentation](http://localhost:8000/docs) - Interactive API docs (after starting)
+- [API Documentation](http://api.airflowanalysis.xyz/docs) - Interactive API docs
 
 ## 🛠️ Development
 
