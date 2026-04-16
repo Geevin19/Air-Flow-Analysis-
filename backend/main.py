@@ -34,26 +34,23 @@ app = FastAPI(
     openapi_url='/openapi.json'
 )
 
-# Get allowed origins from environment - allow all for simplicity
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '*').split(',')
-
-# CORS Middleware - Production configuration
+# CORS Middleware - Allow all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if "*" in ALLOWED_ORIGINS else ALLOWED_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # GZip compression for responses
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Trusted host middleware disabled for domain flexibility
-# app.add_middleware(
-#     TrustedHostMiddleware,
-#     allowed_hosts=['airflowanalysis.xyz', 'www.airflowanalysis.xyz', 'api.airflowanalysis.xyz', 'localhost', '127.0.0.1']
-# )
+# Trusted host middleware - Allow all hosts for domain flexibility
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*"]
+)
 
 OTP_EXPIRE_MINUTES = 10
 
