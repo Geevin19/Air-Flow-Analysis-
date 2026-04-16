@@ -56,7 +56,7 @@ services:
     networks:
       - airflow_network
 
-  # React Frontend
+  # React Frontend (Build Container)
   frontend:
     build:
       context: ./Frontend
@@ -65,16 +65,10 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    expose:
-      - "80"
+    volumes:
+      - frontend_dist:/app/dist
     networks:
       - airflow_network
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
   # Nginx Reverse Proxy
   nginx:
@@ -85,12 +79,13 @@ services:
       backend:
         condition: service_healthy
       frontend:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - frontend_dist:/usr/share/nginx/html:ro
       - ./nginx/logs:/var/log/nginx
       - certbot_data:/etc/letsencrypt
       - certbot_www:/var/www/certbot
@@ -108,6 +103,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  frontend_dist:
     driver: local
   certbot_data:
     driver: local

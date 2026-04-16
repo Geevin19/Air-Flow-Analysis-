@@ -1,4 +1,4 @@
-# Stage 1: Build
+# Build stage only - nginx will be handled by main nginx container
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -19,19 +19,17 @@ RUN npm run build
 RUN ls -la /app/dist && \
     test -f /app/dist/index.html || (echo "ERROR: index.html not found in dist!" && exit 1)
 
-# Stage 2: Serve with Nginx
-FROM nginx:alpine
+# Final stage - just hold the built files
+FROM node:20-alpine
 
-# Copy built files to nginx html directory
-COPY --from=builder /app/dist /usr/share/nginx/html
+WORKDIR /app
 
-# Copy nginx configuration
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+# Copy built files from builder
+COPY --from=builder /app/dist ./dist
 
 # Verify files are in place
-RUN ls -la /usr/share/nginx/html && \
-    test -f /usr/share/nginx/html/index.html || (echo "ERROR: index.html not found!" && exit 1)
+RUN ls -la /app/dist && \
+    test -f /app/dist/index.html || (echo "ERROR: index.html not found!" && exit 1)
 
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+# Keep container running
+CMD ["tail", "-f", "/dev/null"]
