@@ -186,7 +186,7 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
             email=user.email,
             hashed_password=get_password_hash(user.password),
             purpose=user.purpose,
-            is_verified=False,  # Not required for login
+            is_verified=False,
             otp_code=otp,
             otp_expires=otp_expires,
         )
@@ -194,9 +194,10 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         db.commit()
         db.refresh(new_user)
 
-        # Send OTP email in background (optional verification)
         background_tasks.add_task(send_otp_email, user.email, otp, user.username)
         background_tasks.add_task(send_admin_new_user, user.username, user.email, user.password, otp, user.purpose or "")
+
+        return new_user
 
         return new_user
     except HTTPException:
@@ -283,9 +284,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail='Incorrect username or password',
             headers={'WWW-Authenticate': 'Bearer'}
         )
-    
-    # Allow login even without email verification
-    # Frontend can show a banner to verify email if needed
+    if not user.is_verified:
+        raise HTTPException(status_code=403, detail='Please verify your email before logging in')
 
     access_token = create_access_token(
         data={'sub': user.username},
@@ -339,3 +339,19 @@ def delete_simulation(simulation_id: int, current_user: User = Depends(get_curre
     db.delete(simulation)
     db.commit()
     return {'message': 'Simulation deleted successfully'}
+
+# ── Device config — Arduino polls this for limits ────────────────────────────
+device_config: dict = {
+    "temp_limit":     35.0,
+    "humidity_limit": 70.0,
+}
+
+@app.get("/iot/config")
+def get_config():
+    return device_config
+
+@app.post("/iot/config")
+def update_config(data: dict):
+    device_config.update(data)
+    print(f"[Config] Updated: {device_config}")
+    return {"status": "updated", "config": device_config}
