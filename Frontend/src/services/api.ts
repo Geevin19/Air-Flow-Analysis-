@@ -17,7 +17,7 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 });
 
 export const authAPI = {
-  register: (data: { username: string; email: string; password: string; purpose?: string }) =>
+  register: (data: { username: string; email: string; password: string; purpose?: string; role?: string; manager_id?: number }) =>
     api.post('/register', data),
 
   login: (username: string, password: string) =>

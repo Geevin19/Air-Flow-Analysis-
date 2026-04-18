@@ -11,10 +11,11 @@ import asyncio
 import os
 
 from database import engine, get_db, Base, check_db_health
-from models import User, Simulation
+from models import User, Simulation, LimitRequest, Alert, SensorReading
 from schemas import (
     UserCreate, UserResponse, Token, SimulationCreate, SimulationResponse,
-    OTPVerify, ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest
+    OTPVerify, ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest,
+    LimitRequestCreate, LimitRequestResponse, AlertResponse
 )
 from auth import verify_password, get_password_hash, create_access_token, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
 from simulation import run_simulation, compute_iot_physics
@@ -186,6 +187,8 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
             email=user.email,
             hashed_password=get_password_hash(user.password),
             purpose=user.purpose,
+            role=user.role or 'worker',
+            manager_id=user.manager_id if user.role == 'worker' else None,
             is_verified=False,
             otp_code=otp,
             otp_expires=otp_expires,
@@ -355,3 +358,144 @@ def update_config(data: dict):
     device_config.update(data)
     print(f"[Config] Updated: {device_config}")
     return {"status": "updated", "config": device_config}
+
+
+# ── Manager: list all workers under this manager ──────────────────────────────
+@app.get('/manager/workers', response_model=List[UserResponse])
+def get_workers(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != 'manager':
+        raise HTTPException(status_code=403, detail='Manager access required')
+    return db.query(User).filter(User.manager_id == current_user.id).all()
+
+
+# ── Manager: get a specific worker's latest IoT data ─────────────────────────
+@app.get('/manager/workers/{worker_id}/iot')
+def get_worker_iot(worker_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != 'manager':
+        raise HTTPException(status_code=403, detail='Manager access required')
+    worker = db.query(User).filter(User.id == worker_id, User.manager_id == current_user.id).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail='Worker not found')
+    # Return latest sensor reading for this worker
+    reading = db.query(SensorReading).filter(SensorReading.user_id == worker_id).order_by(SensorReading.recorded_at.desc()).first()
+    return {'worker': worker.username, 'data': reading.raw if reading else None, 'recorded_at': reading.recorded_at if reading else None}
+
+
+# ── List all managers (for worker registration dropdown) ─────────────────────
+@app.get('/managers', response_model=List[UserResponse])
+def list_managers(db: Session = Depends(get_db)):
+    return db.query(User).filter(User.role == 'manager', User.is_verified == True).all()
+
+
+# ── Worker: request a limit change ───────────────────────────────────────────
+@app.post('/limits/request', response_model=LimitRequestResponse)
+def request_limit(data: LimitRequestCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != 'worker':
+        raise HTTPException(status_code=403, detail='Only workers can request limits')
+    if not current_user.manager_id:
+        raise HTTPException(status_code=400, detail='No manager assigned to this worker')
+    req = LimitRequest(
+        worker_id=current_user.id,
+        manager_id=current_user.manager_id,
+        metric=data.metric,
+        value=data.value,
+        status='pending',
+    )
+    db.add(req); db.commit(); db.refresh(req)
+    # Notify manager
+    manager = db.query(User).filter(User.id == current_user.manager_id).first()
+    if manager:
+        from email_utils import _send
+        _send(manager.email, f"[SmartTracker] Limit request from {current_user.username}",
+              f"<p>Worker <b>{current_user.username}</b> has requested a limit of <b>{data.value}</b> for <b>{data.metric}</b>. Please review in your dashboard.</p>")
+    return req
+
+
+# ── Manager: get pending limit requests ──────────────────────────────────────
+@app.get('/limits/pending', response_model=List[LimitRequestResponse])
+def get_pending_limits(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != 'manager':
+        raise HTTPException(status_code=403, detail='Manager access required')
+    return db.query(LimitRequest).filter(LimitRequest.manager_id == current_user.id, LimitRequest.status == 'pending').all()
+
+
+# ── Manager: approve or reject a limit request ───────────────────────────────
+@app.post('/limits/{request_id}/review')
+def review_limit(request_id: int, action: str, reason: Optional[str] = None,
+                 current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != 'manager':
+        raise HTTPException(status_code=403, detail='Manager access required')
+    if action not in ('approved', 'rejected'):
+        raise HTTPException(status_code=400, detail='action must be approved or rejected')
+    req = db.query(LimitRequest).filter(LimitRequest.id == request_id, LimitRequest.manager_id == current_user.id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail='Request not found')
+    req.status = action
+    req.reason = reason
+    req.reviewed_at = datetime.utcnow()
+    db.commit()
+    # Notify worker
+    worker = db.query(User).filter(User.id == req.worker_id).first()
+    if worker:
+        from email_utils import _send
+        status_word = 'approved' if action == 'approved' else 'rejected'
+        _send(worker.email, f"[SmartTracker] Limit request {status_word}",
+              f"<p>Your limit request for <b>{req.metric}</b> = <b>{req.value}</b> has been <b>{status_word}</b> by your manager.{(' Reason: ' + reason) if reason else ''}</p>")
+    return {'status': action, 'request_id': request_id}
+
+
+# ── Worker: get own approved limits ──────────────────────────────────────────
+@app.get('/limits/approved')
+def get_approved_limits(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    reqs = db.query(LimitRequest).filter(LimitRequest.worker_id == current_user.id, LimitRequest.status == 'approved').all()
+    return {r.metric: r.value for r in reqs}
+
+
+# ── IoT alert with role-aware emails ─────────────────────────────────────────
+class RoleAlertPayload(BaseModel):
+    metric:         str
+    value:          float
+    limit:          float
+    unit:           str
+    critical_level: Optional[float] = None  # if value >= this, also alert manager
+
+@app.post('/iot/alert/role')
+async def send_role_alert(payload: RoleAlertPayload, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from email_utils import _send
+    # Save alert to DB
+    level = 'critical' if (payload.critical_level and payload.value >= payload.critical_level) else 'warning'
+    alert = Alert(user_id=current_user.id, metric=payload.metric, value=payload.value, limit=payload.limit, level=level)
+    db.add(alert); db.commit()
+
+    # Email worker
+    _send(current_user.email, f"[SmartTracker] ⚠ {payload.metric} limit exceeded",
+          f"""<div style="font-family:Arial;padding:24px;background:#fef2f2;border-radius:12px;border:1.5px solid #fca5a5">
+          <h2 style="color:#dc2626">Sensor Limit Exceeded</h2>
+          <p>Hi <b>{current_user.username}</b>, your sensor <b>{payload.metric}</b> has exceeded the limit.</p>
+          <p>Current value: <b style="color:#dc2626">{payload.value:.4f} {payload.unit}</b> | Limit: <b>{payload.limit} {payload.unit}</b></p>
+          </div>""")
+
+    # Email manager if critical
+    if level == 'critical' and current_user.manager_id:
+        manager = db.query(User).filter(User.id == current_user.manager_id).first()
+        if manager:
+            _send(manager.email, f"[SmartTracker] 🚨 CRITICAL: {payload.metric} — Worker {current_user.username}",
+                  f"""<div style="font-family:Arial;padding:24px;background:#fef2f2;border-radius:12px;border:2px solid #dc2626">
+                  <h2 style="color:#dc2626">CRITICAL Alert from Worker</h2>
+                  <p>Worker <b>{current_user.username}</b> has a critical sensor reading.</p>
+                  <p><b>{payload.metric}</b>: <b style="color:#dc2626">{payload.value:.4f} {payload.unit}</b> (critical threshold: {payload.critical_level} {payload.unit})</p>
+                  <p>Please check immediately.</p>
+                  </div>""")
+
+    return {"status": "alerts sent", "level": level}
+
+
+# ── Alert history ─────────────────────────────────────────────────────────────
+@app.get('/alerts', response_model=List[AlertResponse])
+def get_alerts(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role == 'manager':
+        # Manager sees alerts from all their workers
+        worker_ids = [w.id for w in db.query(User).filter(User.manager_id == current_user.id).all()]
+        worker_ids.append(current_user.id)
+        return db.query(Alert).filter(Alert.user_id.in_(worker_ids)).order_by(Alert.created_at.desc()).limit(100).all()
+    return db.query(Alert).filter(Alert.user_id == current_user.id).order_by(Alert.created_at.desc()).limit(100).all()

@@ -1,12 +1,14 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 class UserCreate(BaseModel):
-    username: str
-    email: EmailStr
-    password: str
-    purpose: Optional[str] = None
+    username:   str
+    email:      EmailStr
+    password:   str
+    purpose:    Optional[str] = None
+    role:       Optional[str] = 'worker'   # 'manager' or 'worker'
+    manager_id: Optional[int] = None       # required if role=worker
 
 class LoginRequest(BaseModel):
     username: str
@@ -14,27 +16,29 @@ class LoginRequest(BaseModel):
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int
-    username: str
-    email: str
-    purpose: Optional[str] = None
+    id:         int
+    username:   str
+    email:      str
+    purpose:    Optional[str] = None
+    role:       str = 'worker'
+    manager_id: Optional[int] = None
     is_verified: bool = False
     created_at: datetime
 
 class Token(BaseModel):
     access_token: str
-    token_type: str
+    token_type:   str
 
 class OTPVerify(BaseModel):
     email: str
-    otp: str
+    otp:   str
 
 class ForgotPasswordRequest(BaseModel):
     email: str
 
 class ResetPasswordRequest(BaseModel):
-    email: str
-    otp: str
+    email:        str
+    otp:          str
     new_password: str
 
 class ChangePasswordRequest(BaseModel):
@@ -42,14 +46,40 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 class SimulationCreate(BaseModel):
-    name: str
+    name:       str
     parameters: Dict[str, Any]
 
 class SimulationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int
-    user_id: int
-    name: str
+    id:         int
+    user_id:    int
+    name:       str
     parameters: Dict[str, Any]
-    results: Optional[Dict[str, Any]] = None
+    results:    Optional[Dict[str, Any]] = None
+    created_at: datetime
+
+class LimitRequestCreate(BaseModel):
+    metric: str
+    value:  float
+
+class LimitRequestResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id:          int
+    worker_id:   int
+    manager_id:  int
+    metric:      str
+    value:       float
+    status:      str
+    reason:      Optional[str] = None
+    created_at:  datetime
+    reviewed_at: Optional[datetime] = None
+
+class AlertResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id:         int
+    user_id:    int
+    metric:     str
+    value:      float
+    limit:      float
+    level:      str
     created_at: datetime

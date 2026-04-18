@@ -2,8 +2,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const WS_URL  = (import.meta.env.VITE_API_URL || 'https://air-flow-analysis.onrender.com').replace(/^http/, 'ws') + '/ws/iot';
-const API_URL = import.meta.env.VITE_API_URL || 'https://air-flow-analysis.onrender.com';
-const MAX_HIST = 50;
+const API_URL = import.meta.env.VITE_API_URL || 'https://air-flow-analysis.onrender.com';const MAX_HIST = 50;
 const PIPE_D = 0.05;
 const K_CAL  = 0.04;
 
@@ -73,6 +72,7 @@ export default function LiveIoT() {
   const [limits, setLimits]           = useState<Record<string, string>>({});
   const [showLimits, setShowLimits]   = useState(false);
   const [alertedKeys, setAlertedKeys] = useState<Set<string>>(new Set());
+  const [arduinoIp, setArduinoIp]     = useState('192.168.1.100');
   const wsRef       = useRef<WebSocket | null>(null);
   const timerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastId     = useRef(0);
@@ -129,6 +129,24 @@ export default function LiveIoT() {
 
   // Keep checkRef always pointing to latest checkLimits
   useEffect(() => { checkRef.current = checkLimits; }, [checkLimits]);
+
+  // Push limits to backend /iot/config so Arduino can poll them
+  const pushLimitsToBackend = useCallback(async (newLimits: Record<string, string>) => {
+    const temp = parseFloat(newLimits['temperature'] ?? newLimits['temp'] ?? '');
+    const hum  = parseFloat(newLimits['humidity'] ?? '');
+    const body: Record<string, number> = {};
+    if (!isNaN(temp)) body['temp_limit']     = temp;
+    if (!isNaN(hum))  body['humidity_limit'] = hum;
+    if (Object.keys(body).length === 0) return;
+    try {
+      await fetch(`${API_URL}/iot/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      console.log('[Config] Pushed limits to backend:', body);
+    } catch { /* ignore */ }
+  }, []);
 
   function connect() {
     setStatus('connecting'); setErrorMsg('');
@@ -267,7 +285,24 @@ export default function LiveIoT() {
           <div style={{ ...s.centerWrap, animation:'fadeUp .4s ease' }}>
             <div style={{ fontSize:64, marginBottom:20 }}>📡</div>
             <h2 style={s.idleTitle}>Connect to Arduino</h2>
-            <p style={s.idleSub}>Open a live WebSocket connection to start receiving sensor data from your Arduino / ESP device.</p>
+            <p style={s.idleSub}>Enter your Arduino IP address and click Connect to start receiving live sensor data.</p>
+
+            <div style={{ marginBottom:20, textAlign:'left' }}>
+              <label style={{ display:'block', fontSize:12, fontWeight:600, color:'#374151', marginBottom:6 }}>
+                Arduino IP Address
+              </label>
+              <input
+                type="text"
+                value={arduinoIp}
+                onChange={e => setArduinoIp(e.target.value)}
+                placeholder="e.g. 192.168.1.100"
+                style={{ width:'100%', padding:'11px 14px', border:'1.5px solid #e2e8f0', borderRadius:10, fontSize:14, color:'#0f172a', background:'#f8fafc', fontFamily:'"Inter",sans-serif', outline:'none' }}
+              />
+              <p style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>
+                Find this in your Arduino Serial Monitor after it connects to WiFi
+              </p>
+            </div>
+
             <button style={s.connectBtn} onClick={connect}><span>📶</span> Connect via WiFi</button>
           </div>
         )}
@@ -300,6 +335,7 @@ export default function LiveIoT() {
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ width:10, height:10, borderRadius:'50%', background: arduinoActive?'#22c55e':'#f59e0b', display:'inline-block', animation: arduinoActive?'glow 2s infinite':'pulse 1.5s infinite' }} />
                 <span style={s.statusTxt}>{arduinoActive ? 'Live — data streaming' : 'Waiting for Arduino…'}</span>
+              {arduinoIp && <span style={{ fontSize:11, color:'#94a3b8', background:'#f1f5f9', padding:'2px 8px', borderRadius:6, fontFamily:'"JetBrains Mono",monospace' }}>{arduinoIp}</span>}
               </div>
               {lastTime && <span style={s.lastTime}>Last update: {lastTime}</span>}
               {alertedKeys.size > 0 && (
@@ -359,7 +395,12 @@ export default function LiveIoT() {
                       <input
                         type="number" placeholder="No limit"
                         value={limits[key] ?? ''}
-                        onChange={e => setLimits(p => ({ ...p, [key]: e.target.value }))}
+                        onChange={e => {
+                          const updated = { ...limits, [key]: e.target.value };
+                          setLimits(updated);
+                          limitsRef.current = updated;
+                          pushLimitsToBackend(updated);
+                        }}
                         style={{ width:'100%', padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, fontFamily:'"JetBrains Mono",monospace', fontWeight:600, outline:'none', background:'#fff', color:'#0f172a' }}
                       />
                     </div>

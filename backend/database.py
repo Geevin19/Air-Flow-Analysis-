@@ -1,68 +1,64 @@
-"""
-Production Database Configuration
-SQLAlchemy-based PostgreSQL connection (no Supabase)
-"""
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.pool import QueuePool
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Declarative base for models
 Base = declarative_base()
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
-# Get database URL from environment with fallback
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://airflow:strongpassword123@db:5432/airflowdb"
-)
+def _try_postgres(url: str):
+    try:
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        eng = create_engine(url, pool_pre_ping=True, pool_size=5,
+                            max_overflow=10, pool_recycle=3600,
+                            connect_args={"connect_timeout": 5})
+        with eng.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        print("[DB] Connected using PostgreSQL")
+        return eng
+    except Exception as e:
+        print(f"[DB] Postgres unreachable ({type(e).__name__}). Falling back to SQLite.")
+        return None
 
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable is required")
+if DATABASE_URL and DATABASE_URL.startswith(("postgresql", "postgres")):
+    engine = _try_postgres(DATABASE_URL)
+else:
+    engine = None
 
-# Ensure postgresql:// prefix (not postgres://)
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+if engine is None:
+    sqlite_path = os.path.join(os.path.dirname(__file__), "simulation.db")
+    engine = create_engine(f"sqlite:///{sqlite_path}", connect_args={"check_same_thread": False})
+    print("[DB] Connected using SQLite")
 
-# Create engine with production settings
-engine = create_engine(
-    DATABASE_URL,
-    poolclass=QueuePool,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    echo=False,  # Set to True for SQL debugging
-    connect_args={
-        "connect_timeout": 10,
-        "options": "-c timezone=utc"
-    }
-)
+    with engine.connect() as conn:
+        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
+        migrations = {
+            "purpose":    "ALTER TABLE users ADD COLUMN purpose VARCHAR(100)",
+            "is_verified":"ALTER TABLE users ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT 0",
+            "otp_code":   "ALTER TABLE users ADD COLUMN otp_code VARCHAR(6)",
+            "otp_expires":"ALTER TABLE users ADD COLUMN otp_expires DATETIME",
+            "role":       "ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'worker'",
+            "manager_id": "ALTER TABLE users ADD COLUMN manager_id INTEGER",
+        }
+        for col, sql in migrations.items():
+            if col not in existing:
+                conn.execute(text(sql))
+                print(f"[DB] Migrated: added column '{col}' to users")
+        conn.commit()
 
-# Session factory
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Dependency for FastAPI
 def get_db():
-    """
-    Database session dependency for FastAPI routes
-    Usage: db: Session = Depends(get_db)
-    """
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-# Health check function
 def check_db_health():
-    """Check if database connection is healthy"""
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -70,13 +66,3 @@ def check_db_health():
     except Exception as e:
         print(f"[DB Health Check Failed]: {e}")
         return False
-
-# Initialize database tables
-def init_db():
-    """Create all tables defined in models"""
-    Base.metadata.create_all(bind=engine)
-    print("[DB] Tables created successfully")
-
-if __name__ == "__main__":
-    print(f"[DB] Connecting to: {DATABASE_URL.split('@')[1] if '@' in DATABASE_URL else 'database'}")
-    init_db()

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { authAPI } from "../services/api";
+import { authAPI, api } from "../services/api";
 
 function getStrength(v: string) {
   if (!v) return { score: 0, label: '', color: '#e2e8f0' };
@@ -18,17 +18,24 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm]   = useState("");
   const [purpose, setPurpose]   = useState("");
+  const [role, setRole]         = useState<'worker'|'manager'>('worker');
+  const [managerId, setManagerId] = useState<number|null>(null);
+  const [managers, setManagers] = useState<{id:number;username:string}[]>([]);
   const [showPw, setShowPw]     = useState(false);
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
   const { score, label, color } = getStrength(password);
+
+  useEffect(() => {
+    api.get('/managers').then(r => setManagers(r.data)).catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError("");
     if (password !== confirm) { setError("Passwords do not match"); return; }
     setLoading(true);
     try {
-      await authAPI.register({ username, email, password, purpose: purpose || undefined });
+      await authAPI.register({ username, email, password, purpose: purpose || undefined, role, manager_id: role === 'worker' ? (managerId ?? undefined) : undefined } as any);
       navigate("/verify-otp", { state: { email } });
     } catch (err: any) {
       setError(err.response?.data?.detail || "Registration failed");
@@ -75,6 +82,28 @@ export default function RegisterPage() {
             <input style={s.input} className="fi" type="email" placeholder="you@example.com"
               required value={email} onChange={e => setEmail(e.target.value)} />
           </div>
+
+          <div style={s.field}>
+            <label style={s.label}>Role</label>
+            <div style={{ display:'flex', gap:10 }}>
+              {(['worker','manager'] as const).map(r => (
+                <button key={r} type="button" onClick={() => setRole(r)}
+                  style={{ flex:1, padding:'10px', border:`1.5px solid ${role===r?'#3b82f6':'#e2e8f0'}`, borderRadius:10, background: role===r?'#eff6ff':'#f8fafc', color: role===r?'#1d4ed8':'#64748b', fontWeight:600, fontSize:13, cursor:'pointer', fontFamily:'"Inter",sans-serif', textTransform:'capitalize' }}>
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {role === 'worker' && managers.length > 0 && (
+            <div style={s.field}>
+              <label style={s.label}>Select Manager</label>
+              <select style={{ ...s.input, cursor:'pointer' }} value={managerId ?? ''} onChange={e => setManagerId(Number(e.target.value) || null)}>
+                <option value="">-- Select your manager --</option>
+                {managers.map(m => <option key={m.id} value={m.id}>{m.username}</option>)}
+              </select>
+            </div>
+          )}
 
           <div style={s.field}>
             <label style={s.label}>Password</label>
