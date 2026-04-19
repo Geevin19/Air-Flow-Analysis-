@@ -26,28 +26,57 @@ Base.metadata.create_all(bind=engine)
 
 # ── Run migrations for new columns on existing DBs ────────────────────────────
 def _run_migrations():
-    pg_migrations = [
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'worker'",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_code VARCHAR(20)",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS purpose VARCHAR(100)",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code VARCHAR(6)",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires TIMESTAMP",
-    ]
     from sqlalchemy import text as _text
     from database import engine as _engine
+    # PostgreSQL uses IF NOT EXISTS, SQLite needs manual check
+    from database import DATABASE_URL as _db_url
+    is_pg = bool(_db_url and _db_url.startswith(("postgresql", "postgres")))
+    
+    if is_pg:
+        stmts = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'worker'",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_code VARCHAR(20)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_id INTEGER",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS purpose VARCHAR(100)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code VARCHAR(6)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires TIMESTAMP",
+            # New tables
+            """CREATE TABLE IF NOT EXISTS limit_requests (
+                id SERIAL PRIMARY KEY,
+                worker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                manager_id INTEGER NOT NULL,
+                metric VARCHAR(100) NOT NULL,
+                value FLOAT NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                reason VARCHAR(255),
+                created_at TIMESTAMP DEFAULT NOW(),
+                reviewed_at TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS alerts (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                metric VARCHAR(100) NOT NULL,
+                value FLOAT NOT NULL,
+                "limit" FLOAT NOT NULL,
+                level VARCHAR(20) NOT NULL DEFAULT 'warning',
+                created_at TIMESTAMP DEFAULT NOW()
+            )""",
+        ]
+    else:
+        stmts = []  # SQLite handled in database.py
+
     try:
         with _engine.connect() as conn:
-            for sql in pg_migrations:
+            for sql in stmts:
                 try:
                     conn.execute(_text(sql))
-                except Exception:
-                    pass  # column already exists
-            conn.commit()
-        print("[DB] Migrations applied")
+                    conn.commit()
+                except Exception as ex:
+                    print(f"[Migration] skipped: {ex}")
+        print("[DB] Migrations complete")
     except Exception as e:
-        print(f"[DB] Migration warning: {e}")
+        print(f"[DB] Migration error: {e}")
 
 _run_migrations()
 
