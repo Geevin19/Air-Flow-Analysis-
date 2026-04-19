@@ -28,8 +28,11 @@ class User(Base):
     otp_expires     = Column(DateTime, nullable=True)
     created_at      = Column(DateTime, default=datetime.utcnow)
 
-    simulations = relationship('Simulation', back_populates='user', cascade='all, delete-orphan')
-    workers     = relationship('User', foreign_keys=[manager_id], backref='manager', lazy='dynamic')
+    simulations    = relationship('Simulation', back_populates='user', cascade='all, delete-orphan')
+    # manager → workers (one manager has many workers)
+    workers        = relationship('User', foreign_keys='User.manager_id',
+                                  primaryjoin='User.id == foreign(User.manager_id)',
+                                  lazy='dynamic', overlaps='manager')
     limit_requests = relationship('LimitRequest', foreign_keys='LimitRequest.worker_id', back_populates='worker', cascade='all, delete-orphan')
 
 
