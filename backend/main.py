@@ -11,6 +11,7 @@ import asyncio
 import os
 
 from database import engine, get_db, Base, check_db_health
+from sqlalchemy import text, inspect
 from models import User, Simulation, LimitRequest, Alert, SensorReading
 from schemas import (
     UserCreate, UserResponse, Token, SimulationCreate, SimulationResponse,
@@ -23,6 +24,37 @@ from email_utils import generate_otp, send_otp_email, send_reset_email, send_adm
 
 # Initialize database tables
 Base.metadata.create_all(bind=engine)
+
+# Run PostgreSQL migrations for existing databases
+try:
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if 'users' in inspector.get_table_names():
+        existing_columns = {col['name'] for col in inspector.get_columns('users')}
+        
+        # Define required columns and their SQL
+        required_migrations = [
+            ("purpose", "ALTER TABLE users ADD COLUMN purpose VARCHAR(100)"),
+            ("role", "ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'worker'"),
+            ("manager_id", "ALTER TABLE users ADD COLUMN manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL"),
+            ("is_verified", "ALTER TABLE users ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT FALSE"),
+            ("otp_code", "ALTER TABLE users ADD COLUMN otp_code VARCHAR(6)"),
+            ("otp_expires", "ALTER TABLE users ADD COLUMN otp_expires TIMESTAMP"),
+            ("created_at", "ALTER TABLE users ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        ]
+        
+        # Run missing migrations
+        with engine.connect() as conn:
+            for col_name, sql in required_migrations:
+                if col_name not in existing_columns:
+                    try:
+                        conn.execute(text(sql))
+                        print(f"[DB Migration] Added column: {col_name}")
+                    except Exception as e:
+                        print(f"[DB Migration] Failed to add {col_name}: {e}")
+            conn.commit()
+except Exception as e:
+    print(f"[DB Migration] Migration check failed: {e}")
 
 # FastAPI app with production settings
 app = FastAPI(
