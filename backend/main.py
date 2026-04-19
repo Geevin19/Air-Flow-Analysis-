@@ -182,13 +182,34 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         otp = generate_otp()
         otp_expires = datetime.utcnow() + timedelta(minutes=OTP_EXPIRE_MINUTES)
 
+        # Resolve manager_code to manager_id if provided
+        resolved_manager_id = user.manager_id
+        if user.role == 'worker' and user.manager_code and not resolved_manager_id:
+            mgr = db.query(User).filter(User.manager_code == user.manager_code, User.role == 'manager').first()
+            if not mgr:
+                raise HTTPException(status_code=400, detail=f'No manager found with code {user.manager_code}')
+            resolved_manager_id = mgr.id
+
+        # Generate unique manager code if role is manager
+        manager_code = None
+        if user.role == 'manager':
+            import random as _random
+            suffix = str(_random.randint(1000, 9999))
+            name_part = user.username.upper()[:8]
+            manager_code = f"MGR-{name_part}-{suffix}"
+            # Ensure uniqueness
+            while db.query(User).filter(User.manager_code == manager_code).first():
+                suffix = str(_random.randint(1000, 9999))
+                manager_code = f"MGR-{name_part}-{suffix}"
+
         new_user = User(
             username=user.username,
             email=user.email,
             hashed_password=get_password_hash(user.password),
             purpose=user.purpose,
             role=user.role or 'worker',
-            manager_id=user.manager_id if user.role == 'worker' else None,
+            manager_code=manager_code,
+            manager_id=resolved_manager_id if user.role == 'worker' else None,
             is_verified=False,
             otp_code=otp,
             otp_expires=otp_expires,

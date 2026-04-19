@@ -18,14 +18,14 @@ export default function ManagerDashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const [u, w, p, a] = await Promise.all([
-          api.get('/users/me'),
+        const u = await api.get('/users/me');
+        setUser(u.data);
+        if (u.data.role !== 'manager') { navigate('/dashboard'); return; }
+        const [w, p, a] = await Promise.all([
           api.get('/manager/workers'),
           api.get('/limits/pending'),
           api.get('/alerts'),
         ]);
-        setUser(u.data);
-        if (u.data.role !== 'manager') { navigate('/dashboard'); return; }
         setWorkers(w.data);
         setPending(p.data);
         setAlerts(a.data);
@@ -62,7 +62,15 @@ export default function ManagerDashboard() {
       <main style={s.main}>
         <div style={s.header}>
           <h2 style={s.title}>Manager Dashboard</h2>
-          <button style={s.workerBtn} onClick={() => navigate('/iot-live')}>Live IoT</button>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            {user?.manager_code && (
+              <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'8px 16px', fontSize:13 }}>
+                Your code: <strong style={{ color:'#1d4ed8', fontFamily:'monospace', letterSpacing:'0.05em' }}>{user.manager_code}</strong>
+                <span style={{ fontSize:11, color:'#64748b', marginLeft:8 }}>Share with workers</span>
+              </div>
+            )}
+            <button style={s.workerBtn} onClick={() => navigate('/iot-live')}>Live IoT</button>
+          </div>
         </div>
 
         {/* Stats */}

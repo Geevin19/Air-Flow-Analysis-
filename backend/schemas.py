@@ -3,12 +3,13 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 class UserCreate(BaseModel):
-    username:   str
-    email:      EmailStr
-    password:   str
-    purpose:    Optional[str] = None
-    role:       Optional[str] = 'worker'   # 'manager' or 'worker'
-    manager_id: Optional[int] = None       # required if role=worker
+    username:     str
+    email:        EmailStr
+    password:     str
+    purpose:      Optional[str] = None
+    role:         Optional[str] = 'worker'
+    manager_id:   Optional[int] = None
+    manager_code: Optional[str] = None   # worker can enter manager code instead of ID
 
 class LoginRequest(BaseModel):
     username: str
@@ -16,14 +17,15 @@ class LoginRequest(BaseModel):
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id:         int
-    username:   str
-    email:      str
-    purpose:    Optional[str] = None
-    role:       str = 'worker'
-    manager_id: Optional[int] = None
-    is_verified: bool = False
-    created_at: datetime
+    id:           int
+    username:     str
+    email:        str
+    purpose:      Optional[str] = None
+    role:         str = 'worker'
+    manager_code: Optional[str] = None
+    manager_id:   Optional[int] = None
+    is_verified:  bool = False
+    created_at:   datetime
 
 class Token(BaseModel):
     access_token: str

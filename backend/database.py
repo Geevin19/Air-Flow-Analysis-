@@ -36,12 +36,13 @@ if engine is None:
     with engine.connect() as conn:
         existing = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
         migrations = {
-            "purpose":    "ALTER TABLE users ADD COLUMN purpose VARCHAR(100)",
-            "is_verified":"ALTER TABLE users ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT 0",
-            "otp_code":   "ALTER TABLE users ADD COLUMN otp_code VARCHAR(6)",
-            "otp_expires":"ALTER TABLE users ADD COLUMN otp_expires DATETIME",
-            "role":       "ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'worker'",
-            "manager_id": "ALTER TABLE users ADD COLUMN manager_id INTEGER",
+            "purpose":      "ALTER TABLE users ADD COLUMN purpose VARCHAR(100)",
+            "is_verified":  "ALTER TABLE users ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT 0",
+            "otp_code":     "ALTER TABLE users ADD COLUMN otp_code VARCHAR(6)",
+            "otp_expires":  "ALTER TABLE users ADD COLUMN otp_expires DATETIME",
+            "role":         "ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'worker'",
+            "manager_id":   "ALTER TABLE users ADD COLUMN manager_id INTEGER",
+            "manager_code": "ALTER TABLE users ADD COLUMN manager_code VARCHAR(20)",
         }
         for col, sql in migrations.items():
             if col not in existing:
