@@ -8,12 +8,13 @@ interface AlertItem { id: number; user_id: number; metric: string; value: number
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
-  const [workers, setWorkers]   = useState<Worker[]>([]);
-  const [pending, setPending]   = useState<LimitReq[]>([]);
-  const [alerts, setAlerts]     = useState<AlertItem[]>([]);
-  const [tab, setTab]           = useState<'workers'|'approvals'|'alerts'>('workers');
-  const [loading, setLoading]   = useState(true);
-  const [user, setUser]         = useState<any>(null);
+  const [workers, setWorkers]     = useState<Worker[]>([]);
+  const [pending, setPending]     = useState<LimitReq[]>([]);
+  const [alerts, setAlerts]       = useState<AlertItem[]>([]);
+  const [tab, setTab]             = useState<'workers'|'approvals'|'alerts'>('workers');
+  const [loading, setLoading]     = useState(true);
+  const [user, setUser]           = useState<any>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -41,6 +42,16 @@ export default function ManagerDashboard() {
 
   const logout = () => { localStorage.removeItem('token'); navigate('/login'); };
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-profile]')) setShowProfile(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   if (loading) return <div style={s.loading}><div style={s.spinner} /></div>;
 
   return (
@@ -53,9 +64,61 @@ export default function ManagerDashboard() {
           <span style={s.logo}>SmartTracker</span>
           <span style={s.badge}>Manager</span>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <span style={{ fontSize:13, color:'#64748b', fontWeight:600 }}>{user?.username}</span>
-          <button style={s.logoutBtn} onClick={logout}>Logout</button>
+        <div style={{ display:'flex', alignItems:'center', gap:10, position:'relative' }} data-profile="true">
+          {/* Profile dropdown trigger */}
+          <button onClick={() => setShowProfile(v => !v)}
+            style={{ display:'flex', alignItems:'center', gap:8, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'7px 14px', cursor:'pointer', fontFamily:'"Inter",sans-serif' }}>
+            <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#f59e0b,#d97706)', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700 }}>
+              {user?.username?.[0]?.toUpperCase()}
+            </div>
+            <span style={{ fontSize:13, fontWeight:600, color:'#374151' }}>{user?.username}</span>
+            <span style={{ fontSize:10, color:'#94a3b8' }}>{showProfile ? '▲' : '▼'}</span>
+          </button>
+
+          {/* Dropdown */}
+          {showProfile && (
+            <div style={{ position:'absolute', top:'calc(100% + 8px)', right:0, background:'#fff', border:'1px solid #e2e8f0', borderRadius:14, boxShadow:'0 8px 32px rgba(0,0,0,.12)', minWidth:280, zIndex:100, overflow:'hidden' }}>
+              {/* Header */}
+              <div style={{ background:'linear-gradient(135deg,#1e3a8a,#3b82f6)', padding:'18px 20px' }}>
+                <div style={{ width:44, height:44, borderRadius:'50%', background:'rgba(255,255,255,.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, fontWeight:800, color:'#fff', marginBottom:10 }}>
+                  {user?.username?.[0]?.toUpperCase()}
+                </div>
+                <div style={{ fontSize:15, fontWeight:700, color:'#fff' }}>{user?.username}</div>
+                <div style={{ fontSize:12, color:'rgba(255,255,255,.7)', marginTop:2 }}>{user?.email}</div>
+              </div>
+
+              {/* Details */}
+              <div style={{ padding:'14px 20px', borderBottom:'1px solid #f1f5f9' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
+                  <span style={{ fontSize:12, color:'#94a3b8', fontWeight:500 }}>Role</span>
+                  <span style={{ fontSize:12, fontWeight:700, color:'#a16207', background:'#fef9c3', padding:'2px 8px', borderRadius:999, border:'1px solid #fde68a' }}>Manager</span>
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
+                  <span style={{ fontSize:12, color:'#94a3b8', fontWeight:500 }}>Manager ID</span>
+                  <span style={{ fontSize:12, fontWeight:700, color:'#374151', fontFamily:'monospace' }}>#{user?.id}</span>
+                </div>
+                {user?.manager_code && (
+                  <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'10px 12px', marginTop:4 }}>
+                    <div style={{ fontSize:11, color:'#64748b', marginBottom:4 }}>Your Manager Code — share with workers</div>
+                    <div style={{ fontSize:15, fontWeight:800, color:'#1d4ed8', fontFamily:'monospace', letterSpacing:'0.05em' }}>{user.manager_code}</div>
+                  </div>
+                )}
+                {user?.purpose && (
+                  <div style={{ marginTop:10, fontSize:12, color:'#64748b' }}>
+                    <span style={{ fontWeight:500 }}>Purpose: </span>{user.purpose}
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div style={{ padding:'8px' }}>
+                <button onClick={logout}
+                  style={{ width:'100%', padding:'9px 14px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'"Inter",sans-serif', textAlign:'left' }}>
+                  Logout
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </nav>
 
