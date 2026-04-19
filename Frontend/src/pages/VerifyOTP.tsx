@@ -83,10 +83,19 @@ export default function VerifyOTPPage() {
 
           <div style={s.field}>
             <label style={s.label}>6-digit OTP code</label>
-            <input style={{ ...s.input, textAlign:'center', fontSize:22, fontWeight:800, letterSpacing:'0.5em', fontFamily:'"JetBrains Mono",monospace' }}
-              className="fi" type="text" placeholder="——————"
+            <input style={{ ...s.input, textAlign:'center', fontSize:22, fontWeight:800, letterSpacing:'0.2em', fontFamily:'"JetBrains Mono",monospace' }}
+              className="fi" type="text" placeholder="000000"
               maxLength={6} required value={otp}
-              onChange={e => setOtp(e.target.value.replace(/\D/g, ""))} />
+              onChange={e => {
+                const value = e.target.value.replace(/\D/g, "");
+                setOtp(value);
+              }}
+              onKeyDown={e => {
+                // Prevent auto-advancing - let user type all 6 digits
+                if (e.key === 'Enter' && otp.length === 6) {
+                  handleVerify(e as any);
+                }
+              }} />
             <p style={{ fontSize:11, color:'#94a3b8', marginTop:6, textAlign:'center' }}>
               Code expires in 10 minutes
             </p>

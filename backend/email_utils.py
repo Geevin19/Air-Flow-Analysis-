@@ -24,8 +24,10 @@ def generate_otp() -> str:
 
 
 def _send(to: str, subject: str, html: str):
+    print(f"[EMAIL] Attempting to send '{subject}' to {to}")
+    
     # Try Resend API first (works on Render — no SMTP port restrictions)
-    if RESEND_KEY:
+    if RESEND_KEY and RESEND_KEY != "":
         try:
             payload = json.dumps({
                 "from": f"{SENDER_NAME} <{SENDER_EMAIL}>",
@@ -43,10 +45,12 @@ def _send(to: str, subject: str, html: str):
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
-                print(f"[EMAIL] Resend sent '{subject}' to {to} — status {resp.status}")
+                print(f"[EMAIL] ✅ Resend sent '{subject}' to {to} — status {resp.status}")
             return
         except Exception as e:
-            print(f"[EMAIL] Resend failed: {e}, falling back to SMTP...")
+            print(f"[EMAIL] ❌ Resend failed: {e}, falling back to SMTP...")
+    else:
+        print(f"[EMAIL] No RESEND_API_KEY found, trying SMTP...")
 
     # Fallback: direct SMTP (works locally, blocked on Render free tier)
     try:
@@ -54,18 +58,28 @@ def _send(to: str, subject: str, html: str):
         from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
         from email.utils import formataddr
+        
+        print(f"[EMAIL] Trying SMTP with {SMTP_USER}@{SMTP_HOST}:{SMTP_PORT}")
+        
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = formataddr((SENDER_NAME, SMTP_USER))
         msg["To"] = to
         msg.attach(MIMEText(html, "html"))
+        
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as s:
             s.ehlo(); s.starttls(); s.ehlo()
             s.login(SMTP_USER, SMTP_PASS)
             s.sendmail(SMTP_USER, to, msg.as_string())
-        print(f"[EMAIL] SMTP sent '{subject}' to {to}")
+        print(f"[EMAIL] ✅ SMTP sent '{subject}' to {to}")
     except Exception as e:
-        print(f"[EMAIL ERROR] All methods failed for '{subject}' to {to}: {e}")
+        print(f"[EMAIL] ❌ SMTP failed: {e}")
+        print(f"[EMAIL] ❌ ALL EMAIL METHODS FAILED for '{subject}' to {to}")
+        print(f"[EMAIL] Debug info:")
+        print(f"  - RESEND_KEY: {'SET' if RESEND_KEY else 'NOT SET'}")
+        print(f"  - SMTP_USER: {SMTP_USER}")
+        print(f"  - SMTP_PASS: {'SET' if SMTP_PASS and SMTP_PASS != 'dummy-password' else 'NOT SET'}")
+        # Don't raise exception - let registration continue even if email fails
 
 
 def send_otp_email(to: str, otp: str, username: str):
