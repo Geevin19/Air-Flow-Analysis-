@@ -167,15 +167,10 @@ export default function ManagerDashboard() {
               <div style={s.empty}>No workers registered under your account yet.</div>
             ) : (
               <table style={s.table}>
-                <thead><tr>{['Username','Email','Purpose','Joined'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
+                <thead><tr>{['Worker','Email','Purpose','Joined','Latest IoT'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
                 <tbody>
                   {workers.map(w => (
-                    <tr key={w.id} style={s.tr}>
-                      <td style={s.td}><strong>{w.username}</strong></td>
-                      <td style={s.td}>{w.email}</td>
-                      <td style={s.td}>{w.purpose || '—'}</td>
-                      <td style={s.td}>{new Date(w.created_at).toLocaleDateString()}</td>
-                    </tr>
+                    <WorkerRow key={w.id} worker={w} />
                   ))}
                 </tbody>
               </table>
@@ -245,6 +240,32 @@ export default function ManagerDashboard() {
         )}
       </main>
     </div>
+  );
+}
+
+function WorkerRow({ worker }: { worker: Worker }) {
+  const [iot, setIot] = useState<any>(null);
+  useEffect(() => {
+    api.get(`/manager/workers/${worker.id}/iot`)
+      .then(r => setIot(r.data))
+      .catch(() => {});
+  }, [worker.id]);
+  return (
+    <tr style={s.tr}>
+      <td style={s.td}><strong>{worker.username}</strong></td>
+      <td style={s.td}>{worker.email}</td>
+      <td style={s.td}>{worker.purpose || '—'}</td>
+      <td style={s.td}>{new Date(worker.created_at).toLocaleDateString()}</td>
+      <td style={s.td}>
+        {iot?.data ? (
+          <div style={{ fontSize:11, fontFamily:'monospace', color:'#374151' }}>
+            {Object.entries(iot.data).filter(([k]) => !['timestamp','source'].includes(k)).map(([k,v]) => (
+              <span key={k} style={{ marginRight:8 }}>{k}: <strong>{String(v)}</strong></span>
+            ))}
+          </div>
+        ) : <span style={{ color:'#94a3b8', fontSize:12 }}>No data</span>}
+      </td>
+    </tr>
   );
 }
 

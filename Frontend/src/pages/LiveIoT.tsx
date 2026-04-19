@@ -115,6 +115,15 @@ export default function LiveIoT() {
         const id = ++toastId.current;
         setToasts(p => [...p, { id, msg: `${key} exceeded limit — ${val.toFixed(4)} ${unit} (limit: ${lim} ${unit})`, metric: key }]);
         setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 8000);
+        // Send role-aware alert email (worker + manager at critical)
+        const token = localStorage.getItem('token');
+        if (token) {
+          fetch(`${API_URL}/iot/alert/role`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ metric: key, value: val, limit: lim, unit, critical_level: lim * 1.2 }),
+          }).catch(() => {});
+        }
       } else if (val <= lim && currentAlerted.has(key)) {
         currentAlerted.delete(key);
         changed = true;
