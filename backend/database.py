@@ -8,46 +8,31 @@ load_dotenv()
 Base = declarative_base()
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
-def _try_postgres(url: str):
-    try:
-        if url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql://", 1)
-        eng = create_engine(url, pool_pre_ping=True, pool_size=5,
-                            max_overflow=10, pool_recycle=3600,
-                            connect_args={"connect_timeout": 5})
-        with eng.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        print("[DB] Connected using PostgreSQL")
-        return eng
-    except Exception as e:
-        print(f"[DB] Postgres unreachable ({type(e).__name__}). Falling back to SQLite.")
-        return None
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is required")
 
-if DATABASE_URL and DATABASE_URL.startswith(("postgresql", "postgres")):
-    engine = _try_postgres(DATABASE_URL)
-else:
-    engine = None
+# Ensure PostgreSQL URL format
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-if engine is None:
-    sqlite_path = os.path.join(os.path.dirname(__file__), "simulation.db")
-    engine = create_engine(f"sqlite:///{sqlite_path}", connect_args={"check_same_thread": False})
-    print("[DB] Connected using SQLite")
+# Create PostgreSQL engine only
+engine = create_engine(
+    DATABASE_URL, 
+    pool_pre_ping=True, 
+    pool_size=5,
+    max_overflow=10, 
+    pool_recycle=3600,
+    connect_args={"connect_timeout": 10}
+)
 
+# Test connection immediately
+try:
     with engine.connect() as conn:
-        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
-        migrations = {
-            "purpose":    "ALTER TABLE users ADD COLUMN purpose VARCHAR(100)",
-            "is_verified":"ALTER TABLE users ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT 0",
-            "otp_code":   "ALTER TABLE users ADD COLUMN otp_code VARCHAR(6)",
-            "otp_expires":"ALTER TABLE users ADD COLUMN otp_expires DATETIME",
-            "role":       "ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'worker'",
-            "manager_id": "ALTER TABLE users ADD COLUMN manager_id INTEGER",
-        }
-        for col, sql in migrations.items():
-            if col not in existing:
-                conn.execute(text(sql))
-                print(f"[DB] Migrated: added column '{col}' to users")
-        conn.commit()
+        conn.execute(text("SELECT 1"))
+    print("[DB] Connected to PostgreSQL successfully")
+except Exception as e:
+    print(f"[DB] Failed to connect to PostgreSQL: {e}")
+    raise
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

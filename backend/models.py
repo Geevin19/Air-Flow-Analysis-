@@ -29,7 +29,8 @@ class User(Base):
     created_at      = Column(DateTime, default=datetime.utcnow)
 
     simulations = relationship('Simulation', back_populates='user', cascade='all, delete-orphan')
-    workers     = relationship('User', foreign_keys=[manager_id], backref='manager', lazy='dynamic')
+    # Self-referential relationship: manager -> workers
+    workers = relationship('User', backref='manager', remote_side=[id])
     limit_requests = relationship('LimitRequest', foreign_keys='LimitRequest.worker_id', back_populates='worker', cascade='all, delete-orphan')
 
 
