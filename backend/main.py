@@ -24,6 +24,33 @@ from email_utils import generate_otp, send_otp_email, send_reset_email, send_adm
 # Initialize database tables
 Base.metadata.create_all(bind=engine)
 
+# ── Run migrations for new columns on existing DBs ────────────────────────────
+def _run_migrations():
+    pg_migrations = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'worker'",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_code VARCHAR(20)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS purpose VARCHAR(100)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code VARCHAR(6)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires TIMESTAMP",
+    ]
+    from sqlalchemy import text as _text
+    from database import engine as _engine
+    try:
+        with _engine.connect() as conn:
+            for sql in pg_migrations:
+                try:
+                    conn.execute(_text(sql))
+                except Exception:
+                    pass  # column already exists
+            conn.commit()
+        print("[DB] Migrations applied")
+    except Exception as e:
+        print(f"[DB] Migration warning: {e}")
+
+_run_migrations()
+
 # FastAPI app with production settings
 app = FastAPI(
     title='AirFlow Analysis API',
