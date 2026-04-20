@@ -20,7 +20,18 @@ const Calculator: React.FC = () => {
   const [shake, setShake] = useState(false);
   const [showSteps, setShowSteps] = useState(false);
   const [calculationSteps, setCalculationSteps] = useState<string[]>([]);
+  const [currentMeme, setCurrentMeme] = useState(0);
   const navigate = useNavigate();
+
+  // Auto-refresh memes every 3 seconds in meme mode
+  useEffect(() => {
+    if (calculatorMode === 'meme') {
+      const interval = setInterval(() => {
+        setCurrentMeme(prev => (prev + 1) % memeResponses.length);
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [calculatorMode]);
 
   // Keyboard support
   useEffect(() => {
@@ -373,8 +384,7 @@ const Calculator: React.FC = () => {
               className="theme-selector"
             >
               <option value="professional">Professional</option>
-              <option value="dark">Dark</option>
-              <option value="neon">Neon Cyberpunk</option>
+              <option value="dark">Dark Mode</option>
             </select>
             <svg className="dropdown-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -535,6 +545,9 @@ const Calculator: React.FC = () => {
           {/* Meme Mode Panel */}
           {calculatorMode === 'meme' && (
             <div className="meme-panel">
+              <div className="meme-display">
+                <p className="meme-text">{memeResponses[currentMeme]}</p>
+              </div>
               <div className="meme-stats">
                 <div className="stat-item">
                   <span className="stat-label">Stress Level</span>
@@ -548,9 +561,6 @@ const Calculator: React.FC = () => {
                     <div className="broke-fill" style={{width: `${Math.min(100, (parseFloat(display) || 0) > 1000 ? 100 : 20)}%`}}></div>
                   </div>
                 </div>
-              </div>
-              <div className="meme-tips">
-                <p>💡 Pro tip: Math is temporary, but student debt is forever!</p>
               </div>
             </div>
           )}
