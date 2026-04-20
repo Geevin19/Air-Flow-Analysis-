@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Calculator.css';
 
@@ -7,15 +7,78 @@ const Calculator: React.FC = () => {
   const [previousValue, setPreviousValue] = useState<number | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
   const [waitingForOperand, setWaitingForOperand] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark' | 'professional'>('professional');
+  const [theme, setTheme] = useState<'light' | 'dark' | 'professional' | 'aesthetic' | 'neon' | 'zen' | 'academia'>('professional');
   const [history, setHistory] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [isScientific, setIsScientific] = useState(false);
   const [memory, setMemory] = useState(0);
   const [showMemory, setShowMemory] = useState(false);
-  const [calculatorMode, setCalculatorMode] = useState<'standard' | 'programmer'>('standard');
+  const [calculatorMode, setCalculatorMode] = useState<'standard' | 'programmer' | 'meme' | 'smart'>('standard');
   const [currentExpression, setCurrentExpression] = useState<string>('');
+  const [showAnimations, setShowAnimations] = useState(true);
+  const [particles, setParticles] = useState<Array<{id: number, x: number, y: number}>>([]);
+  const [shake, setShake] = useState(false);
+  const [showSteps, setShowSteps] = useState(false);
+  const [calculationSteps, setCalculationSteps] = useState<string[]>([]);
   const navigate = useNavigate();
+
+  // Meme responses for broke student mode
+  const memeResponses = [
+    "Error: Insufficient Funds 💸",
+    "Your bank account can't handle this 😭",
+    "Math is hard, life is harder 📚",
+    "This calculation costs extra 💰",
+    "404: Money not found 🏦",
+    "Your GPA called, it's worried 📉",
+    "Even the calculator is stressed 😰"
+  ];
+
+  // Smart explanations
+  const getSmartExplanation = (firstValue: number, secondValue: number, op: string): string[] => {
+    const steps = [];
+    switch (op) {
+      case '+':
+        steps.push(`Adding ${firstValue} and ${secondValue}`);
+        steps.push(`${firstValue} + ${secondValue} = ${firstValue + secondValue}`);
+        break;
+      case '-':
+        steps.push(`Subtracting ${secondValue} from ${firstValue}`);
+        steps.push(`${firstValue} - ${secondValue} = ${firstValue - secondValue}`);
+        break;
+      case '×':
+        steps.push(`Multiplying ${firstValue} by ${secondValue}`);
+        if (secondValue <= 10) {
+          steps.push(`Think: ${firstValue} groups of ${secondValue}`);
+        }
+        steps.push(`${firstValue} × ${secondValue} = ${firstValue * secondValue}`);
+        break;
+      case '÷':
+        steps.push(`Dividing ${firstValue} by ${secondValue}`);
+        steps.push(`How many ${secondValue}s fit into ${firstValue}?`);
+        steps.push(`${firstValue} ÷ ${secondValue} = ${firstValue / secondValue}`);
+        break;
+    }
+    return steps;
+  };
+
+  // Particle animation effect
+  const createParticles = () => {
+    if (!showAnimations) return;
+    const newParticles = Array.from({length: 8}, (_, i) => ({
+      id: Date.now() + i,
+      x: Math.random() * 100,
+      y: Math.random() * 100
+    }));
+    setParticles(newParticles);
+    setTimeout(() => setParticles([]), 1000);
+  };
+
+  // Shake animation for complex calculations
+  const triggerShake = () => {
+    if (!showAnimations) return;
+    setShake(true);
+    setTimeout(() => setShake(false), 500);
+  };
 
   const addToHistory = (calculation: string) => {
     setHistory(prev => [calculation, ...prev.slice(0, 9)]);
@@ -24,6 +87,11 @@ const Calculator: React.FC = () => {
   const scientificOperation = (func: string) => {
     const value = parseFloat(display);
     let result = 0;
+    
+    // Trigger shake for complex operations in meme mode
+    if (calculatorMode === 'meme' && ['sin', 'cos', 'tan', 'factorial'].includes(func)) {
+      triggerShake();
+    }
     
     switch (func) {
       case 'sin':
@@ -59,6 +127,12 @@ const Calculator: React.FC = () => {
       case 'e':
         result = Math.E;
         break;
+    }
+    
+    // Meme mode responses for large numbers
+    if (calculatorMode === 'meme' && Math.abs(result) > 1000000) {
+      setDisplay(memeResponses[Math.floor(Math.random() * memeResponses.length)]);
+      return;
     }
     
     setDisplay(String(result));
@@ -132,6 +206,29 @@ const Calculator: React.FC = () => {
       const newValue = calculate(previousValue, inputValue, operation);
       const calculation = `${previousValue} ${operation} ${inputValue} = ${newValue}`;
       
+      // Generate smart explanation
+      if (showSteps) {
+        const steps = getSmartExplanation(previousValue, inputValue, operation);
+        setCalculationSteps(steps);
+      }
+      
+      // Meme mode responses
+      if (calculatorMode === 'meme') {
+        if (Math.abs(newValue) > 1000000) {
+          setDisplay(memeResponses[Math.floor(Math.random() * memeResponses.length)]);
+          createParticles();
+          return;
+        }
+        if (newValue === 69 || newValue === 420 || newValue === 1337) {
+          triggerShake();
+        }
+      }
+      
+      // Create particles for perfect numbers
+      if ([100, 1000, 10000].includes(Math.abs(newValue)) || newValue % 1000 === 0) {
+        createParticles();
+      }
+      
       setCurrentExpression(`${previousValue} ${operation} ${inputValue} =`);
       addToHistory(calculation);
       setDisplay(String(newValue));
@@ -172,8 +269,39 @@ const Calculator: React.FC = () => {
     setDisplay(String(value * -1));
   };
 
+  // Smart unit converter
+  const convertUnit = (value: number, fromUnit: string, toUnit: string): number => {
+    const conversions: {[key: string]: number} = {
+      'pizza_slices': 8, // 1 pizza = 8 slices
+      'coffee_cups': 1, // base unit
+      'energy_drinks': 2, // 1 energy drink = 2 coffee cups
+      'hours_sleep': 1, // base unit
+      'all_nighters': 0, // 1 all-nighter = 0 sleep
+      'dollars': 1, // base unit
+      'ramen_packets': 0.5, // $0.50 per packet
+      'textbooks': 200, // $200 per textbook
+    };
+    
+    return (value * conversions[fromUnit]) / conversions[toUnit];
+  };
+
   return (
-    <div className={`calculator-app theme-${theme}`}>
+    <div className={`calculator-app theme-${theme} ${shake ? 'shake' : ''}`}>
+      {/* Particle Effects */}
+      {particles.length > 0 && (
+        <div className="particles-container">
+          {particles.map(particle => (
+            <div
+              key={particle.id}
+              className="particle"
+              style={{
+                left: `${particle.x}%`,
+                top: `${particle.y}%`,
+              }}
+            />
+          ))}
+        </div>
+      )}
       {/* Header */}
       <header className="app-header">
         <button className="back-button" onClick={() => navigate('/')}>
@@ -195,17 +323,58 @@ const Calculator: React.FC = () => {
         <div className="header-controls">
           <select 
             value={theme} 
-            onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'professional')}
+            onChange={(e) => setTheme(e.target.value as any)}
             className="theme-selector"
           >
             <option value="professional">Professional</option>
             <option value="light">Light</option>
             <option value="dark">Dark</option>
+            <option value="aesthetic">Aesthetic Vibes</option>
+            <option value="neon">Neon Cyberpunk</option>
+            <option value="zen">Minimalist Zen</option>
+            <option value="academia">Dark Academia</option>
           </select>
 
           <button 
+            className={`control-btn ${calculatorMode === 'meme' ? 'active' : ''}`}
+            onClick={() => setCalculatorMode(calculatorMode === 'meme' ? 'standard' : 'meme')}
+            title="Meme Mode"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <circle cx="7" cy="8" r="1" fill="currentColor"/>
+              <circle cx="13" cy="8" r="1" fill="currentColor"/>
+              <path d="M6 13s1.5 2 4 2 4-2 4-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5"/>
+            </svg>
+          </button>
+
+          <button 
+            className={`control-btn ${calculatorMode === 'smart' ? 'active' : ''}`}
+            onClick={() => {
+              setCalculatorMode(calculatorMode === 'smart' ? 'standard' : 'smart');
+              setShowSteps(!showSteps);
+            }}
+            title="Smart Mode"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="2"/>
+            </svg>
+          </button>
+
+          <button 
+            className={`control-btn ${showAnimations ? 'active' : ''}`}
+            onClick={() => setShowAnimations(!showAnimations)}
+            title="Animations"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M10 2L13 8L20 9L15 14L16 21L10 18L4 21L5 14L0 9L7 8L10 2Z" stroke="currentColor" strokeWidth="1.5"/>
+            </svg>
+          </button>
+
+          <button 
             className={`control-btn ${calculatorMode === 'programmer' ? 'active' : ''}`}
-            onClick={() => setCalculatorMode(calculatorMode === 'standard' ? 'programmer' : 'standard')}
+            onClick={() => setCalculatorMode(calculatorMode === 'programmer' ? 'standard' : 'programmer')}
             title="Programmer Mode"
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -291,6 +460,72 @@ const Calculator: React.FC = () => {
             </div>
           )}
 
+          {/* Smart Mode Panel */}
+          {calculatorMode === 'smart' && showSteps && calculationSteps.length > 0 && (
+            <div className="smart-panel">
+              <div className="panel-header">
+                <h4>Step-by-Step Solution</h4>
+              </div>
+              <div className="steps-list">
+                {calculationSteps.map((step, index) => (
+                  <div key={index} className="step-item">
+                    <span className="step-number">{index + 1}</span>
+                    <span className="step-text">{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Meme Mode Panel */}
+          {calculatorMode === 'meme' && (
+            <div className="meme-panel">
+              <div className="meme-stats">
+                <div className="stat-item">
+                  <span className="stat-label">Stress Level</span>
+                  <div className="stress-bar">
+                    <div className="stress-fill" style={{width: `${Math.min(100, Math.abs(parseFloat(display) || 0) / 100)}%`}}></div>
+                  </div>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-label">Broke Meter</span>
+                  <div className="broke-bar">
+                    <div className="broke-fill" style={{width: `${Math.min(100, (parseFloat(display) || 0) > 1000 ? 100 : 20)}%`}}></div>
+                  </div>
+                </div>
+              </div>
+              <div className="meme-tips">
+                <p>💡 Pro tip: Math is temporary, but student debt is forever!</p>
+              </div>
+            </div>
+          )}
+
+          {/* Smart Unit Converter */}
+          {calculatorMode === 'smart' && (
+            <div className="converter-panel">
+              <div className="panel-header">
+                <h4>College Life Converter</h4>
+              </div>
+              <div className="converter-grid">
+                <div className="converter-item">
+                  <span className="convert-label">Pizza Slices</span>
+                  <span className="convert-value">{Math.round(parseFloat(display || '0') * 8)}</span>
+                </div>
+                <div className="converter-item">
+                  <span className="convert-label">Coffee Cups</span>
+                  <span className="convert-value">{Math.round(parseFloat(display || '0') / 2)}</span>
+                </div>
+                <div className="converter-item">
+                  <span className="convert-label">Ramen Packets</span>
+                  <span className="convert-value">{Math.round(parseFloat(display || '0') * 2)}</span>
+                </div>
+                <div className="converter-item">
+                  <span className="convert-label">Study Hours</span>
+                  <span className="convert-value">{Math.round(parseFloat(display || '0') / 60)}</span>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Programmer Panel */}
           {calculatorMode === 'programmer' && (
             <div className="programmer-panel">
