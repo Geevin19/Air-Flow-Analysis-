@@ -59,7 +59,7 @@ export default function LandingPage() {
               Get Started — it's free
             </Link>
             <Link to="/calculator" className="calc-btn" style={s.calculatorBtn}>
-              🧮 Try Calculator
+              Calculator
             </Link>
             <Link to="/login" className="sec-btn" style={s.secondaryBtn}>
               Sign In
@@ -94,10 +94,10 @@ export default function LandingPage() {
         <div style={s.featGrid}>
           {[
             {
-              icon: '🧮',
+              icon: '⚡',
               num: '00',
               title: 'Smart Calculator',
-              desc: 'Professional calculator with beautiful animations and advanced functions. Perfect for quick calculations.',
+              desc: 'Professional calculator with glassmorphism design, voice feedback, and advanced mathematical functions.',
               color: '#f59e0b',
             },
             {
