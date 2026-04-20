@@ -302,7 +302,10 @@ const Calculator: React.FC = () => {
             <line x1="4" y1="9" x2="20" y2="9" stroke="currentColor" strokeWidth="2"/>
             <line x1="9" y1="9" x2="9" y2="20" stroke="currentColor" strokeWidth="2"/>
           </svg>
-          <h1>Smart Calculator</h1>
+          <h1>
+            <span className="title-full">Smart Calculator</span>
+            <span className="title-short">Calculator</span>
+          </h1>
         </div>
 
         <div className="header-right">

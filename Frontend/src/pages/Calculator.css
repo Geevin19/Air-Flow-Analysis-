@@ -232,6 +232,14 @@
   text-overflow: ellipsis;
 }
 
+.title-short {
+  display: none;
+}
+
+.title-full {
+  display: inline;
+}
+
 .title-icon {
   flex-shrink: 0;
 }
@@ -712,6 +720,8 @@
   max-width: 1400px;
   margin: 0 auto;
   width: 100%;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -809,6 +819,7 @@
 .calculator-main {
   flex: 1;
   max-width: 480px;
+  width: 100%;
   margin: 0 auto;
   background: rgba(255, 255, 255, 0.95);
   border-radius: 20px;
@@ -1271,12 +1282,18 @@
 @media (max-width: 1024px) {
   .app-content {
     flex-direction: column;
+    align-items: center;
+    padding: 24px;
   }
 
   .history-sidebar {
     width: 100%;
     max-width: 480px;
     margin: 0 auto;
+  }
+
+  .calculator-main {
+    width: 100%;
   }
 }
 
@@ -1316,10 +1333,13 @@
 
   .app-content {
     padding: 16px;
+    align-items: center;
   }
 
   .calculator-main {
     padding: 20px;
+    width: 100%;
+    max-width: 100%;
   }
 
   .result-line {
@@ -1333,16 +1353,29 @@
 }
 
 @media (max-width: 480px) {
+  .calculator-app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
   .app-header {
-    padding: 10px 12px;
+    padding: 8px 10px;
     flex-wrap: nowrap;
-    gap: 6px;
+    gap: 4px;
+    min-height: auto;
   }
 
   .back-button {
-    padding: 6px 10px;
+    padding: 6px;
     font-size: 13px;
-    min-width: 36px;
+    min-width: 32px;
+    border-radius: 6px;
+  }
+
+  .back-button svg {
+    width: 18px;
+    height: 18px;
   }
 
   .back-button span {
@@ -1350,27 +1383,41 @@
   }
 
   .app-title {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
-    padding: 0 8px;
-    gap: 6px;
+    padding: 0 4px;
+    gap: 4px;
+    justify-content: flex-start;
   }
 
   .app-title h1 {
-    font-size: 14px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 13px;
+    overflow: visible;
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  .title-full {
+    display: none;
+  }
+
+  .title-short {
+    display: inline;
   }
 
   .title-icon {
-    width: 18px;
-    height: 18px;
+    display: none;
+  }
+
+  .header-right {
+    flex: 0 0 auto;
   }
 
   .theme-selector {
-    min-width: 70px;
+    min-width: 85px;
     font-size: 10px;
-    padding: 5px 22px 5px 8px;
+    padding: 5px 24px 5px 8px;
+    border-radius: 6px;
   }
 
   .dropdown-icon {
@@ -1380,58 +1427,87 @@
   }
 
   .control-bar {
-    padding: 8px 8px;
+    padding: 8px 6px;
     gap: 4px;
     justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .control-btn {
-    min-width: 50px;
-    padding: 6px 8px;
-    gap: 2px;
+    min-width: 52px;
+    padding: 6px 6px;
+    gap: 3px;
+    border-radius: 6px;
+    flex-shrink: 0;
   }
 
   .control-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
   }
 
   .control-btn span {
     font-size: 9px;
+    font-weight: 600;
   }
 
   .app-content {
     padding: 12px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
   }
 
   .calculator-main {
     padding: 16px;
     max-width: 100%;
+    width: 100%;
+    margin: 0;
   }
 
   .calculator-display {
-    padding: 16px 12px;
-    min-height: 90px;
+    padding: 14px 12px;
+    min-height: 85px;
+    margin-bottom: 16px;
   }
 
   .result-line {
-    font-size: 28px;
+    font-size: 32px;
   }
 
   .expression-line {
-    font-size: 12px;
+    font-size: 11px;
+  }
+
+  .calculator-keypad {
+    gap: 8px;
   }
 
   .key {
-    height: 48px;
-    font-size: 15px;
+    height: 52px;
+    font-size: 16px;
     border-radius: 10px;
   }
 
-  .scientific-panel,
+  .scientific-panel {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+
+  .sci-btn {
+    height: 36px;
+    font-size: 12px;
+  }
+
   .meme-panel,
   .smart-panel,
-  .converter-panel {
+  .converter-panel,
+  .programmer-panel {
     padding: 10px;
     margin-bottom: 10px;
   }
@@ -1442,14 +1518,36 @@
   }
 
   .mem-btn {
-    height: 30px;
+    height: 32px;
     font-size: 11px;
   }
 
   .history-sidebar {
     width: 100%;
     max-width: 100%;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
+    max-height: 200px;
+  }
+
+  .panel-header h4 {
+    font-size: 12px;
+  }
+
+  .converter-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .converter-item {
+    padding: 6px 8px;
+  }
+
+  .convert-label {
+    font-size: 10px;
+  }
+
+  .convert-value {
+    font-size: 11px;
   }
 }
 /* ═══════════════════════════════════════════════════════════════════════════
