@@ -18,51 +18,6 @@ const Calculator: React.FC = () => {
   const [isAnimated, setIsAnimated] = useState(true);
   const navigate = useNavigate();
 
-  const inputNumber = (num: string) => {
-    if (waitingForOperand) {
-      setDisplay(num);
-      setWaitingForOperand(false);
-    } else {
-      setDisplay(display === '0' ? num : display + num);
-    }
-  };
-
-  const inputOperation = (nextOperation: string) => {
-    const inputValue = parseFloat(display);
-
-    if (previousValue === null) {
-      setPreviousValue(inputValue);
-      setCurrentExpression(`${inputValue} ${nextOperation}`);
-    } else if (operation) {
-      const currentValue = previousValue || 0;
-      const newValue = calculate(currentValue, inputValue, operation);
-      
-      setDisplay(String(newValue));
-      setPreviousValue(newValue);
-      setCurrentExpression(`${newValue} ${nextOperation}`);
-    }
-
-    setWaitingForOperand(true);
-    setOperation(nextOperation);
-  };
-
-  const calculate = (firstValue: number, secondValue: number, operation: string): number => {
-    switch (operation) {
-      case '+':
-        return firstValue + secondValue;
-      case '-':
-        return firstValue - secondValue;
-      case '×':
-        return firstValue * secondValue;
-      case '÷':
-        return firstValue / secondValue;
-      case '=':
-        return secondValue;
-      default:
-        return secondValue;
-    }
-  };
-
   // Remove voice functionality and add better calculation display
   const formatCalculation = (prev: number, op: string, curr: string) => {
     return `${prev} ${op} ${curr}`;
@@ -137,6 +92,51 @@ const Calculator: React.FC = () => {
 
   const memoryAdd = () => {
     setMemory(prev => prev + parseFloat(display));
+  };
+
+  const inputNumber = (num: string) => {
+    if (waitingForOperand) {
+      setDisplay(num);
+      setWaitingForOperand(false);
+    } else {
+      setDisplay(display === '0' ? num : display + num);
+    }
+  };
+
+  const inputOperation = (nextOperation: string) => {
+    const inputValue = parseFloat(display);
+
+    if (previousValue === null) {
+      setPreviousValue(inputValue);
+      setCurrentExpression(`${inputValue} ${nextOperation}`);
+    } else if (operation) {
+      const currentValue = previousValue || 0;
+      const newValue = calculate(currentValue, inputValue, operation);
+      
+      setDisplay(String(newValue));
+      setPreviousValue(newValue);
+      setCurrentExpression(`${newValue} ${nextOperation}`);
+    }
+
+    setWaitingForOperand(true);
+    setOperation(nextOperation);
+  };
+
+  const calculate = (firstValue: number, secondValue: number, operation: string): number => {
+    switch (operation) {
+      case '+':
+        return firstValue + secondValue;
+      case '-':
+        return firstValue - secondValue;
+      case '×':
+        return firstValue * secondValue;
+      case '÷':
+        return firstValue / secondValue;
+      case '=':
+        return secondValue;
+      default:
+        return secondValue;
+    }
   };
 
   const performCalculation = () => {
@@ -340,6 +340,9 @@ const Calculator: React.FC = () => {
                 <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) | parseInt('255')))}>OR</button>
                 <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) ^ parseInt('255')))}>XOR</button>
                 <button className="btn btn-bitwise" onClick={() => setDisplay(String(~parseInt(display)))}>NOT</button>
+                <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) << 1))}>{'<<'}</button>
+                <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) >> 1))}>{'>>'}
+                </button>
               </div>
             </div>
           )}
