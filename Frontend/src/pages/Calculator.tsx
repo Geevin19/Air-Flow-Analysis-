@@ -311,6 +311,23 @@ const Calculator: React.FC = () => {
           <span>Back</span>
         </button>
         
+        <div className="left-controls">
+          <div className="theme-selector-container">
+            <select 
+              value={theme} 
+              onChange={(e) => setTheme(e.target.value as any)}
+              className="theme-selector"
+            >
+              <option value="professional">Professional</option>
+              <option value="dark">Dark</option>
+              <option value="neon">Neon Cyberpunk</option>
+            </select>
+            <svg className="dropdown-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+        </div>
+        
         <div className="app-title">
           <svg className="title-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
             <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
@@ -321,19 +338,6 @@ const Calculator: React.FC = () => {
         </div>
 
         <div className="header-controls">
-          <select 
-            value={theme} 
-            onChange={(e) => setTheme(e.target.value as any)}
-            className="theme-selector"
-          >
-            <option value="professional">Professional</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-            <option value="aesthetic">Aesthetic Vibes</option>
-            <option value="neon">Neon Cyberpunk</option>
-            <option value="zen">Minimalist Zen</option>
-            <option value="academia">Dark Academia</option>
-          </select>
 
           <button 
             className={`control-btn ${calculatorMode === 'meme' ? 'active' : ''}`}

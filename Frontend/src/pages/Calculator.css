@@ -191,9 +191,89 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
+.left-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: 16px;
+}
+
+.theme-selector-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.theme-selector {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding: 10px 40px 10px 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.3s ease;
+  min-width: 160px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.theme-selector:hover {
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.2);
+  transform: translateY(-1px);
+}
+
+.theme-selector:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.dropdown-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: rgba(0, 0, 0, 0.6);
+  transition: transform 0.2s ease;
+}
+
+.theme-selector:focus + .dropdown-icon {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.theme-selector option {
+  padding: 12px 16px;
+  background: white;
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
 .theme-dark .app-header {
   background: rgba(30, 30, 30, 0.95);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.theme-dark .theme-selector {
+  background: rgba(40, 40, 40, 0.9);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.theme-dark .theme-selector:hover {
+  background: rgba(50, 50, 50, 1);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.theme-dark .dropdown-icon {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .theme-neon .app-header {
@@ -202,19 +282,42 @@
   box-shadow: 0 2px 20px rgba(0, 255, 136, 0.1);
 }
 
+.theme-neon .theme-selector {
+  background: rgba(12, 12, 12, 0.9);
+  border-color: rgba(0, 255, 136, 0.3);
+  color: #00ff88;
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
+}
+
+.theme-neon .theme-selector:hover {
+  background: rgba(20, 20, 20, 1);
+  border-color: rgba(0, 255, 136, 0.6);
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+}
+
+.theme-neon .dropdown-icon {
+  color: #00ff88;
+}
+
 .theme-aesthetic .app-header {
   background: rgba(255, 255, 255, 0.9);
   border-bottom: 1px solid rgba(255, 182, 193, 0.3);
 }
 
-.theme-academia .app-header {
-  background: rgba(44, 24, 16, 0.95);
-  border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+.theme-aesthetic .theme-selector {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 240, 245, 0.9));
+  border-color: rgba(255, 182, 193, 0.4);
+  color: #ff6b9d;
 }
 
-.theme-zen .app-header {
-  background: rgba(255, 255, 255, 0.98);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+.theme-aesthetic .theme-selector:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(255, 240, 245, 1));
+  border-color: rgba(255, 107, 157, 0.6);
+  box-shadow: 0 6px 20px rgba(255, 107, 157, 0.2);
+}
+
+.theme-aesthetic .dropdown-icon {
+  color: #ff6b9d;
 }
 
 .back-button {
