@@ -13,7 +13,9 @@ const Calculator: React.FC = () => {
   const [isScientific, setIsScientific] = useState(false);
   const [memory, setMemory] = useState(0);
   const [showMemory, setShowMemory] = useState(false);
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [showCalculationSteps, setShowCalculationSteps] = useState(true);
+  const [calculatorMode, setCalculatorMode] = useState<'standard' | 'programmer' | 'graphing'>('standard');
+  const [isAnimated, setIsAnimated] = useState(true);
   const navigate = useNavigate();
 
   const inputNumber = (num: string) => {
@@ -23,7 +25,6 @@ const Calculator: React.FC = () => {
     } else {
       setDisplay(display === '0' ? num : display + num);
     }
-    speak(num);
   };
 
   const inputOperation = (nextOperation: string) => {
@@ -31,12 +32,14 @@ const Calculator: React.FC = () => {
 
     if (previousValue === null) {
       setPreviousValue(inputValue);
+      setCurrentCalculation(`${inputValue} ${nextOperation}`);
     } else if (operation) {
       const currentValue = previousValue || 0;
       const newValue = calculate(currentValue, inputValue, operation);
-
+      
       setDisplay(String(newValue));
       setPreviousValue(newValue);
+      setCurrentCalculation(`${newValue} ${nextOperation}`);
     }
 
     setWaitingForOperand(true);
@@ -60,23 +63,13 @@ const Calculator: React.FC = () => {
     }
   };
 
-  // Voice feedback function - Fixed implementation
-  const speak = (text: string) => {
-    if (voiceEnabled && 'speechSynthesis' in window) {
-      // Cancel any ongoing speech
-      speechSynthesis.cancel();
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      utterance.volume = 0.8;
-      
-      // Wait a bit before speaking to ensure previous speech is cancelled
-      setTimeout(() => {
-        speechSynthesis.speak(utterance);
-      }, 100);
-    }
+  // Remove voice functionality and add better calculation display
+  const formatCalculation = (prev: number, op: string, curr: string) => {
+    return `${prev} ${op} ${curr}`;
   };
+
+  // Add calculation steps tracking
+  const [currentCalculation, setCurrentCalculation] = useState<string>('');
 
   // Add to history
   const addToHistory = (calculation: string) => {
@@ -125,30 +118,25 @@ const Calculator: React.FC = () => {
     }
     
     setDisplay(String(result));
-    speak(`Result is ${result.toFixed(2)}`);
   };
 
   // Memory functions
   const memoryStore = () => {
     setMemory(parseFloat(display));
     setShowMemory(true);
-    speak('Memory stored');
   };
 
   const memoryRecall = () => {
     setDisplay(String(memory));
-    speak(`Memory recalled: ${memory}`);
   };
 
   const memoryClear = () => {
     setMemory(0);
     setShowMemory(false);
-    speak('Memory cleared');
   };
 
   const memoryAdd = () => {
     setMemory(prev => prev + parseFloat(display));
-    speak('Added to memory');
   };
 
   const performCalculation = () => {
@@ -161,8 +149,8 @@ const Calculator: React.FC = () => {
       setDisplay(String(newValue));
       setPreviousValue(null);
       setOperation(null);
+      setCurrentCalculation('');
       setWaitingForOperand(true);
-      speak(`Equals ${newValue}`);
     }
   };
 
@@ -215,8 +203,8 @@ const Calculator: React.FC = () => {
               onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'glassmorphism' | 'liquid' | 'minimal')}
               className="theme-select"
             >
-              <option value="glassmorphism">Glass</option>
-              <option value="liquid">Liquid</option>
+              <option value="glassmorphism">Glass Dark</option>
+              <option value="liquid">Liquid Dark</option>
               <option value="minimal">Minimal</option>
               <option value="dark">Dark</option>
               <option value="light">Light</option>
@@ -224,16 +212,11 @@ const Calculator: React.FC = () => {
           </div>
           
           <button 
-            className={`toggle-btn ${voiceEnabled ? 'active' : ''}`}
-            onClick={() => {
-              setVoiceEnabled(!voiceEnabled);
-              if (!voiceEnabled) {
-                speak('Voice enabled');
-              }
-            }}
-            title="Toggle Voice Feedback"
+            className={`toggle-btn ${calculatorMode !== 'standard' ? 'active' : ''}`}
+            onClick={() => setCalculatorMode(calculatorMode === 'standard' ? 'programmer' : 'standard')}
+            title="Toggle Programmer Mode"
           >
-            <span className="icon">{voiceEnabled ? '🔊' : '🔇'}</span>
+            <span className="icon">BIN</span>
           </button>
           
           <button 
@@ -251,6 +234,14 @@ const Calculator: React.FC = () => {
           >
             <span className="icon">H</span>
           </button>
+
+          <button 
+            className={`toggle-btn ${isAnimated ? 'active' : ''}`}
+            onClick={() => setIsAnimated(!isAnimated)}
+            title="Toggle Animations"
+          >
+            <span className="icon">FX</span>
+          </button>
         </div>
       </div>
 
@@ -267,7 +258,6 @@ const Calculator: React.FC = () => {
                   <div key={index} className="history-item" onClick={() => {
                     const result = calc.split(' = ')[1];
                     setDisplay(result);
-                    speak(`Using result ${result}`);
                   }}>
                     {calc}
                   </div>
@@ -276,7 +266,6 @@ const Calculator: React.FC = () => {
             </div>
             <button className="clear-history" onClick={() => {
               setHistory([]);
-              speak('History cleared');
             }}>
               Clear History
             </button>
@@ -286,7 +275,12 @@ const Calculator: React.FC = () => {
         <div className="calculator">
           <div className="calculator-display">
             <div className="display-value">{display}</div>
-            {operation && (
+            {showCalculationSteps && currentCalculation && (
+              <div className="calculation-preview">
+                {currentCalculation}
+              </div>
+            )}
+            {operation && previousValue !== null && (
               <div className="operation-indicator">
                 {previousValue} {operation}
               </div>
@@ -315,23 +309,49 @@ const Calculator: React.FC = () => {
             </div>
           )}
 
+          {/* Programmer Mode Panel */}
+          {calculatorMode === 'programmer' && (
+            <div className="programmer-panel">
+              <div className="number-systems">
+                <div className="system-row">
+                  <span className="system-label">HEX:</span>
+                  <span className="system-value">{parseInt(display || '0').toString(16).toUpperCase()}</span>
+                </div>
+                <div className="system-row">
+                  <span className="system-label">DEC:</span>
+                  <span className="system-value">{parseInt(display || '0')}</span>
+                </div>
+                <div className="system-row">
+                  <span className="system-label">OCT:</span>
+                  <span className="system-value">{parseInt(display || '0').toString(8)}</span>
+                </div>
+                <div className="system-row">
+                  <span className="system-label">BIN:</span>
+                  <span className="system-value">{parseInt(display || '0').toString(2)}</span>
+                </div>
+              </div>
+              <div className="bitwise-operations">
+                <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) & parseInt('255')))}>AND</button>
+                <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) | parseInt('255')))}>OR</button>
+                <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) ^ parseInt('255')))}>XOR</button>
+                <button className="btn btn-bitwise" onClick={() => setDisplay(String(~parseInt(display)))}>NOT</button>
+              </div>
+            </div>
+          )}
+
           {/* Memory Functions */}
           <div className="memory-panel">
             <button className="btn btn-memory" onClick={() => {
               memoryClear();
-              speak('Memory cleared');
             }} title="Memory Clear">MC</button>
             <button className="btn btn-memory" onClick={() => {
               memoryRecall();
-              speak(`Memory recalled: ${memory}`);
             }} title="Memory Recall">MR</button>
             <button className="btn btn-memory" onClick={() => {
               memoryStore();
-              speak('Memory stored');
             }} title="Memory Store">MS</button>
             <button className="btn btn-memory" onClick={() => {
               memoryAdd();
-              speak('Added to memory');
             }} title="Memory Add">M+</button>
           </div>
 
@@ -339,25 +359,21 @@ const Calculator: React.FC = () => {
             {/* Row 1 */}
             <button className="btn btn-function" onClick={() => {
               clear();
-              speak('All clear');
             }}>
               AC
             </button>
             <button className="btn btn-function" onClick={() => {
               clearEntry();
-              speak('Clear entry');
             }}>
               CE
             </button>
             <button className="btn btn-function" onClick={() => {
               percentage();
-              speak('Percent');
             }}>
               %
             </button>
             <button className="btn btn-operator" onClick={() => {
               inputOperation('÷');
-              speak('Divide');
             }}>
               ÷
             </button>
@@ -374,7 +390,6 @@ const Calculator: React.FC = () => {
             </button>
             <button className="btn btn-operator" onClick={() => {
               inputOperation('×');
-              speak('Multiply');
             }}>
               ×
             </button>
@@ -391,7 +406,6 @@ const Calculator: React.FC = () => {
             </button>
             <button className="btn btn-operator" onClick={() => {
               inputOperation('-');
-              speak('Minus');
             }}>
               −
             </button>
@@ -408,7 +422,6 @@ const Calculator: React.FC = () => {
             </button>
             <button className="btn btn-operator" onClick={() => {
               inputOperation('+');
-              speak('Plus');
             }}>
               +
             </button>
@@ -419,13 +432,11 @@ const Calculator: React.FC = () => {
             </button>
             <button className="btn btn-function" onClick={() => {
               inputDecimal();
-              speak('Decimal point');
             }}>
               .
             </button>
             <button className="btn btn-function" onClick={() => {
               toggleSign();
-              speak('Plus minus');
             }}>
               ±
             </button>

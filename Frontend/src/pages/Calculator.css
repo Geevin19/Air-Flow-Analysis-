@@ -21,11 +21,11 @@
 
 /* Theme Backgrounds */
 .theme-glassmorphism {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
 }
 
 .theme-liquid {
-  background: linear-gradient(135deg, #007AFF 0%, #5856D6 50%, #AF52DE 100%);
+  background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
 }
 
 .theme-minimal {
@@ -49,8 +49,21 @@
   right: 0;
   bottom: 0;
   background: 
-    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.08) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.theme-liquid::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 30% 70%, rgba(59, 130, 246, 0.15) 0%, transparent 60%),
+    radial-gradient(circle at 70% 30%, rgba(236, 72, 153, 0.1) 0%, transparent 60%);
   pointer-events: none;
 }
 
@@ -455,6 +468,21 @@
   opacity: 0.7;
 }
 
+.calculation-preview {
+  font-size: 18px;
+  text-align: right;
+  margin-top: 4px;
+  font-family: 'SF Mono', Monaco, monospace;
+  opacity: 0.8;
+  color: #007AFF;
+}
+
+.theme-glassmorphism .calculation-preview,
+.theme-liquid .calculation-preview,
+.theme-dark .calculation-preview {
+  color: #64B5F6;
+}
+
 .memory-indicator {
   font-size: 14px;
   text-align: left;
@@ -517,6 +545,69 @@
 
 .btn-memory:hover {
   background: rgba(88, 86, 214, 1);
+  transform: translateY(-1px);
+}
+
+/* Programmer Panel */
+.programmer-panel {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.number-systems {
+  margin-bottom: 12px;
+}
+
+.system-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 14px;
+}
+
+.system-label {
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.system-value {
+  font-weight: 500;
+  color: #007AFF;
+}
+
+.theme-glassmorphism .system-value,
+.theme-liquid .system-value,
+.theme-dark .system-value {
+  color: #64B5F6;
+}
+
+.bitwise-operations {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.btn-bitwise {
+  height: 36px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(255, 152, 0, 0.8);
+  color: white;
+  backdrop-filter: blur(20px);
+}
+
+.btn-bitwise:hover {
+  background: rgba(255, 152, 0, 1);
   transform: translateY(-1px);
 }
 
