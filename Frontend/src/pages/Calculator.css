@@ -184,19 +184,18 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 32px;
+  padding: 16px 24px;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  min-height: 80px;
 }
 
 .back-button {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 8px 14px;
   background: transparent;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
@@ -206,6 +205,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .back-button:hover {
@@ -216,23 +216,120 @@
 .app-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex: 1;
   justify-content: center;
   min-width: 0;
+  padding: 0 12px;
 }
 
 .app-title h1 {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.5px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.title-icon {
+  flex-shrink: 0;
 }
 
 .header-right {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONTROL BAR - NOVELTY FEATURES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.control-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.control-bar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.control-bar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+}
+
+.control-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.control-btn span {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.control-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.control-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+
+.theme-dark .control-bar {
+  background: rgba(30, 30, 30, 0.9);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.theme-dark .control-btn {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.theme-dark .control-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.theme-neon .control-bar {
+  background: rgba(12, 12, 12, 0.9);
+  border-bottom-color: rgba(0, 255, 136, 0.2);
+}
+
+.theme-neon .control-btn {
+  border-color: rgba(0, 255, 136, 0.3);
+}
+
+.theme-neon .control-btn:hover {
+  background: rgba(0, 255, 136, 0.1);
+}
+
+.theme-neon .control-btn.active {
+  background: #00ff88;
+  border-color: #00ff88;
+  color: #0c0c0c;
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
 }
 
 .theme-selector-container {
@@ -1185,49 +1282,67 @@
 
 @media (max-width: 768px) {
   .app-header {
-    padding: 16px 20px;
-    min-height: 70px;
+    padding: 12px 16px;
   }
 
   .app-title h1 {
-    font-size: 18px;
+    font-size: 16px;
+  }
+
+  .title-icon {
+    width: 20px;
+    height: 20px;
   }
 
   .theme-selector {
-    min-width: 100px;
+    min-width: 90px;
     font-size: 12px;
     padding: 6px 28px 6px 10px;
   }
 
+  .control-bar {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .control-btn {
+    min-width: 55px;
+    padding: 6px 10px;
+  }
+
+  .control-btn span {
+    font-size: 10px;
+  }
+
   .app-content {
-    padding: 20px;
+    padding: 16px;
   }
 
   .calculator-main {
-    padding: 24px;
+    padding: 20px;
   }
 
   .result-line {
-    font-size: 40px;
+    font-size: 36px;
   }
 
   .key {
-    height: 56px;
-    font-size: 18px;
+    height: 54px;
+    font-size: 17px;
   }
 }
 
 @media (max-width: 480px) {
   .app-header {
-    padding: 12px 16px;
-    min-height: 60px;
+    padding: 10px 12px;
     flex-wrap: nowrap;
-    gap: 8px;
+    gap: 6px;
   }
 
   .back-button {
-    padding: 8px 12px;
+    padding: 6px 10px;
     font-size: 13px;
+    min-width: 36px;
   }
 
   .back-button span {
@@ -1237,73 +1352,104 @@
   .app-title {
     flex: 1;
     min-width: 0;
+    padding: 0 8px;
+    gap: 6px;
   }
 
   .app-title h1 {
-    font-size: 16px;
+    font-size: 14px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .title-icon {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
   }
 
   .theme-selector {
-    min-width: 80px;
-    font-size: 11px;
-    padding: 6px 24px 6px 8px;
+    min-width: 70px;
+    font-size: 10px;
+    padding: 5px 22px 5px 8px;
   }
 
   .dropdown-icon {
     right: 6px;
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
+  }
+
+  .control-bar {
+    padding: 8px 8px;
+    gap: 4px;
+    justify-content: flex-start;
+  }
+
+  .control-btn {
+    min-width: 50px;
+    padding: 6px 8px;
+    gap: 2px;
+  }
+
+  .control-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .control-btn span {
+    font-size: 9px;
   }
 
   .app-content {
-    padding: 16px;
+    padding: 12px;
   }
 
   .calculator-main {
-    padding: 20px;
+    padding: 16px;
     max-width: 100%;
   }
 
   .calculator-display {
-    padding: 20px 16px;
-    min-height: 100px;
+    padding: 16px 12px;
+    min-height: 90px;
   }
 
   .result-line {
-    font-size: 32px;
+    font-size: 28px;
   }
 
   .expression-line {
-    font-size: 14px;
+    font-size: 12px;
   }
 
   .key {
-    height: 50px;
-    font-size: 16px;
+    height: 48px;
+    font-size: 15px;
+    border-radius: 10px;
   }
 
   .scientific-panel,
   .meme-panel,
   .smart-panel,
   .converter-panel {
-    padding: 12px;
-    margin-bottom: 12px;
+    padding: 10px;
+    margin-bottom: 10px;
   }
 
   .memory-panel {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
+    gap: 6px;
   }
 
   .mem-btn {
-    height: 32px;
-    font-size: 12px;
+    height: 30px;
+    font-size: 11px;
+  }
+
+  .history-sidebar {
+    width: 100%;
+    max-width: 100%;
+    margin-bottom: 16px;
   }
 }
 /* ═══════════════════════════════════════════════════════════════════════════

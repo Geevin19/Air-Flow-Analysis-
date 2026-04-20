@@ -323,6 +323,83 @@ const Calculator: React.FC = () => {
         </div>
       </header>
 
+      {/* Control Bar - Novelty Features */}
+      <div className="control-bar">
+        <button 
+          className={`control-btn ${calculatorMode === 'meme' ? 'active' : ''}`}
+          onClick={() => setCalculatorMode(calculatorMode === 'meme' ? 'standard' : 'meme')}
+          title="Meme Mode"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <circle cx="7" cy="8" r="1" fill="currentColor"/>
+            <circle cx="13" cy="8" r="1" fill="currentColor"/>
+            <path d="M6 13s1.5 2 4 2 4-2 4-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5"/>
+          </svg>
+          <span>Meme</span>
+        </button>
+
+        <button 
+          className={`control-btn ${calculatorMode === 'smart' ? 'active' : ''}`}
+          onClick={() => {
+            setCalculatorMode(calculatorMode === 'smart' ? 'standard' : 'smart');
+            setShowSteps(!showSteps);
+          }}
+          title="Smart Mode"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="2"/>
+          </svg>
+          <span>Smart</span>
+        </button>
+
+        <button 
+          className={`control-btn ${showAnimations ? 'active' : ''}`}
+          onClick={() => setShowAnimations(!showAnimations)}
+          title="Animations"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 2L13 8L20 9L15 14L16 21L10 18L4 21L5 14L0 9L7 8L10 2Z" stroke="currentColor" strokeWidth="1.5"/>
+          </svg>
+          <span>FX</span>
+        </button>
+
+        <button 
+          className={`control-btn ${calculatorMode === 'programmer' ? 'active' : ''}`}
+          onClick={() => setCalculatorMode(calculatorMode === 'programmer' ? 'standard' : 'programmer')}
+          title="Programmer Mode"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <text x="2" y="14" fontSize="10" fill="currentColor" fontFamily="monospace">01</text>
+          </svg>
+          <span>Code</span>
+        </button>
+        
+        <button 
+          className={`control-btn ${isScientific ? 'active' : ''}`}
+          onClick={() => setIsScientific(!isScientific)}
+          title="Scientific Mode"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <text x="3" y="14" fontSize="12" fill="currentColor">f(x)</text>
+          </svg>
+          <span>Sci</span>
+        </button>
+        
+        <button 
+          className={`control-btn ${showHistory ? 'active' : ''}`}
+          onClick={() => setShowHistory(!showHistory)}
+          title="History"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="2"/>
+            <path d="M10 6V10L13 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          <span>History</span>
+        </button>
+      </div>
+
       {/* Main Content */}
       <div className="app-content">
         {/* History Sidebar */}
