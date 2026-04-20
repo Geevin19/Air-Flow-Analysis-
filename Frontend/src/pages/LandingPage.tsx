@@ -12,6 +12,7 @@ export default function LandingPage() {
         @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:none} }
         @keyframes dash { to { stroke-dashoffset: 0; } }
         .hero-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(59,130,246,.45) !important; }
+        .calc-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(245,158,11,.45) !important; }
         .sec-btn:hover { background: #f0f7ff !important; }
         .feat-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,.08) !important; }
         .nav-link:hover { color: #3b82f6 !important; }
@@ -24,6 +25,7 @@ export default function LandingPage() {
           <span style={s.logo}>SmartTracker</span>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <Link to="/calculator" className="nav-link" style={s.navLink}>Calculator</Link>
           <Link to="/login" className="nav-link" style={s.navLink}>Sign In</Link>
           <Link to="/register" className="hero-btn" style={s.navCta}>Get Started →</Link>
         </div>
@@ -55,6 +57,9 @@ export default function LandingPage() {
           <div style={{ display:'flex', gap:14, justifyContent:'center', flexWrap:'wrap' }}>
             <Link to="/register" className="hero-btn" style={s.primaryBtn}>
               Get Started — it's free
+            </Link>
+            <Link to="/calculator" className="calc-btn" style={s.calculatorBtn}>
+              🧮 Try Calculator
             </Link>
             <Link to="/login" className="sec-btn" style={s.secondaryBtn}>
               Sign In
@@ -88,6 +93,13 @@ export default function LandingPage() {
 
         <div style={s.featGrid}>
           {[
+            {
+              icon: '🧮',
+              num: '00',
+              title: 'Smart Calculator',
+              desc: 'Professional calculator with beautiful animations and advanced functions. Perfect for quick calculations.',
+              color: '#f59e0b',
+            },
             {
               icon: '🌊',
               num: '01',
@@ -188,6 +200,7 @@ export default function LandingPage() {
         </div>
         <span style={{ color:'#cbd5e1', fontSize:13 }}>© 2026 · Airflow Simulation Platform</span>
         <div style={{ display:'flex', gap:20 }}>
+          <Link to="/calculator" style={{ color:'#94a3b8', textDecoration:'none', fontSize:13 }}>Calculator</Link>
           <Link to="/login" style={{ color:'#94a3b8', textDecoration:'none', fontSize:13 }}>Sign In</Link>
           <Link to="/register" style={{ color:'#94a3b8', textDecoration:'none', fontSize:13 }}>Register</Link>
         </div>
@@ -216,6 +229,7 @@ const s: Record<string, React.CSSProperties> = {
   heroAccent: { background:'linear-gradient(135deg,#3b82f6,#8b5cf6)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' },
   heroSub: { fontSize:18, color:'#64748b', lineHeight:1.7, marginBottom:40, maxWidth:600, margin:'0 auto 40px' },
   primaryBtn: { display:'inline-flex', alignItems:'center', gap:8, padding:'14px 32px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', textDecoration:'none', fontSize:15, fontWeight:700, borderRadius:12, transition:'all .2s', boxShadow:'0 4px 16px rgba(99,102,241,.35)', border:'none' },
+  calculatorBtn: { display:'inline-flex', alignItems:'center', gap:8, padding:'14px 32px', background:'linear-gradient(135deg,#f59e0b,#f97316)', color:'#fff', textDecoration:'none', fontSize:15, fontWeight:600, borderRadius:12, transition:'all .2s', boxShadow:'0 4px 16px rgba(245,158,11,.35)', border:'none' },
   secondaryBtn: { display:'inline-flex', alignItems:'center', padding:'14px 32px', background:'#fff', color:'#1e293b', textDecoration:'none', fontSize:15, fontWeight:600, borderRadius:12, border:'1.5px solid #e2e8f0', transition:'all .2s' },
 
   statsRow: { display:'flex', justifyContent:'center', gap:0, marginTop:64, borderTop:'1px solid #f1f5f9', paddingTop:40, flexWrap:'wrap' },
