@@ -378,10 +378,13 @@ def delete_simulation(simulation_id: int, current_user: User = Depends(get_curre
     db.commit()
     return {'message': 'Simulation deleted successfully'}
 
-# ── Device config — Arduino polls this for limits ────────────────────────────
+# ── Device config — Arduino polls this for limits + WiFi ─────────────────────
 device_config: dict = {
     "temp_limit":     35.0,
     "humidity_limit": 70.0,
+    "wifi_ssid":      "",
+    "wifi_password":  "",
+    "wifi_updated":   False,   # Arduino checks this flag
 }
 
 @app.get("/iot/config")
@@ -391,8 +394,29 @@ def get_config():
 @app.post("/iot/config")
 def update_config(data: dict):
     device_config.update(data)
-    print(f"[Config] Updated: {device_config}")
+    print(f"[Config] Updated: { {k:v for k,v in device_config.items() if k != 'wifi_password'} }")
     return {"status": "updated", "config": device_config}
+
+@app.post("/iot/wifi")
+async def update_wifi(data: dict):
+    """Send new WiFi credentials to Arduino via config endpoint."""
+    ssid     = data.get("ssid", "").strip()
+    password = data.get("password", "").strip()
+    if not ssid:
+        raise HTTPException(status_code=400, detail="SSID is required")
+    device_config["wifi_ssid"]     = ssid
+    device_config["wifi_password"] = password
+    device_config["wifi_updated"]  = True
+    print(f"[WiFi] New credentials set for SSID: {ssid}")
+    # Broadcast to all connected browsers
+    await manager.broadcast({"type": "wifi_update", "ssid": ssid})
+    return {"status": "wifi credentials updated", "ssid": ssid}
+
+@app.post("/iot/wifi/ack")
+def wifi_ack():
+    """Arduino calls this after applying new WiFi — resets the flag."""
+    device_config["wifi_updated"] = False
+    return {"status": "acknowledged"}
 
 
 # ── Manager: list all workers under this manager ──────────────────────────────

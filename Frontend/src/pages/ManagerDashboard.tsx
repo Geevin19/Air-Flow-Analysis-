@@ -8,12 +8,15 @@ interface AlertItem { id: number; user_id: number; metric: string; value: number
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
-  const [workers, setWorkers]   = useState<Worker[]>([]);
-  const [pending, setPending]   = useState<LimitReq[]>([]);
-  const [alerts, setAlerts]     = useState<AlertItem[]>([]);
-  const [tab, setTab]           = useState<'workers'|'approvals'|'alerts'>('workers');
-  const [loading, setLoading]   = useState(true);
-  const [user, setUser]         = useState<any>(null);
+  const [workers, setWorkers]       = useState<Worker[]>([]);
+  const [pending, setPending]       = useState<LimitReq[]>([]);
+  const [alerts, setAlerts]         = useState<AlertItem[]>([]);
+  const [tab, setTab]               = useState<'workers'|'approvals'|'alerts'|'iot'>('workers');
+  const [loading, setLoading]       = useState(true);
+  const [user, setUser]             = useState<any>(null);
+  const [workerFilter, setWorkerFilter] = useState('');
+  const [selectedWorker, setSelectedWorker] = useState<number|null>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -81,10 +84,13 @@ export default function ManagerDashboard() {
 
         {/* Tabs */}
         <div style={s.tabs}>
-          {(['workers','approvals','alerts'] as const).map(t => (
+          {(['workers','iot','approvals','alerts'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               style={{ ...s.tab, ...(tab===t ? s.tabActive : {}) }}>
-              {t === 'workers' ? `Workers (${workers.length})` : t === 'approvals' ? `Approvals (${pending.length})` : `Alerts (${alerts.length})`}
+              {t === 'workers' ? `Workers (${workers.length})` :
+               t === 'iot'     ? 'Live IoT' :
+               t === 'approvals' ? `Approvals (${pending.length})` :
+               `Alerts (${alerts.length})`}
             </button>
           ))}
         </div>

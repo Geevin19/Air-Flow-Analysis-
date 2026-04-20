@@ -13,18 +13,18 @@ function getStrength(v: string) {
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
-  const [email, setEmail]       = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm]   = useState("");
-  const [purpose, setPurpose]   = useState("");
-  const [role, setRole]         = useState<'worker'|'manager'>('worker');
-  const [managerId, setManagerId] = useState<number|null>(null);
-  const [managers, setManagers] = useState<{id:number;username:string}[]>([]);
-  const [showPw, setShowPw]     = useState(false);
-  const [error, setError]       = useState("");
-  const [loading, setLoading]   = useState(false);
-  const { score, label, color } = getStrength(password);
+  const [username, setUsername]       = useState("");
+  const [email, setEmail]             = useState("");
+  const [password, setPassword]       = useState("");
+  const [confirm, setConfirm]         = useState("");
+  const [purpose, setPurpose]         = useState("");
+  const [role, setRole]               = useState<'worker'|'manager'>('worker');
+  const [managerCode, setManagerCode] = useState("");
+  const [managers, setManagers]       = useState<{id:number;username:string;manager_code:string}[]>([]);
+  const [showPw, setShowPw]           = useState(false);
+  const [error, setError]             = useState("");
+  const [loading, setLoading]         = useState(false);
+  const { score, label, color }       = getStrength(password);
 
   useEffect(() => {
     api.get('/managers').then(r => setManagers(r.data)).catch(() => {});
@@ -33,9 +33,17 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError("");
     if (password !== confirm) { setError("Passwords do not match"); return; }
+    if (role === 'worker' && !managerCode.trim()) {
+      setError("Workers must enter their Manager Code to register"); return;
+    }
     setLoading(true);
     try {
-      await authAPI.register({ username, email, password, purpose: purpose || undefined, role, manager_id: role === 'worker' ? (managerId ?? undefined) : undefined } as any);
+      await authAPI.register({
+        username, email, password,
+        purpose: purpose || undefined,
+        role,
+        manager_code: role === 'worker' ? managerCode.trim().toUpperCase() : undefined,
+      } as any);
       navigate("/verify-otp", { state: { email } });
     } catch (err: any) {
       setError(err.response?.data?.detail || "Registration failed");
@@ -95,13 +103,29 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {role === 'worker' && managers.length > 0 && (
+          {role === 'worker' && (
             <div style={s.field}>
-              <label style={s.label}>Select Manager</label>
-              <select style={{ ...s.input, cursor:'pointer' }} value={managerId ?? ''} onChange={e => setManagerId(Number(e.target.value) || null)}>
-                <option value="">-- Select your manager --</option>
-                {managers.map(m => <option key={m.id} value={m.id}>{m.username}</option>)}
-              </select>
+              <label style={s.label}>
+                Manager Code <span style={{ color:'#ef4444', fontWeight:700 }}>*</span>
+              </label>
+              {managers.length > 0 ? (
+                <select style={{ ...s.input, cursor:'pointer' }}
+                  value={managerCode} onChange={e => setManagerCode(e.target.value)} required>
+                  <option value="">-- Select your manager --</option>
+                  {managers.map(m => (
+                    <option key={m.id} value={m.manager_code}>
+                      {m.username} — {m.manager_code}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input style={s.input} className="fi" type="text"
+                  placeholder="e.g. MGR-GEEVIN-4821" required
+                  value={managerCode} onChange={e => setManagerCode(e.target.value.toUpperCase())} />
+              )}
+              <p style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>
+                Ask your manager for their unique code — required to register as a worker
+              </p>
             </div>
           )}
 
