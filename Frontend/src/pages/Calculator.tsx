@@ -269,22 +269,6 @@ const Calculator: React.FC = () => {
     setDisplay(String(value * -1));
   };
 
-  // Smart unit converter
-  const convertUnit = (value: number, fromUnit: string, toUnit: string): number => {
-    const conversions: {[key: string]: number} = {
-      'pizza_slices': 8, // 1 pizza = 8 slices
-      'coffee_cups': 1, // base unit
-      'energy_drinks': 2, // 1 energy drink = 2 coffee cups
-      'hours_sleep': 1, // base unit
-      'all_nighters': 0, // 1 all-nighter = 0 sleep
-      'dollars': 1, // base unit
-      'ramen_packets': 0.5, // $0.50 per packet
-      'textbooks': 200, // $200 per textbook
-    };
-    
-    return (value * conversions[fromUnit]) / conversions[toUnit];
-  };
-
   return (
     <div className={`calculator-app theme-${theme} ${shake ? 'shake' : ''}`}>
       {/* Particle Effects */}
@@ -302,6 +286,7 @@ const Calculator: React.FC = () => {
           ))}
         </div>
       )}
+
       {/* Header */}
       <header className="app-header">
         <button className="back-button" onClick={() => navigate('/')}>
@@ -311,7 +296,16 @@ const Calculator: React.FC = () => {
           <span>Back</span>
         </button>
         
-        <div className="left-controls">
+        <div className="app-title">
+          <svg className="title-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
+            <line x1="4" y1="9" x2="20" y2="9" stroke="currentColor" strokeWidth="2"/>
+            <line x1="9" y1="9" x2="9" y2="20" stroke="currentColor" strokeWidth="2"/>
+          </svg>
+          <h1>Smart Calculator</h1>
+        </div>
+
+        <div className="header-right">
           <div className="theme-selector-container">
             <select 
               value={theme} 
@@ -326,86 +320,6 @@ const Calculator: React.FC = () => {
               <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-        </div>
-        
-        <div className="app-title">
-          <svg className="title-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
-            <line x1="4" y1="9" x2="20" y2="9" stroke="currentColor" strokeWidth="2"/>
-            <line x1="9" y1="9" x2="9" y2="20" stroke="currentColor" strokeWidth="2"/>
-          </svg>
-          <h1>Smart Calculator</h1>
-        </div>
-
-        <div className="header-controls">
-
-          <button 
-            className={`control-btn ${calculatorMode === 'meme' ? 'active' : ''}`}
-            onClick={() => setCalculatorMode(calculatorMode === 'meme' ? 'standard' : 'meme')}
-            title="Meme Mode"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <circle cx="7" cy="8" r="1" fill="currentColor"/>
-              <circle cx="13" cy="8" r="1" fill="currentColor"/>
-              <path d="M6 13s1.5 2 4 2 4-2 4-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.5"/>
-            </svg>
-          </button>
-
-          <button 
-            className={`control-btn ${calculatorMode === 'smart' ? 'active' : ''}`}
-            onClick={() => {
-              setCalculatorMode(calculatorMode === 'smart' ? 'standard' : 'smart');
-              setShowSteps(!showSteps);
-            }}
-            title="Smart Mode"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="2"/>
-            </svg>
-          </button>
-
-          <button 
-            className={`control-btn ${showAnimations ? 'active' : ''}`}
-            onClick={() => setShowAnimations(!showAnimations)}
-            title="Animations"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path d="M10 2L13 8L20 9L15 14L16 21L10 18L4 21L5 14L0 9L7 8L10 2Z" stroke="currentColor" strokeWidth="1.5"/>
-            </svg>
-          </button>
-
-          <button 
-            className={`control-btn ${calculatorMode === 'programmer' ? 'active' : ''}`}
-            onClick={() => setCalculatorMode(calculatorMode === 'programmer' ? 'standard' : 'programmer')}
-            title="Programmer Mode"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <text x="2" y="14" fontSize="10" fill="currentColor" fontFamily="monospace">01</text>
-            </svg>
-          </button>
-          
-          <button 
-            className={`control-btn ${isScientific ? 'active' : ''}`}
-            onClick={() => setIsScientific(!isScientific)}
-            title="Scientific Mode"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <text x="3" y="14" fontSize="12" fill="currentColor">f(x)</text>
-            </svg>
-          </button>
-          
-          <button 
-            className={`control-btn ${showHistory ? 'active' : ''}`}
-            onClick={() => setShowHistory(!showHistory)}
-            title="History"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="2"/>
-              <path d="M10 6V10L13 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          </button>
         </div>
       </header>
 
@@ -530,6 +444,7 @@ const Calculator: React.FC = () => {
               </div>
             </div>
           )}
+
           {/* Programmer Panel */}
           {calculatorMode === 'programmer' && (
             <div className="programmer-panel">
