@@ -1,0 +1,81 @@
+═══════════════════════════════════════════════════════════════════════════
+  QUICK FIX: Enable HTTPS for airflowanalysis.xyz
+═══════════════════════════════════════════════════════════════════════════
+
+🚀 FASTEST METHOD (Copy & Paste on VPS):
+
+1. SSH into your VPS:
+   ssh ubuntu@your-vps-ip
+
+2. Run this ONE command:
+   cd ~/airflow && chmod +x enable-https.sh && ./enable-https.sh
+
+3. Enter your email when prompted
+
+4. Done! Visit https://airflowanalysis.xyz
+
+═══════════════════════════════════════════════════════════════════════════
+
+📋 MANUAL METHOD (If script doesn't work):
+
+1. Install Certbot:
+   sudo apt update
+   sudo apt install -y certbot python3-certbot-nginx
+
+2. Stop nginx:
+   sudo systemctl stop nginx
+
+3. Get certificate:
+   sudo certbot certonly --standalone -d airflowanalysis.xyz -d www.airflowanalysis.xyz
+
+4. Copy nginx-vm-https.conf to server:
+   sudo cp nginx-vm-https.conf /etc/nginx/sites-available/airflow
+
+5. Enable site:
+   sudo ln -sf /etc/nginx/sites-available/airflow /etc/nginx/sites-enabled/
+
+6. Start nginx:
+   sudo nginx -t
+   sudo systemctl start nginx
+
+7. Enable auto-renewal:
+   sudo systemctl enable certbot.timer
+
+═══════════════════════════════════════════════════════════════════════════
+
+✅ VERIFICATION:
+
+• Visit: https://airflowanalysis.xyz
+• Should see green padlock 🔒
+• No "Not secure" warning
+• Certificate valid for 90 days
+
+═══════════════════════════════════════════════════════════════════════════
+
+🔄 AUTO-RENEWAL:
+
+Certificate automatically renews every 60 days.
+Check status: sudo certbot certificates
+
+═══════════════════════════════════════════════════════════════════════════
+
+🚨 TROUBLESHOOTING:
+
+Problem: Port 80/443 in use
+Fix: sudo systemctl stop nginx
+
+Problem: DNS not pointing to server
+Fix: Check DNS A record points to VPS IP
+
+Problem: Firewall blocking
+Fix: sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
+
+═══════════════════════════════════════════════════════════════════════════
+
+📞 NEED HELP?
+
+Check logs: sudo tail -f /var/log/nginx/error.log
+Test nginx: sudo nginx -t
+Check cert: sudo certbot certificates
+
+═══════════════════════════════════════════════════════════════════════════

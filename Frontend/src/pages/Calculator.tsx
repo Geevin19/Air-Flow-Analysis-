@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Calculator.css';
 
@@ -7,31 +7,20 @@ const Calculator: React.FC = () => {
   const [previousValue, setPreviousValue] = useState<number | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
   const [waitingForOperand, setWaitingForOperand] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark' | 'glassmorphism' | 'liquid' | 'minimal'>('minimal');
+  const [theme, setTheme] = useState<'light' | 'dark' | 'professional'>('professional');
   const [history, setHistory] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [isScientific, setIsScientific] = useState(false);
   const [memory, setMemory] = useState(0);
   const [showMemory, setShowMemory] = useState(false);
-  const [showCalculationSteps, setShowCalculationSteps] = useState(true);
-  const [calculatorMode, setCalculatorMode] = useState<'standard' | 'programmer' | 'graphing'>('standard');
-  const [isAnimated, setIsAnimated] = useState(true);
+  const [calculatorMode, setCalculatorMode] = useState<'standard' | 'programmer'>('standard');
+  const [currentExpression, setCurrentExpression] = useState<string>('');
   const navigate = useNavigate();
 
-  // Remove voice functionality and add better calculation display
-  const formatCalculation = (prev: number, op: string, curr: string) => {
-    return `${prev} ${op} ${curr}`;
-  };
-
-  // Add calculation steps tracking
-  const [currentExpression, setCurrentExpression] = useState<string>('');
-
-  // Add to history
   const addToHistory = (calculation: string) => {
-    setHistory(prev => [calculation, ...prev.slice(0, 9)]); // Keep last 10 calculations
+    setHistory(prev => [calculation, ...prev.slice(0, 9)]);
   };
 
-  // Scientific functions
   const scientificOperation = (func: string) => {
     const value = parseFloat(display);
     let result = 0;
@@ -75,7 +64,6 @@ const Calculator: React.FC = () => {
     setDisplay(String(result));
   };
 
-  // Memory functions
   const memoryStore = () => {
     setMemory(parseFloat(display));
     setShowMemory(true);
@@ -132,8 +120,6 @@ const Calculator: React.FC = () => {
         return firstValue * secondValue;
       case '÷':
         return firstValue / secondValue;
-      case '=':
-        return secondValue;
       default:
         return secondValue;
     }
@@ -146,9 +132,7 @@ const Calculator: React.FC = () => {
       const newValue = calculate(previousValue, inputValue, operation);
       const calculation = `${previousValue} ${operation} ${inputValue} = ${newValue}`;
       
-      // Show the complete expression with equals
       setCurrentExpression(`${previousValue} ${operation} ${inputValue} =`);
-      
       addToHistory(calculation);
       setDisplay(String(newValue));
       setPreviousValue(null);
@@ -189,74 +173,81 @@ const Calculator: React.FC = () => {
   };
 
   return (
-    <div className={`calculator-container theme-${theme}`}>
-      <div className="calculator-header">
-        <button className="back-btn" onClick={() => navigate('/')}>
-          <span>←</span> Back to Home
+    <div className={`calculator-app theme-${theme}`}>
+      {/* Header */}
+      <header className="app-header">
+        <button className="back-button" onClick={() => navigate('/')}>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M12.5 15L7.5 10L12.5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span>Back</span>
         </button>
-        <h1 className="calculator-title">
-          <span className="calc-icon">⚡</span>
-          Smart Calculator
-        </h1>
         
-        {/* Theme and Feature Toggles */}
-        <div className="feature-toggles">
-          <div className="theme-selector">
-            <select 
-              value={theme} 
-              onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'glassmorphism' | 'liquid' | 'minimal')}
-              className="theme-select"
-            >
-              <option value="minimal">Minimal</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-              <option value="glassmorphism">Glass Dark</option>
-              <option value="liquid">Liquid Dark</option>
-            </select>
-          </div>
-          
-          <button 
-            className={`toggle-btn ${calculatorMode !== 'standard' ? 'active' : ''}`}
-            onClick={() => setCalculatorMode(calculatorMode === 'standard' ? 'programmer' : 'standard')}
-            title="Toggle Programmer Mode"
+        <div className="app-title">
+          <svg className="title-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
+            <line x1="4" y1="9" x2="20" y2="9" stroke="currentColor" strokeWidth="2"/>
+            <line x1="9" y1="9" x2="9" y2="20" stroke="currentColor" strokeWidth="2"/>
+          </svg>
+          <h1>Smart Calculator</h1>
+        </div>
+
+        <div className="header-controls">
+          <select 
+            value={theme} 
+            onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'professional')}
+            className="theme-selector"
           >
-            <span className="icon">BIN</span>
-          </button>
-          
-          <button 
-            className={`toggle-btn ${isScientific ? 'active' : ''}`}
-            onClick={() => setIsScientific(!isScientific)}
-            title="Toggle Scientific Mode"
-          >
-            <span className="icon">f(x)</span>
-          </button>
-          
-          <button 
-            className={`toggle-btn ${showHistory ? 'active' : ''}`}
-            onClick={() => setShowHistory(!showHistory)}
-            title="Toggle History"
-          >
-            <span className="icon">H</span>
-          </button>
+            <option value="professional">Professional</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
 
           <button 
-            className={`toggle-btn ${isAnimated ? 'active' : ''}`}
-            onClick={() => setIsAnimated(!isAnimated)}
-            title="Toggle Animations"
+            className={`control-btn ${calculatorMode === 'programmer' ? 'active' : ''}`}
+            onClick={() => setCalculatorMode(calculatorMode === 'standard' ? 'programmer' : 'standard')}
+            title="Programmer Mode"
           >
-            <span className="icon">FX</span>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <text x="2" y="14" fontSize="10" fill="currentColor" fontFamily="monospace">01</text>
+            </svg>
+          </button>
+          
+          <button 
+            className={`control-btn ${isScientific ? 'active' : ''}`}
+            onClick={() => setIsScientific(!isScientific)}
+            title="Scientific Mode"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <text x="3" y="14" fontSize="12" fill="currentColor">f(x)</text>
+            </svg>
+          </button>
+          
+          <button 
+            className={`control-btn ${showHistory ? 'active' : ''}`}
+            onClick={() => setShowHistory(!showHistory)}
+            title="History"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="2"/>
+              <path d="M10 6V10L13 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="calculator-layout">
-        {/* History Panel */}
+      {/* Main Content */}
+      <div className="app-content">
+        {/* History Sidebar */}
         {showHistory && (
-          <div className="history-panel">
-            <h3>History</h3>
+          <aside className="history-sidebar">
+            <div className="sidebar-header">
+              <h3>History</h3>
+              <button className="clear-btn" onClick={() => setHistory([])}>Clear</button>
+            </div>
             <div className="history-list">
               {history.length === 0 ? (
-                <p className="no-history">No calculations yet</p>
+                <p className="empty-message">No calculations yet</p>
               ) : (
                 history.map((calc, index) => (
                   <div key={index} className="history-item" onClick={() => {
@@ -268,193 +259,98 @@ const Calculator: React.FC = () => {
                 ))
               )}
             </div>
-            <button className="clear-history" onClick={() => {
-              setHistory([]);
-            }}>
-              Clear History
-            </button>
-          </div>
+          </aside>
         )}
 
-        <div className="calculator">
+        {/* Calculator */}
+        <main className="calculator-main">
+          {/* Display */}
           <div className="calculator-display">
-            <div className="display-container">
-              {/* Top line: Shows the expression like "78 × 99 =" */}
-              <div className="expression-display">
-                {currentExpression ? (
-                  <span className="expression-text">{currentExpression}</span>
-                ) : showMemory && memory !== 0 ? (
-                  <span className="memory-indicator">M: {memory}</span>
-                ) : (
-                  <span className="placeholder">&nbsp;</span>
-                )}
-              </div>
-              
-              {/* Bottom line: Shows the large result like "7,722" */}
-              <div className="result-display">
-                <span className="result-value">{display}</span>
-              </div>
+            <div className="expression-line">
+              {currentExpression || (showMemory && memory !== 0 ? `M: ${memory}` : '\u00A0')}
+            </div>
+            <div className="result-line">
+              {display}
             </div>
           </div>
 
-          {/* Scientific Functions Panel */}
+          {/* Scientific Panel */}
           {isScientific && (
             <div className="scientific-panel">
-              <button className="btn btn-scientific" onClick={() => scientificOperation('sin')}>sin</button>
-              <button className="btn btn-scientific" onClick={() => scientificOperation('cos')}>cos</button>
-              <button className="btn btn-scientific" onClick={() => scientificOperation('tan')}>tan</button>
-              <button className="btn btn-scientific" onClick={() => scientificOperation('log')}>log</button>
-              <button className="btn btn-scientific" onClick={() => scientificOperation('ln')}>ln</button>
-              <button className="btn btn-scientific" onClick={() => scientificOperation('sqrt')}>√</button>
-              <button className="btn btn-scientific" onClick={() => scientificOperation('square')}>x²</button>
-              <button className="btn btn-scientific" onClick={() => scientificOperation('cube')}>x³</button>
-              <button className="btn btn-scientific" onClick={() => scientificOperation('factorial')}>x!</button>
-              <button className="btn btn-scientific" onClick={() => scientificOperation('pi')}>π</button>
-              <button className="btn btn-scientific" onClick={() => scientificOperation('e')}>e</button>
+              <button className="sci-btn" onClick={() => scientificOperation('sin')}>sin</button>
+              <button className="sci-btn" onClick={() => scientificOperation('cos')}>cos</button>
+              <button className="sci-btn" onClick={() => scientificOperation('tan')}>tan</button>
+              <button className="sci-btn" onClick={() => scientificOperation('log')}>log</button>
+              <button className="sci-btn" onClick={() => scientificOperation('ln')}>ln</button>
+              <button className="sci-btn" onClick={() => scientificOperation('sqrt')}>√</button>
+              <button className="sci-btn" onClick={() => scientificOperation('square')}>x²</button>
+              <button className="sci-btn" onClick={() => scientificOperation('cube')}>x³</button>
+              <button className="sci-btn" onClick={() => scientificOperation('factorial')}>x!</button>
+              <button className="sci-btn" onClick={() => scientificOperation('pi')}>π</button>
+              <button className="sci-btn" onClick={() => scientificOperation('e')}>e</button>
             </div>
           )}
 
-          {/* Programmer Mode Panel */}
+          {/* Programmer Panel */}
           {calculatorMode === 'programmer' && (
             <div className="programmer-panel">
-              <div className="number-systems">
-                <div className="system-row">
-                  <span className="system-label">HEX:</span>
-                  <span className="system-value">{parseInt(display || '0').toString(16).toUpperCase()}</span>
+              <div className="base-conversions">
+                <div className="base-item">
+                  <span className="base-label">HEX</span>
+                  <span className="base-value">{parseInt(display || '0').toString(16).toUpperCase()}</span>
                 </div>
-                <div className="system-row">
-                  <span className="system-label">DEC:</span>
-                  <span className="system-value">{parseInt(display || '0')}</span>
+                <div className="base-item">
+                  <span className="base-label">DEC</span>
+                  <span className="base-value">{parseInt(display || '0')}</span>
                 </div>
-                <div className="system-row">
-                  <span className="system-label">OCT:</span>
-                  <span className="system-value">{parseInt(display || '0').toString(8)}</span>
+                <div className="base-item">
+                  <span className="base-label">OCT</span>
+                  <span className="base-value">{parseInt(display || '0').toString(8)}</span>
                 </div>
-                <div className="system-row">
-                  <span className="system-label">BIN:</span>
-                  <span className="system-value">{parseInt(display || '0').toString(2)}</span>
+                <div className="base-item">
+                  <span className="base-label">BIN</span>
+                  <span className="base-value">{parseInt(display || '0').toString(2)}</span>
                 </div>
-              </div>
-              <div className="bitwise-operations">
-                <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) & parseInt('255')))}>AND</button>
-                <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) | parseInt('255')))}>OR</button>
-                <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) ^ parseInt('255')))}>XOR</button>
-                <button className="btn btn-bitwise" onClick={() => setDisplay(String(~parseInt(display)))}>NOT</button>
-                <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) << 1))}>{'<<'}</button>
-                <button className="btn btn-bitwise" onClick={() => setDisplay(String(parseInt(display) >> 1))}>{'>>'}
-                </button>
               </div>
             </div>
           )}
 
-          {/* Memory Functions */}
+          {/* Memory Panel */}
           <div className="memory-panel">
-            <button className="btn btn-memory" onClick={() => {
-              memoryClear();
-            }} title="Memory Clear">MC</button>
-            <button className="btn btn-memory" onClick={() => {
-              memoryRecall();
-            }} title="Memory Recall">MR</button>
-            <button className="btn btn-memory" onClick={() => {
-              memoryStore();
-            }} title="Memory Store">MS</button>
-            <button className="btn btn-memory" onClick={() => {
-              memoryAdd();
-            }} title="Memory Add">M+</button>
+            <button className="mem-btn" onClick={memoryClear}>MC</button>
+            <button className="mem-btn" onClick={memoryRecall}>MR</button>
+            <button className="mem-btn" onClick={memoryStore}>MS</button>
+            <button className="mem-btn" onClick={memoryAdd}>M+</button>
           </div>
 
+          {/* Keypad */}
           <div className="calculator-keypad">
-            {/* Row 1 */}
-            <button className="btn btn-function" onClick={() => {
-              clear();
-            }}>
-              AC
-            </button>
-            <button className="btn btn-function" onClick={() => {
-              clearEntry();
-            }}>
-              CE
-            </button>
-            <button className="btn btn-function" onClick={() => {
-              percentage();
-            }}>
-              %
-            </button>
-            <button className="btn btn-operator" onClick={() => {
-              inputOperation('÷');
-            }}>
-              ÷
-            </button>
+            <button className="key key-function" onClick={clear}>AC</button>
+            <button className="key key-function" onClick={clearEntry}>CE</button>
+            <button className="key key-function" onClick={percentage}>%</button>
+            <button className="key key-operator" onClick={() => inputOperation('÷')}>÷</button>
 
-            {/* Row 2 */}
-            <button className="btn btn-number" onClick={() => inputNumber('7')}>
-              7
-            </button>
-            <button className="btn btn-number" onClick={() => inputNumber('8')}>
-              8
-            </button>
-            <button className="btn btn-number" onClick={() => inputNumber('9')}>
-              9
-            </button>
-            <button className="btn btn-operator" onClick={() => {
-              inputOperation('×');
-            }}>
-              ×
-            </button>
+            <button className="key key-number" onClick={() => inputNumber('7')}>7</button>
+            <button className="key key-number" onClick={() => inputNumber('8')}>8</button>
+            <button className="key key-number" onClick={() => inputNumber('9')}>9</button>
+            <button className="key key-operator" onClick={() => inputOperation('×')}>×</button>
 
-            {/* Row 3 */}
-            <button className="btn btn-number" onClick={() => inputNumber('4')}>
-              4
-            </button>
-            <button className="btn btn-number" onClick={() => inputNumber('5')}>
-              5
-            </button>
-            <button className="btn btn-number" onClick={() => inputNumber('6')}>
-              6
-            </button>
-            <button className="btn btn-operator" onClick={() => {
-              inputOperation('-');
-            }}>
-              −
-            </button>
+            <button className="key key-number" onClick={() => inputNumber('4')}>4</button>
+            <button className="key key-number" onClick={() => inputNumber('5')}>5</button>
+            <button className="key key-number" onClick={() => inputNumber('6')}>6</button>
+            <button className="key key-operator" onClick={() => inputOperation('-')}>−</button>
 
-            {/* Row 4 */}
-            <button className="btn btn-number" onClick={() => inputNumber('1')}>
-              1
-            </button>
-            <button className="btn btn-number" onClick={() => inputNumber('2')}>
-              2
-            </button>
-            <button className="btn btn-number" onClick={() => inputNumber('3')}>
-              3
-            </button>
-            <button className="btn btn-operator" onClick={() => {
-              inputOperation('+');
-            }}>
-              +
-            </button>
+            <button className="key key-number" onClick={() => inputNumber('1')}>1</button>
+            <button className="key key-number" onClick={() => inputNumber('2')}>2</button>
+            <button className="key key-number" onClick={() => inputNumber('3')}>3</button>
+            <button className="key key-operator" onClick={() => inputOperation('+')}>+</button>
 
-            {/* Row 5 */}
-            <button className="btn btn-number btn-zero" onClick={() => inputNumber('0')}>
-              0
-            </button>
-            <button className="btn btn-function" onClick={() => {
-              inputDecimal();
-            }}>
-              .
-            </button>
-            <button className="btn btn-function" onClick={() => {
-              toggleSign();
-            }}>
-              ±
-            </button>
-            <button className="btn btn-equals" onClick={() => {
-              performCalculation();
-            }}>
-              =
-            </button>
+            <button className="key key-number key-zero" onClick={() => inputNumber('0')}>0</button>
+            <button className="key key-function" onClick={inputDecimal}>.</button>
+            <button className="key key-function" onClick={toggleSign}>±</button>
+            <button className="key key-equals" onClick={performCalculation}>=</button>
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );
