@@ -22,6 +22,45 @@ const Calculator: React.FC = () => {
   const [calculationSteps, setCalculationSteps] = useState<string[]>([]);
   const navigate = useNavigate();
 
+  // Keyboard support
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Numbers
+      if (e.key >= '0' && e.key <= '9') {
+        inputNumber(e.key);
+      }
+      // Operators
+      else if (e.key === '+') inputOperation('+');
+      else if (e.key === '-') inputOperation('-');
+      else if (e.key === '*') inputOperation('×');
+      else if (e.key === '/') {
+        e.preventDefault();
+        inputOperation('÷');
+      }
+      // Actions
+      else if (e.key === 'Enter' || e.key === '=') {
+        e.preventDefault();
+        performCalculation();
+      }
+      else if (e.key === 'Escape') clear();
+      else if (e.key === 'Backspace') backspace();
+      else if (e.key === '.') inputDecimal();
+      else if (e.key === '%') percentage();
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [display, previousValue, operation, waitingForOperand]);
+
+  // Backspace function
+  const backspace = () => {
+    if (display.length > 1) {
+      setDisplay(display.slice(0, -1));
+    } else {
+      setDisplay('0');
+    }
+  };
+
   // Meme responses for broke student mode
   const memeResponses = [
     "Error: Insufficient Funds 💸",
@@ -30,7 +69,20 @@ const Calculator: React.FC = () => {
     "This calculation costs extra 💰",
     "404: Money not found 🏦",
     "Your GPA called, it's worried 📉",
-    "Even the calculator is stressed 😰"
+    "Even the calculator is stressed 😰",
+    "Calculating... still broke 🤷",
+    "Error: Too many zeros in debt 💳",
+    "Student loan intensifies 📈",
+    "Ramen budget exceeded 🍜",
+    "Coffee > Math 😴",
+    "Brain.exe has stopped working 🧠",
+    "Is this even legal? 🤔",
+    "My therapist will hear about this 😤",
+    "Crying in STEM 😢",
+    "Parents: How's college? Me: 🔥",
+    "Sleep schedule not found ⏰",
+    "Procrastination level: MAX 📱",
+    "Due tomorrow? Do tomorrow! 📅"
   ];
 
   // Smart explanations
@@ -64,13 +116,13 @@ const Calculator: React.FC = () => {
   // Particle animation effect
   const createParticles = () => {
     if (!showAnimations) return;
-    const newParticles = Array.from({length: 8}, (_, i) => ({
+    const newParticles = Array.from({length: 15}, (_, i) => ({
       id: Date.now() + i,
       x: Math.random() * 100,
       y: Math.random() * 100
     }));
     setParticles(newParticles);
-    setTimeout(() => setParticles([]), 1000);
+    setTimeout(() => setParticles([]), 1500);
   };
 
   // Shake animation for complex calculations
@@ -224,9 +276,14 @@ const Calculator: React.FC = () => {
         }
       }
       
-      // Create particles for perfect numbers
-      if ([100, 1000, 10000].includes(Math.abs(newValue)) || newValue % 1000 === 0) {
-        createParticles();
+      // Create particles for perfect numbers OR when animations are enabled
+      if (showAnimations) {
+        if ([100, 1000, 10000].includes(Math.abs(newValue)) || newValue % 1000 === 0) {
+          createParticles();
+        } else if (Math.random() > 0.7) {
+          // 30% chance to show particles on any calculation when FX is on
+          createParticles();
+        }
       }
       
       setCurrentExpression(`${previousValue} ${operation} ${inputValue} =`);
@@ -270,7 +327,7 @@ const Calculator: React.FC = () => {
   };
 
   return (
-    <div className={`calculator-app theme-${theme} ${shake ? 'shake' : ''}`}>
+    <div className={`calculator-app theme-${theme} ${shake ? 'shake' : ''} ${showAnimations ? 'fx-active' : ''}`}>
       {/* Particle Effects */}
       {particles.length > 0 && (
         <div className="particles-container">
@@ -561,7 +618,11 @@ const Calculator: React.FC = () => {
           <div className="calculator-keypad">
             <button className="key key-function" onClick={clear}>AC</button>
             <button className="key key-function" onClick={clearEntry}>CE</button>
-            <button className="key key-function" onClick={percentage}>%</button>
+            <button className="key key-function" onClick={backspace}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M9 9L15 15M15 9L9 15M20 12C20 16.4183 16.4183 20 12 20H7L3 16L7 12L3 8L7 4H12C16.4183 4 20 7.58172 20 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
             <button className="key key-operator" onClick={() => inputOperation('÷')}>÷</button>
 
             <button className="key key-number" onClick={() => inputNumber('7')}>7</button>
@@ -581,7 +642,7 @@ const Calculator: React.FC = () => {
 
             <button className="key key-number key-zero" onClick={() => inputNumber('0')}>0</button>
             <button className="key key-function" onClick={inputDecimal}>.</button>
-            <button className="key key-function" onClick={toggleSign}>±</button>
+            <button className="key key-function" onClick={percentage}>%</button>
             <button className="key key-equals" onClick={performCalculation}>=</button>
           </div>
         </main>
