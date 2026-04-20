@@ -7,7 +7,7 @@ const Calculator: React.FC = () => {
   const [previousValue, setPreviousValue] = useState<number | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
   const [waitingForOperand, setWaitingForOperand] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark' | 'glassmorphism' | 'liquid' | 'minimal'>('glassmorphism');
+  const [theme, setTheme] = useState<'light' | 'dark' | 'glassmorphism' | 'liquid' | 'minimal'>('minimal');
   const [history, setHistory] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [isScientific, setIsScientific] = useState(false);
@@ -32,14 +32,14 @@ const Calculator: React.FC = () => {
 
     if (previousValue === null) {
       setPreviousValue(inputValue);
-      setCurrentCalculation(`${inputValue} ${nextOperation}`);
+      setCurrentExpression(`${inputValue} ${nextOperation}`);
     } else if (operation) {
       const currentValue = previousValue || 0;
       const newValue = calculate(currentValue, inputValue, operation);
       
       setDisplay(String(newValue));
       setPreviousValue(newValue);
-      setCurrentCalculation(`${newValue} ${nextOperation}`);
+      setCurrentExpression(`${newValue} ${nextOperation}`);
     }
 
     setWaitingForOperand(true);
@@ -69,7 +69,7 @@ const Calculator: React.FC = () => {
   };
 
   // Add calculation steps tracking
-  const [currentCalculation, setCurrentCalculation] = useState<string>('');
+  const [currentExpression, setCurrentExpression] = useState<string>('');
 
   // Add to history
   const addToHistory = (calculation: string) => {
@@ -145,11 +145,14 @@ const Calculator: React.FC = () => {
     if (previousValue !== null && operation) {
       const newValue = calculate(previousValue, inputValue, operation);
       const calculation = `${previousValue} ${operation} ${inputValue} = ${newValue}`;
+      
+      // Show the complete expression with equals
+      setCurrentExpression(`${previousValue} ${operation} ${inputValue} =`);
+      
       addToHistory(calculation);
       setDisplay(String(newValue));
       setPreviousValue(null);
       setOperation(null);
-      setCurrentCalculation('');
       setWaitingForOperand(true);
     }
   };
@@ -159,6 +162,7 @@ const Calculator: React.FC = () => {
     setPreviousValue(null);
     setOperation(null);
     setWaitingForOperand(false);
+    setCurrentExpression('');
   };
 
   const clearEntry = () => {
@@ -203,11 +207,11 @@ const Calculator: React.FC = () => {
               onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'glassmorphism' | 'liquid' | 'minimal')}
               className="theme-select"
             >
+              <option value="minimal">Minimal</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
               <option value="glassmorphism">Glass Dark</option>
               <option value="liquid">Liquid Dark</option>
-              <option value="minimal">Minimal</option>
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
             </select>
           </div>
           
@@ -274,22 +278,23 @@ const Calculator: React.FC = () => {
 
         <div className="calculator">
           <div className="calculator-display">
-            <div className="display-value">{display}</div>
-            {showCalculationSteps && currentCalculation && (
-              <div className="calculation-preview">
-                {currentCalculation}
+            <div className="display-container">
+              {/* Top line: Shows the expression like "78 × 99 =" */}
+              <div className="expression-display">
+                {currentExpression ? (
+                  <span className="expression-text">{currentExpression}</span>
+                ) : showMemory && memory !== 0 ? (
+                  <span className="memory-indicator">M: {memory}</span>
+                ) : (
+                  <span className="placeholder">&nbsp;</span>
+                )}
               </div>
-            )}
-            {operation && previousValue !== null && (
-              <div className="operation-indicator">
-                {previousValue} {operation}
+              
+              {/* Bottom line: Shows the large result like "7,722" */}
+              <div className="result-display">
+                <span className="result-value">{display}</span>
               </div>
-            )}
-            {showMemory && memory !== 0 && (
-              <div className="memory-indicator">
-                M: {memory}
-              </div>
-            )}
+            </div>
           </div>
 
           {/* Scientific Functions Panel */}

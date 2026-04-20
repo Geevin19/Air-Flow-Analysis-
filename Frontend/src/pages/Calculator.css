@@ -414,81 +414,121 @@
   position: relative;
   overflow: hidden;
   backdrop-filter: blur(20px);
+  min-height: 120px;
 }
 
 .theme-glassmorphism .calculator-display {
   background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .theme-liquid .calculator-display {
   background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .theme-minimal .calculator-display {
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .theme-dark .calculator-display {
   background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .theme-light .calculator-display {
-  background: rgba(0, 0, 0, 0.02);
+  background: rgba(0, 0, 0, 0.01);
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-.display-value {
-  font-size: 48px;
-  font-weight: 300;
-  text-align: right;
-  font-family: 'SF Mono', Monaco, monospace;
-  letter-spacing: -1px;
-  min-height: 60px;
+.display-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: space-between;
+}
+
+.expression-display {
+  min-height: 28px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  word-break: break-all;
+  margin-bottom: 12px;
 }
 
-.theme-glassmorphism .display-value,
-.theme-liquid .display-value,
-.theme-dark .display-value {
-  color: white;
+.result-display {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 70px;
 }
 
-.theme-minimal .display-value,
-.theme-light .display-value {
-  color: #1C1C1E;
-}
-
-.operation-indicator {
-  font-size: 16px;
-  text-align: right;
-  margin-top: 8px;
+.expression-text {
+  font-size: 20px;
   font-family: 'SF Mono', Monaco, monospace;
+  font-weight: 400;
   opacity: 0.7;
+  letter-spacing: 0.5px;
 }
 
-.calculation-preview {
-  font-size: 18px;
+.result-value {
+  font-size: 56px;
+  font-weight: 200;
   text-align: right;
-  margin-top: 4px;
   font-family: 'SF Mono', Monaco, monospace;
-  opacity: 0.8;
-  color: #007AFF;
-}
-
-.theme-glassmorphism .calculation-preview,
-.theme-liquid .calculation-preview,
-.theme-dark .calculation-preview {
-  color: #64B5F6;
+  letter-spacing: -2px;
+  line-height: 1;
+  word-break: break-all;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .memory-indicator {
-  font-size: 14px;
-  text-align: left;
-  margin-top: 8px;
+  font-size: 16px;
   font-family: 'SF Mono', Monaco, monospace;
+  font-weight: 500;
+  color: #FF9500;
   opacity: 0.8;
+}
+
+.placeholder {
+  font-size: 20px;
+  opacity: 0;
+}
+
+/* Theme-specific colors */
+.theme-glassmorphism .expression-text,
+.theme-liquid .expression-text,
+.theme-dark .expression-text {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.theme-minimal .expression-text,
+.theme-light .expression-text {
+  color: rgba(28, 28, 30, 0.7);
+}
+
+.theme-glassmorphism .result-value,
+.theme-liquid .result-value,
+.theme-dark .result-value {
+  color: white;
+}
+
+.theme-minimal .result-value,
+.theme-light .result-value {
+  color: #1C1C1E;
+}
+
+.theme-glassmorphism .memory-indicator,
+.theme-liquid .memory-indicator,
+.theme-dark .memory-indicator {
+  color: #FFB74D;
+}
+
+.theme-minimal .memory-indicator,
+.theme-light .memory-indicator {
+  color: #FF9500;
 }
 
 /* Scientific Panel */
@@ -892,8 +932,26 @@
     font-size: 20px;
   }
   
-  .display-value {
-    font-size: 36px;
+  .result-value {
+    font-size: 42px;
+  }
+  
+  .expression-text {
+    font-size: 16px;
+  }
+  
+  .calculator-display {
+    min-height: 100px;
+    padding: 20px 16px;
+  }
+  
+  .result-display {
+    min-height: 56px;
+  }
+  
+  .expression-display {
+    min-height: 24px;
+    margin-bottom: 8px;
   }
   
   .scientific-panel {
