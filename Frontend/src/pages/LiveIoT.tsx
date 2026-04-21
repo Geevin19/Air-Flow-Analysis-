@@ -88,6 +88,7 @@ export default function LiveIoT() {
   const [newSsid, setNewSsid]         = useState('');
   const [newPass, setNewPass]         = useState('');
   const [wifiMsg, setWifiMsg]         = useState('');
+  const [deviceId, setDeviceId]       = useState('ARDUINO_001');
   const wsRef       = useRef<WebSocket | null>(null);
   const timerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastId     = useRef(0);
@@ -198,6 +199,27 @@ export default function LiveIoT() {
         body: JSON.stringify({ ssid: wifiSsid, password: wifiPass }),
       }).catch(() => {});
     }
+    // Verify device ID before opening dashboard
+    fetch(`${API_URL}/iot/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_id: deviceId.trim(), ip: arduinoIp }),
+    }).then(async r => {
+      if (!r.ok) {
+        const err = await r.json();
+        setStatus('error');
+        setErrorMsg(err.detail || 'Device not found. Make sure Arduino is running and sending data to the backend.');
+        return;
+      }
+      // Device verified — open WebSocket
+      openWebSocket();
+    }).catch(() => {
+      // If backend unreachable, still try to connect
+      openWebSocket();
+    });
+  }
+
+  function openWebSocket() {
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
     ws.onopen = () => {
@@ -350,6 +372,18 @@ export default function LiveIoT() {
                 <p style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>Find this in Arduino Serial Monitor after WiFi connects</p>
               </div>
 
+              <div style={{ marginBottom:14 }}>
+                <label style={idleLabel}>
+                  Device ID <span style={{ color:'#ef4444', fontWeight:700 }}>*</span>
+                </label>
+                <input type="text" value={deviceId} onChange={e => setDeviceId(e.target.value.toUpperCase())}
+                  placeholder="e.g. ARDUINO_001"
+                  style={{ ...idleInput, fontFamily:'"JetBrains Mono",monospace', fontWeight:700, letterSpacing:'0.05em' }} />
+                <p style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>
+                  Must match <code style={{ background:'#f1f5f9', padding:'1px 5px', borderRadius:4 }}>device_id</code> in your Arduino sketch
+                </p>
+              </div>
+
               <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px', marginBottom:20 }}>
                 <div style={{ fontSize:12, fontWeight:700, color:'#374151', marginBottom:12 }}>WiFi Credentials (sent to Arduino)</div>
                 <div style={{ marginBottom:10 }}>
@@ -399,6 +433,7 @@ export default function LiveIoT() {
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ width:10, height:10, borderRadius:'50%', background: arduinoActive?'#22c55e':'#f59e0b', display:'inline-block', animation: arduinoActive?'glow 2s infinite':'pulse 1.5s infinite' }} />
                 <span style={s.statusTxt}>{arduinoActive ? 'Live — data streaming' : 'Waiting for Arduino…'}</span>
+              <span style={{ fontSize:11, color:'#94a3b8', background:'#f1f5f9', padding:'2px 8px', borderRadius:6, fontFamily:'monospace', fontWeight:700 }}>{deviceId}</span>
               {arduinoIp && (
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                   {showIpEdit ? (

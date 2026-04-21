@@ -137,6 +137,14 @@ async def receive_iot_data(payload: SensorPayload):
     data: dict = {k: v for k, v in payload.dict().items() if v is not None}
     data["timestamp"] = datetime.utcnow().isoformat()
 
+    # Register device when it posts data
+    device_id = data.get("device_id")
+    if device_id:
+        registered_devices[device_id] = {
+            "last_seen": datetime.utcnow().isoformat(),
+            "ip": "wifi",
+        }
+
     # Run physics if we have at least temperature + humidity
     if payload.temperature is not None and payload.humidity is not None:
         try:
@@ -378,7 +386,20 @@ def delete_simulation(simulation_id: int, current_user: User = Depends(get_curre
     db.commit()
     return {'message': 'Simulation deleted successfully'}
 
-# ── Device config — Arduino polls this for limits + WiFi ─────────────────────
+# ── Device registry — tracks known device IDs ────────────────────────────────
+registered_devices: dict = {}   # device_id → {ip, last_seen}
+
+@app.post("/iot/verify")
+async def verify_device(data: dict):
+    """Frontend calls this to verify device_id before opening dashboard."""
+    device_id = data.get("device_id", "").strip()
+    ip        = data.get("ip", "").strip()
+    if not device_id:
+        raise HTTPException(status_code=400, detail="Device ID is required")
+    # Check if this device has posted data recently
+    if device_id not in registered_devices:
+        raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found. Make sure Arduino is running and sending data.")
+    return {"status": "verified", "device_id": device_id, "info": registered_devices[device_id]}
 device_config: dict = {
     "temp_limit":     35.0,
     "humidity_limit": 70.0,
