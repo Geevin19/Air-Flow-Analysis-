@@ -683,7 +683,7 @@ export default function LiveIoT() {
                     {/* Sensor values */}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
                       {(['temperature','humidity'] as const).filter(k => latest?.[k] != null).map(k => (
-                        <div key={k} style={{ background:'#f8fafc', borderRadius:10, padding:'12px 14px', border:`1px solid ${alertedKeys.has(k)?'#fca5a5':'#e2e8f0'}` }}>
+                        <div key={k} style={{ background:'#f8fafc', borderRadius:10, padding:'16px 14px', border:`1px solid ${alertedKeys.has(k)?'#fca5a5':'#e2e8f0'}`, minHeight:120 }}>
                           <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>{SENSOR_META[k]?.label}</div>
                           <div style={{ fontSize:22, fontWeight:800, color: alertedKeys.has(k)?'#dc2626':SENSOR_META[k]?.color, fontFamily:'monospace' }}>
                             {((latest as any)[k] as number).toFixed(2)}
@@ -731,7 +731,7 @@ export default function LiveIoT() {
                   </div>
                   <div style={{ padding:'16px' }}>
                     {/* Gas value */}
-                    <div style={{ background:'#fef2f2', borderRadius:10, padding:'12px 14px', border:`1px solid ${alertedKeys.has('gas')?'#fca5a5':'#fecaca'}`, marginBottom:14 }}>
+                    <div style={{ background:'#fef2f2', borderRadius:10, padding:'16px 14px', border:`1px solid ${alertedKeys.has('gas')?'#fca5a5':'#fecaca'}`, marginBottom:14, minHeight:120 }}>
                       <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Gas Sensor</div>
                       <div style={{ fontSize:22, fontWeight:800, color: alertedKeys.has('gas')?'#dc2626':'#ef4444', fontFamily:'monospace' }}>
                         {latest?.gas?.toFixed(0) ?? '—'}
