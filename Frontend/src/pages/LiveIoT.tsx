@@ -31,6 +31,7 @@ interface Toast { id: number; msg: string; metric: string; }
 const SENSOR_META: Record<string, { label: string; unit: string; color: string }> = {
   temperature: { label: 'Temperature', unit: '°C',  color: '#f97316' },
   humidity:    { label: 'Humidity',    unit: '%',   color: '#6366f1' },
+  gas:         { label: 'Gas',         unit: 'ppm', color: '#ef4444' },
   pressure:    { label: 'Pressure',    unit: 'Pa',  color: '#0ea5e9' },
   flow_rate:   { label: 'Flow Rate',   unit: 'm/s', color: '#10b981' },
   airflow:     { label: 'Airflow',     unit: 'm/s', color: '#10b981' },
@@ -102,7 +103,7 @@ export default function LiveIoT() {
   useEffect(() => { alertedRef.current = alertedKeys; }, [alertedKeys]);
 
   const sensorKeys = latest
-    ? Object.keys(latest).filter(k => k !== 'timestamp' && typeof (latest as any)[k] === 'number')
+    ? Object.keys(latest).filter(k => !['timestamp','device_id','pipe_diameter_m','flow_angle_deg','k_calibration'].includes(k) && typeof (latest as any)[k] === 'number')
     : [];
 
   const physics = useMemo(() => {

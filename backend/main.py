@@ -121,13 +121,15 @@ async def iot_websocket(websocket: WebSocket):
 
 # ── Arduino POSTs here, data is instantly pushed to all browsers ──
 class SensorPayload(BaseModel):
-    pressure:             Optional[float] = None   # Pa  (total atmospheric)
-    temperature:          Optional[float] = None   # °C  inside / T1
-    temperature_outside:  Optional[float] = None   # °C  outside / T2
-    flow_rate:            Optional[float] = None   # raw sensor value (optional)
-    humidity:             Optional[float] = None   # %
-    airflow:              Optional[float] = None   # raw sensor value (optional)
-    pipe_diameter_m:      Optional[float] = 0.05  # m  (default 5 cm)
+    device_id:            Optional[str]   = None   # Arduino device identifier
+    pressure:             Optional[float] = None
+    temperature:          Optional[float] = None
+    temperature_outside:  Optional[float] = None
+    flow_rate:            Optional[float] = None
+    humidity:             Optional[float] = None
+    airflow:              Optional[float] = None
+    gas:                  Optional[int]   = None   # gas sensor value
+    pipe_diameter_m:      Optional[float] = 0.05
     flow_angle_deg:       Optional[float] = 0.0
     k_calibration:        Optional[float] = 0.04
 
