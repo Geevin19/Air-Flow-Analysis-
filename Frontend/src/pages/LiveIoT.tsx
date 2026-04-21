@@ -77,18 +77,19 @@ export default function LiveIoT() {
   const [limits, setLimits]           = useState<Record<string, string>>({});
   const [showLimits, setShowLimits]   = useState(false);
   const [alertedKeys, setAlertedKeys] = useState<Set<string>>(new Set());
-  const [arduinoIp, setArduinoIp]     = useState('192.168.8.102');
+  const [arduinoIp, setArduinoIp]     = useState(() => localStorage.getItem('arduino_ip') || '192.168.8.102');
   const [showIpEdit, setShowIpEdit]   = useState(false);
   const [newIp, setNewIp]             = useState('');
   const [isWorker, setIsWorker]       = useState(false);
   const [limitPending, setLimitPending] = useState<Set<string>>(new Set());
-  const [wifiSsid, setWifiSsid]       = useState('');
+  const [wifiSsid, setWifiSsid]       = useState(() => localStorage.getItem('arduino_ssid') || '');
   const [wifiPass, setWifiPass]       = useState('');
   const [showWifiChange, setShowWifiChange] = useState(false);
   const [newSsid, setNewSsid]         = useState('');
   const [newPass, setNewPass]         = useState('');
   const [wifiMsg, setWifiMsg]         = useState('');
-  const [deviceId, setDeviceId]       = useState('ARDUINO_001');
+  const [deviceId, setDeviceId]       = useState(() => localStorage.getItem('arduino_device_id') || 'ARDUINO_001');
+  const [isFirstTime]                 = useState(() => !localStorage.getItem('arduino_device_id'));
   const wsRef       = useRef<WebSocket | null>(null);
   const timerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastId     = useRef(0);
@@ -211,6 +212,10 @@ export default function LiveIoT() {
         setErrorMsg(err.detail || 'Device not found. Make sure Arduino is running and sending data to the backend.');
         return;
       }
+      // Save to localStorage so next visit skips setup
+      localStorage.setItem('arduino_ip',        arduinoIp);
+      localStorage.setItem('arduino_device_id', deviceId.trim());
+      localStorage.setItem('arduino_ssid',      wifiSsid);
       // Device verified — open WebSocket
       openWebSocket();
     }).catch(() => {
@@ -294,6 +299,14 @@ export default function LiveIoT() {
 
   useEffect(() => () => { wsRef.current?.close(); if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
+  // Auto-connect on return visits (skip setup screen)
+  useEffect(() => {
+    if (!isFirstTime) {
+      connect();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const regimeColor = physics?.regime === 'Laminar' ? '#10b981' : physics?.regime === 'Transition' ? '#f59e0b' : '#ef4444';
 
   // All configurable limit keys
@@ -356,7 +369,7 @@ export default function LiveIoT() {
 
       <main style={s.main}>
 
-        {/* IDLE */}
+        {/* IDLE — only shown on first time or after disconnect */}
         {status === 'idle' && (
           <div style={{ ...s.centerWrap, animation:'fadeUp .4s ease' }}>
             <div style={{ fontSize:56, marginBottom:16 }}>📡</div>
@@ -402,6 +415,13 @@ export default function LiveIoT() {
             </div>
 
             <button style={s.connectBtn} onClick={connect}><span>📶</span> Connect via WiFi</button>
+
+            {!isFirstTime && (
+              <button onClick={() => { localStorage.removeItem('arduino_device_id'); localStorage.removeItem('arduino_ip'); localStorage.removeItem('arduino_ssid'); window.location.reload(); }}
+                style={{ marginTop:12, background:'none', border:'none', color:'#94a3b8', fontSize:12, cursor:'pointer', fontFamily:'"Inter",sans-serif' }}>
+                Reset saved device
+              </button>
+            )}
           </div>
         )}
 
