@@ -200,28 +200,30 @@ export default function LiveIoT() {
         body: JSON.stringify({ ssid: wifiSsid, password: wifiPass }),
       }).catch(() => {});
     }
-    // Verify device ID before opening dashboard
-    fetch(`${API_URL}/iot/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ device_id: deviceId.trim(), ip: arduinoIp }),
-    }).then(async r => {
-      if (!r.ok) {
-        const err = await r.json();
-        setStatus('error');
-        setErrorMsg(err.detail || 'Device not found. Make sure Arduino is running and sending data to the backend.');
-        return;
-      }
-      // Save to localStorage so next visit skips setup
-      localStorage.setItem('arduino_ip',        arduinoIp);
-      localStorage.setItem('arduino_device_id', deviceId.trim());
-      localStorage.setItem('arduino_ssid',      wifiSsid);
-      // Device verified — open WebSocket
+
+    if (isFirstTime) {
+      // First time: verify device ID exists before opening dashboard
+      fetch(`${API_URL}/iot/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: deviceId.trim(), ip: arduinoIp }),
+      }).then(async r => {
+        if (!r.ok) {
+          const err = await r.json();
+          setStatus('error');
+          setErrorMsg(err.detail || 'Device not found. Make sure Arduino is running and sending data.');
+          return;
+        }
+        // Save credentials for future visits
+        localStorage.setItem('arduino_ip',        arduinoIp);
+        localStorage.setItem('arduino_device_id', deviceId.trim());
+        localStorage.setItem('arduino_ssid',      wifiSsid);
+        openWebSocket();
+      }).catch(() => openWebSocket());
+    } else {
+      // Return visit: skip verification, connect directly
       openWebSocket();
-    }).catch(() => {
-      // If backend unreachable, still try to connect
-      openWebSocket();
-    });
+    }
   }
 
   function openWebSocket() {
