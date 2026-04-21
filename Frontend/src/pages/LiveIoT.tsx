@@ -577,45 +577,50 @@ export default function LiveIoT() {
               <div style={s.limitsCard}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
                   <div>
-                    <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Alert Limits</div>
-                    <div style={{ fontSize:12, color:'#94a3b8', marginTop:2 }}>Set max values — beep + on-page alert when exceeded</div>
+                    <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Alert Limits — Per Pipe</div>
+                    <div style={{ fontSize:12, color:'#94a3b8', marginTop:2 }}>Set max values per pipe — beep + alert when exceeded</div>
                   </div>
-                  <button onClick={() => { beep(); const id = ++toastId.current; setToasts(p => [...p, { id, msg: 'Test alert — beep and toast are working!', metric: 'test' }]); setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 5000); }}
-                    style={{ fontSize:11, color:'#3b82f6', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'5px 12px', cursor:'pointer' }}>
-                    Test Alert
-                  </button>
-                  <button onClick={() => { alertedRef.current = new Set(); setAlertedKeys(new Set()); }} style={{ fontSize:11, color:'#64748b', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, padding:'5px 12px', cursor:'pointer' }}>Reset alerts</button>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button onClick={() => { beep(); const id = ++toastId.current; setToasts(p => [...p, { id, msg: 'Test alert working!', metric: 'test' }]); setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4000); }}
+                      style={{ fontSize:11, color:'#3b82f6', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'5px 12px', cursor:'pointer' }}>Test</button>
+                    <button onClick={() => { alertedRef.current = new Set(); setAlertedKeys(new Set()); }}
+                      style={{ fontSize:11, color:'#64748b', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, padding:'5px 12px', cursor:'pointer' }}>Reset</button>
+                  </div>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:10 }}>
-                  {limitableKeys.map(({ key, label, unit }) => (
-                    <div key={key} style={{ background: alertedKeys.has(key) ? '#fef2f2' : '#f8fafc', border: `1px solid ${alertedKeys.has(key) ? '#fca5a5' : '#e2e8f0'}`, borderRadius:10, padding:'10px 14px' }}>
-                      <div style={{ fontSize:11, fontWeight:600, color: alertedKeys.has(key) ? '#dc2626' : '#64748b', marginBottom:6, display:'flex', justifyContent:'space-between' }}>
-                        <span>{label}</span>
-                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                          {unit && <span style={{ color:'#94a3b8' }}>{unit}</span>}
-                          {limitPending.has(key) && <span style={{ fontSize:10, color:'#f59e0b', fontWeight:700 }}>Pending approval</span>}
-                        </div>
-                      </div>
-                      <input
-                        type="number" placeholder="No limit"
-                        value={limits[key] ?? ''}
-                        onBlur={e => {
-                          if (e.target.value) {
-                            const updated = { ...limits, [key]: e.target.value };
-                            setLimits(updated);
-                            limitsRef.current = updated;
-                            pushLimitsToBackend(key, e.target.value);
-                          }
-                        }}
-                        onChange={e => {
-                          const updated = { ...limits, [key]: e.target.value };
-                          setLimits(updated);
-                          limitsRef.current = updated;
-                        }}
-                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${limitPending.has(key)?'#fde68a':'#e2e8f0'}`, borderRadius:8, fontSize:13, fontFamily:'"JetBrains Mono",monospace', fontWeight:600, outline:'none', background: limitPending.has(key)?'#fefce8':'#fff', color:'#0f172a' }}
-                      />
-                    </div>
-                  ))}
+
+                {/* Pipe 1 limits */}
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#1d4ed8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:10, padding:'6px 12px', background:'#eff6ff', borderRadius:8, border:'1px solid #bfdbfe', display:'inline-block' }}>
+                    Pipe 1 — Temperature · Humidity
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:10 }}>
+                    {[
+                      { key:'temperature', label:'Temperature', unit:'°C' },
+                      { key:'humidity',    label:'Humidity',    unit:'%'  },
+                    ].map(({ key, label, unit }) => (
+                      <LimitInput key={key} metricKey={key} label={label} unit={unit}
+                        limits={limits} setLimits={setLimits} limitsRef={limitsRef}
+                        alertedKeys={alertedKeys} limitPending={limitPending}
+                        pushLimitsToBackend={pushLimitsToBackend} />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Pipe 2 limits */}
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#dc2626', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:10, padding:'6px 12px', background:'#fef2f2', borderRadius:8, border:'1px solid #fecaca', display:'inline-block' }}>
+                    Pipe 2 — Gas Sensor
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:10 }}>
+                    {[
+                      { key:'gas', label:'Gas', unit:'ppm' },
+                    ].map(({ key, label, unit }) => (
+                      <LimitInput key={key} metricKey={key} label={label} unit={unit}
+                        limits={limits} setLimits={setLimits} limitsRef={limitsRef}
+                        alertedKeys={alertedKeys} limitPending={limitPending}
+                        pushLimitsToBackend={pushLimitsToBackend} />
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -794,6 +799,33 @@ export default function LiveIoT() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+// ── Reusable limit input ──────────────────────────────────────────────────────
+function LimitInput({ metricKey, label, unit, limits, setLimits, limitsRef, alertedKeys, limitPending, pushLimitsToBackend }: {
+  metricKey: string; label: string; unit: string;
+  limits: Record<string,string>; setLimits: (v: Record<string,string>) => void;
+  limitsRef: React.MutableRefObject<Record<string,string>>;
+  alertedKeys: Set<string>; limitPending: Set<string>;
+  pushLimitsToBackend: (key: string, value: string) => void;
+}) {
+  const exceeded = alertedKeys.has(metricKey);
+  const pending  = limitPending.has(metricKey);
+  return (
+    <div style={{ background: exceeded ? '#fef2f2' : '#f8fafc', border:`1px solid ${exceeded?'#fca5a5':'#e2e8f0'}`, borderRadius:10, padding:'10px 14px' }}>
+      <div style={{ fontSize:11, fontWeight:600, color: exceeded?'#dc2626':'#64748b', marginBottom:6, display:'flex', justifyContent:'space-between' }}>
+        <span>{label}</span>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          {unit && <span style={{ color:'#94a3b8' }}>{unit}</span>}
+          {pending && <span style={{ fontSize:10, color:'#f59e0b', fontWeight:700 }}>Pending</span>}
+        </div>
+      </div>
+      <input type="number" placeholder="No limit" value={limits[metricKey] ?? ''}
+        onBlur={e => { if (e.target.value) { const u = { ...limits, [metricKey]: e.target.value }; setLimits(u); limitsRef.current = u; pushLimitsToBackend(metricKey, e.target.value); } }}
+        onChange={e => { const u = { ...limits, [metricKey]: e.target.value }; setLimits(u); limitsRef.current = u; }}
+        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${pending?'#fde68a':'#e2e8f0'}`, borderRadius:8, fontSize:13, fontFamily:'"JetBrains Mono",monospace', fontWeight:600, outline:'none', background: pending?'#fefce8':'#fff', color:'#0f172a' }} />
     </div>
   );
 }
