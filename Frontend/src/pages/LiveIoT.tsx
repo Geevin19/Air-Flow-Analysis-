@@ -378,14 +378,6 @@ export default function LiveIoT() {
 
             <div style={{ width:'100%', maxWidth:400, textAlign:'left' }}>
               <div style={{ marginBottom:14 }}>
-                <label style={idleLabel}>Arduino IP Address</label>
-                <input type="text" value={arduinoIp} onChange={e => setArduinoIp(e.target.value)}
-                  placeholder="e.g. 192.168.8.102"
-                  style={idleInput} />
-                <p style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>Find this in Arduino Serial Monitor after WiFi connects</p>
-              </div>
-
-              <div style={{ marginBottom:14 }}>
                 <label style={idleLabel}>
                   Device ID <span style={{ color:'#ef4444', fontWeight:700 }}>*</span>
                 </label>
