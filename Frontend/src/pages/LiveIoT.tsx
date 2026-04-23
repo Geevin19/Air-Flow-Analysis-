@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const WS_URL  = (import.meta.env.VITE_API_URL || 'http://57.129.123.50:8000').replace(/^http/, 'ws') + '/ws/iot';
-const API_URL = import.meta.env.VITE_API_URL || 'http://57.129.123.50:8000';
+const WS_URL  = (import.meta.env.VITE_API_URL || 'https://hardened-fifth-sprinkler.ngrok-free.dev').replace(/^http/, 'ws') + '/ws/iot';
+const API_URL = import.meta.env.VITE_API_URL || 'https://hardened-fifth-sprinkler.ngrok-free.dev';
 const MAX_HIST = 50;
 
 // ── Physics per pipe ──────────────────────────────────────────────────────────
