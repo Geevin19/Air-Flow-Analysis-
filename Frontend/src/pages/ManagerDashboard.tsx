@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 
@@ -18,6 +18,14 @@ export default function ManagerDashboard() {
   const [workerFilter, setWorkerFilter] = useState('');
   const [selectedWorker, setSelectedWorker] = useState<number|null>(null);
   const [showProfile, setShowProfile] = useState(false);
+  // IoT state for manager view
+  const [iotData, setIotData]         = useState<any>(null);
+  const [iotLimits, setIotLimits]     = useState<Record<string,string>>({});
+  const [iotAlerted, setIotAlerted]   = useState<Set<string>>(new Set());
+  const [iotLastTime, setIotLastTime] = useState('');
+  const [pipe1D, setPipe1D]           = useState(0.05);
+  const [pipe2D, setPipe2D]           = useState(0.05);
+  const iotPollRef = useRef<ReturnType<typeof setInterval>|null>(null);
 
   useEffect(() => {
     (async () => {
@@ -44,6 +52,26 @@ export default function ManagerDashboard() {
     await api.post(`/limits/${id}/review?action=${action}`);
     setPending(p => p.filter(r => r.id !== id));
   };
+
+  // Poll IoT data when on IoT tab
+  useEffect(() => {
+    if (tab === 'iot') {
+      const poll = async () => {
+        try {
+          const r = await api.get('/manager/iot/live');
+          if (r.data.latest && Object.keys(r.data.latest).length > 0) {
+            setIotData(r.data.latest);
+            setIotLastTime(new Date().toLocaleTimeString());
+          }
+        } catch { /* ignore */ }
+      };
+      poll();
+      iotPollRef.current = setInterval(poll, 2000);
+    } else {
+      if (iotPollRef.current) clearInterval(iotPollRef.current);
+    }
+    return () => { if (iotPollRef.current) clearInterval(iotPollRef.current); };
+  }, [tab]);
 
   const logout = () => { localStorage.removeItem('token'); navigate('/login'); };
 
@@ -130,10 +158,11 @@ export default function ManagerDashboard() {
 
         {/* Tabs */}
         <div style={s.tabs}>
-          {(['workers','simulations','approvals','alerts'] as const).map(t => (
+          {(['workers','iot','simulations','approvals','alerts'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               style={{ ...s.tab, ...(tab===t ? s.tabActive : {}) }}>
               {t === 'workers'     ? `Workers (${workers.length})` :
+               t === 'iot'         ? 'Live IoT' :
                t === 'simulations' ? `Simulations (${simulations.length})` :
                t === 'approvals'   ? `Approvals (${pending.length})` :
                `Alerts (${alerts.length})`}
@@ -162,6 +191,17 @@ export default function ManagerDashboard() {
               </table>
             )}
           </div>
+        )}
+
+        {/* IoT tab — manager view of worker IoT data */}
+        {tab === 'iot' && (
+          <ManagerIoTView
+            iotData={iotData} lastTime={iotLastTime}
+            limits={iotLimits} setLimits={setIotLimits}
+            alerted={iotAlerted} setAlerted={setIotAlerted}
+            pipe1D={pipe1D} setPipe1D={setPipe1D}
+            pipe2D={pipe2D} setPipe2D={setPipe2D}
+          />
         )}
 
         {/* Simulations tab */}
@@ -257,6 +297,188 @@ export default function ManagerDashboard() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+// ── Physics helpers (same as LiveIoT) ────────────────────────────────────────
+function satP(Tk: number) { const T=Tk-273.15; return 610.78*Math.exp((17.27*T)/(T+237.3)); }
+function calcPhysics(temp: number, hum: number, pipeD: number) {
+  const K=0.04, T1=temp+273.15, T2=(temp-2)+273.15;
+  const Pv=(hum/100)*satP(T1), rho=(((101325-Pv)/(287.05*T1))+(Pv/(461.5*T1)));
+  const mu=1.716e-5*Math.pow(T1/273.15,1.5)*((273.15+110.4)/(T1+110.4));
+  const v=Math.sqrt((2*K*(T1-T2))/rho), A=Math.PI*(pipeD/2)**2, Q=A*v;
+  const Re=mu>0?(rho*v*pipeD)/mu:0;
+  return { rho, v, Q, mdot:rho*Q, q:0.5*rho*v*v, Re, regime:Re<2300?'Laminar':Re<4000?'Transition':'Turbulent' };
+}
+function calcGasPipe(gas: number, pipeD: number) {
+  const v=gas/1000, A=Math.PI*(pipeD/2)**2, Q=A*v, rho=1.2, Re=(rho*v*pipeD)/1.8e-5;
+  return { v, Q, rho, Re, q:0.5*rho*v*v, regime:Re<2300?'Laminar':Re<4000?'Transition':'Turbulent' };
+}
+
+// ── Manager IoT View ──────────────────────────────────────────────────────────
+function ManagerIoTView({ iotData, lastTime, limits, setLimits, alerted, setAlerted, pipe1D, setPipe1D, pipe2D, setPipe2D }: {
+  iotData: any; lastTime: string;
+  limits: Record<string,string>; setLimits: (v:Record<string,string>)=>void;
+  alerted: Set<string>; setAlerted: (v:Set<string>)=>void;
+  pipe1D: number; setPipe1D: (v:number)=>void;
+  pipe2D: number; setPipe2D: (v:number)=>void;
+}) {
+  const [showLimits, setShowLimits] = useState(false);
+  const [showPipes, setShowPipes]   = useState(false);
+
+  const temp = iotData?.temperature ?? iotData?.temp;
+  const hum  = iotData?.humidity;
+  const gas  = iotData?.gas;
+
+  const p1 = (temp != null && hum != null) ? calcPhysics(temp, hum, pipe1D) : null;
+  const p2 = gas != null ? calcGasPipe(gas, pipe2D) : null;
+
+  const setLimit = (key: string, val: string) => {
+    const updated = { ...limits, [key]: val };
+    setLimits(updated);
+    // Manager sets limits directly
+    const numVal = parseFloat(val);
+    if (!isNaN(numVal)) {
+      const body: Record<string,number> = {};
+      if (key==='temperature') body['temp_limit'] = numVal;
+      else if (key==='humidity') body['humidity_limit'] = numVal;
+      else body[key+'_limit'] = numVal;
+      fetch(`${import.meta.env.VITE_API_URL||''}/iot/config`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+      }).catch(()=>{});
+    }
+  };
+
+  return (
+    <div>
+      {/* Status bar */}
+      <div style={{ display:'flex', alignItems:'center', gap:12, background:'#fff', padding:'10px 16px', borderRadius:12, marginBottom:16, border:'1px solid #e2e8f0', flexWrap:'wrap' as const }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ width:8, height:8, borderRadius:'50%', background: iotData?'#22c55e':'#f59e0b', display:'inline-block' }} />
+          <span style={{ fontSize:13, fontWeight:600, color:'#1e293b' }}>{iotData ? 'Live data from workers' : 'Waiting for sensor data…'}</span>
+        </div>
+        {lastTime && <span style={{ fontSize:12, color:'#94a3b8', marginLeft:'auto' }}>Last update: {lastTime}</span>}
+        <button onClick={() => setShowPipes(v=>!v)} style={{ fontSize:12, padding:'5px 12px', background: showPipes?'#0369a1':'#f1f5f9', color: showPipes?'#fff':'#374151', border:'1px solid #e2e8f0', borderRadius:8, cursor:'pointer' }}>Pipes</button>
+        <button onClick={() => setShowLimits(v=>!v)} style={{ fontSize:12, padding:'5px 12px', background: showLimits?'#dc2626':'#f1f5f9', color: showLimits?'#fff':'#374151', border:'1px solid #e2e8f0', borderRadius:8, cursor:'pointer' }}>Limits</button>
+      </div>
+
+      {/* Pipe diameter editor */}
+      {showPipes && (
+        <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px', marginBottom:16 }}>
+          <div style={{ fontSize:14, fontWeight:700, color:'#0f172a', marginBottom:12 }}>Pipe Diameter Settings</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+            {[{label:'Pipe 1 — Temp/Humidity', val:pipe1D, set:setPipe1D, key:'p1'},{label:'Pipe 2 — Gas Sensor', val:pipe2D, set:setPipe2D, key:'p2'}].map(p=>(
+              <div key={p.key} style={{ background:'#f8fafc', borderRadius:10, padding:'14px 16px', border:'1px solid #e2e8f0' }}>
+                <div style={{ fontSize:12, fontWeight:600, color:'#374151', marginBottom:8 }}>{p.label}</div>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <button onClick={()=>p.set(Math.max(0.01,parseFloat((p.val-0.005).toFixed(3))))} style={{ width:32,height:32,borderRadius:8,border:'1px solid #e2e8f0',background:'#fff',fontSize:18,cursor:'pointer' }}>−</button>
+                  <div style={{ flex:1,textAlign:'center',fontSize:18,fontWeight:800,color:'#1d4ed8',fontFamily:'monospace' }}>{p.val.toFixed(3)} <span style={{fontSize:12,color:'#94a3b8'}}>m</span></div>
+                  <button onClick={()=>p.set(parseFloat((p.val+0.005).toFixed(3)))} style={{ width:32,height:32,borderRadius:8,border:'1px solid #e2e8f0',background:'#fff',fontSize:18,cursor:'pointer' }}>+</button>
+                </div>
+                <input type="range" min="0.01" max="0.5" step="0.005" value={p.val} onChange={e=>p.set(parseFloat(e.target.value))} style={{width:'100%',marginTop:8,accentColor:'#3b82f6'}} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Limits panel */}
+      {showLimits && (
+        <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px', marginBottom:16 }}>
+          <div style={{ fontSize:14, fontWeight:700, color:'#0f172a', marginBottom:12 }}>Alert Limits (Manager sets directly)</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+            <div style={{ background:'#eff6ff', borderRadius:10, padding:'12px 14px', border:'1px solid #bfdbfe' }}>
+              <div style={{ fontSize:11, fontWeight:700, color:'#1d4ed8', marginBottom:8 }}>Pipe 1 — Temp · Humidity</div>
+              {[{key:'temperature',label:'Temperature',unit:'°C'},{key:'humidity',label:'Humidity',unit:'%'}].map(m=>(
+                <div key={m.key} style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:11, color:'#64748b', marginBottom:4 }}>{m.label} ({m.unit})</div>
+                  <input type="number" placeholder="No limit" value={limits[m.key]??''} onBlur={e=>{if(e.target.value)setLimit(m.key,e.target.value);}} onChange={e=>setLimits({...limits,[m.key]:e.target.value})}
+                    style={{ width:'100%',padding:'7px 10px',border:'1px solid #bfdbfe',borderRadius:8,fontSize:13,fontFamily:'monospace',fontWeight:600,outline:'none',background:'#fff',color:'#0f172a' }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ background:'#fef2f2', borderRadius:10, padding:'12px 14px', border:'1px solid #fecaca' }}>
+              <div style={{ fontSize:11, fontWeight:700, color:'#dc2626', marginBottom:8 }}>Pipe 2 — Gas Sensor</div>
+              <div style={{ fontSize:11, color:'#64748b', marginBottom:4 }}>Gas (ppm)</div>
+              <input type="number" placeholder="No limit" value={limits['gas']??''} onBlur={e=>{if(e.target.value)setLimit('gas',e.target.value);}} onChange={e=>setLimits({...limits,gas:e.target.value})}
+                style={{ width:'100%',padding:'7px 10px',border:'1px solid #fecaca',borderRadius:8,fontSize:13,fontFamily:'monospace',fontWeight:600,outline:'none',background:'#fff',color:'#0f172a' }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2-pipe dashboard */}
+      {!iotData ? (
+        <div style={{ background:'#fff', borderRadius:16, padding:'48px 24px', textAlign:'center', border:'1px solid #e2e8f0' }}>
+          <p style={{ fontSize:16, fontWeight:700, color:'#0f172a', margin:'0 0 6px' }}>No sensor data yet</p>
+          <p style={{ fontSize:13, color:'#64748b' }}>Workers' Arduino must be running and sending data</p>
+        </div>
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+          {/* Pipe 1 */}
+          <div style={{ background:'#fff', borderRadius:16, border:'2px solid #3b82f6', overflow:'hidden' }}>
+            <div style={{ background:'linear-gradient(135deg,#1e3a8a,#3b82f6)', padding:'14px 20px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div><div style={{ fontSize:13, fontWeight:800, color:'#fff' }}>Pipe 1</div><div style={{ fontSize:11, color:'rgba(255,255,255,.7)' }}>Temperature · Humidity · Air Flow</div></div>
+              <div style={{ fontSize:11, color:'rgba(255,255,255,.8)', fontFamily:'monospace' }}>Ø {(pipe1D*100).toFixed(1)} cm</div>
+            </div>
+            <div style={{ padding:'16px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+                {[{k:'temperature',l:'Temperature',u:'°C',c:'#f97316'},{k:'humidity',l:'Humidity',u:'%',c:'#6366f1'}].map(m=>(
+                  <div key={m.k} style={{ background:'#f8fafc', borderRadius:10, padding:'14px', border:`1px solid ${alerted.has(m.k)?'#fca5a5':'#e2e8f0'}`, minHeight:80 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', marginBottom:4 }}>{m.l}</div>
+                    <div style={{ fontSize:22, fontWeight:800, color:alerted.has(m.k)?'#dc2626':m.c, fontFamily:'monospace' }}>
+                      {(iotData[m.k]??iotData[m.k==='temperature'?'temp':m.k])?.toFixed(2) ?? '—'} <span style={{fontSize:12,color:'#94a3b8'}}>{m.u}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {p1 && (
+                <div style={{ background:'#f0f9ff', borderRadius:10, padding:'12px 14px', border:'1px solid #bfdbfe' }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:'#1d4ed8', textTransform:'uppercase', marginBottom:8, display:'flex', justifyContent:'space-between' }}>
+                    <span>Physics</span>
+                    <span style={{ background:p1.regime==='Laminar'?'#dcfce7':p1.regime==='Transition'?'#fef9c3':'#fef2f2', color:p1.regime==='Laminar'?'#16a34a':p1.regime==='Transition'?'#a16207':'#dc2626', padding:'1px 8px', borderRadius:999, fontSize:10 }}>{p1.regime}</span>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                    {[{l:'Velocity',v:p1.v.toFixed(4),u:'m/s'},{l:'Flow Q',v:p1.Q.toFixed(6),u:'m³/s'},{l:'Reynolds',v:p1.Re.toFixed(0),u:''},{l:'Mass Flow',v:p1.mdot.toFixed(6),u:'kg/s'}].map(m=>(
+                      <div key={m.l}><div style={{fontSize:9,color:'#64748b',fontWeight:600,textTransform:'uppercase'}}>{m.l}</div><div style={{fontSize:13,fontWeight:700,color:'#1e293b',fontFamily:'monospace'}}>{m.v} <span style={{fontSize:10,color:'#94a3b8'}}>{m.u}</span></div></div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Pipe 2 */}
+          <div style={{ background:'#fff', borderRadius:16, border:'2px solid #ef4444', overflow:'hidden' }}>
+            <div style={{ background:'linear-gradient(135deg,#7f1d1d,#ef4444)', padding:'14px 20px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div><div style={{ fontSize:13, fontWeight:800, color:'#fff' }}>Pipe 2</div><div style={{ fontSize:11, color:'rgba(255,255,255,.7)' }}>Gas Sensor · Flow Analysis</div></div>
+              <div style={{ fontSize:11, color:'rgba(255,255,255,.8)', fontFamily:'monospace' }}>Ø {(pipe2D*100).toFixed(1)} cm</div>
+            </div>
+            <div style={{ padding:'16px' }}>
+              <div style={{ background:'#fef2f2', borderRadius:10, padding:'14px', border:`1px solid ${alerted.has('gas')?'#fca5a5':'#fecaca'}`, marginBottom:14, minHeight:80 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', marginBottom:4 }}>Gas Sensor</div>
+                <div style={{ fontSize:22, fontWeight:800, color:alerted.has('gas')?'#dc2626':'#ef4444', fontFamily:'monospace' }}>
+                  {iotData.gas?.toFixed(0) ?? '—'} <span style={{fontSize:12,color:'#94a3b8'}}>ppm</span>
+                </div>
+              </div>
+              {p2 && (
+                <div style={{ background:'#fff5f5', borderRadius:10, padding:'12px 14px', border:'1px solid #fecaca' }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:'#dc2626', textTransform:'uppercase', marginBottom:8, display:'flex', justifyContent:'space-between' }}>
+                    <span>Physics</span>
+                    <span style={{ background:p2.regime==='Laminar'?'#dcfce7':p2.regime==='Transition'?'#fef9c3':'#fef2f2', color:p2.regime==='Laminar'?'#16a34a':p2.regime==='Transition'?'#a16207':'#dc2626', padding:'1px 8px', borderRadius:999, fontSize:10 }}>{p2.regime}</span>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                    {[{l:'Velocity',v:p2.v.toFixed(4),u:'m/s'},{l:'Flow Q',v:p2.Q.toFixed(6),u:'m³/s'},{l:'Reynolds',v:p2.Re.toFixed(0),u:''},{l:'Dyn. Press',v:p2.q.toFixed(4),u:'Pa'}].map(m=>(
+                      <div key={m.l}><div style={{fontSize:9,color:'#64748b',fontWeight:600,textTransform:'uppercase'}}>{m.l}</div><div style={{fontSize:13,fontWeight:700,color:'#1e293b',fontFamily:'monospace'}}>{m.v} <span style={{fontSize:10,color:'#94a3b8'}}>{m.u}</span></div></div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

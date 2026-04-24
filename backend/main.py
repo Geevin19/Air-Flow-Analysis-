@@ -483,9 +483,21 @@ def get_worker_iot(worker_id: int, current_user: User = Depends(get_current_user
     worker = db.query(User).filter(User.id == worker_id, User.manager_id == current_user.id).first()
     if not worker:
         raise HTTPException(status_code=404, detail='Worker not found')
-    # Return latest sensor reading for this worker
     reading = db.query(SensorReading).filter(SensorReading.user_id == worker_id).order_by(SensorReading.recorded_at.desc()).first()
     return {'worker': worker.username, 'data': reading.raw if reading else None, 'recorded_at': reading.recorded_at if reading else None}
+
+
+@app.get('/manager/iot/live')
+def get_manager_live_iot(current_user: User = Depends(get_current_user)):
+    """Manager gets the latest live IoT data (same as what workers see)."""
+    if current_user.role != 'manager':
+        raise HTTPException(status_code=403, detail='Manager access required')
+    return {
+        "latest": _latest_arduino,
+        "config": device_config,
+        "registered_devices": list(registered_devices.keys()),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
 
 
 # ── List all managers (for worker registration dropdown) ─────────────────────
