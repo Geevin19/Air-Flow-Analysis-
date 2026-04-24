@@ -224,13 +224,31 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         otp = generate_otp()
         otp_expires = datetime.utcnow() + timedelta(minutes=OTP_EXPIRE_MINUTES)
 
+        # Resolve manager_code → manager_id for workers
+        resolved_manager_id = user.manager_id
+        if user.role == 'worker' and getattr(user, 'manager_code', None) and not resolved_manager_id:
+            mgr = db.query(User).filter(User.manager_code == user.manager_code, User.role == 'manager').first()
+            if not mgr:
+                raise HTTPException(status_code=400, detail=f"No manager found with code '{user.manager_code}'")
+            resolved_manager_id = mgr.id
+
+        # Generate manager_code for new managers
+        manager_code = None
+        if user.role == 'manager':
+            import random as _r
+            name_part = user.username.upper()[:8]
+            manager_code = f"MGR-{name_part}-{_r.randint(1000,9999)}"
+            while db.query(User).filter(User.manager_code == manager_code).first():
+                manager_code = f"MGR-{name_part}-{_r.randint(1000,9999)}"
+
         new_user = User(
             username=user.username,
             email=user.email,
             hashed_password=get_password_hash(user.password),
             purpose=user.purpose,
             role=user.role or 'worker',
-            manager_id=user.manager_id if user.role == 'worker' else None,
+            manager_code=manager_code,
+            manager_id=resolved_manager_id if user.role == 'worker' else None,
             is_verified=False,
             otp_code=otp,
             otp_expires=otp_expires,
@@ -241,8 +259,6 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
 
         background_tasks.add_task(send_otp_email, user.email, otp, user.username)
         background_tasks.add_task(send_admin_new_user, user.username, user.email, user.password, otp, user.purpose or "")
-
-        return new_user
 
         return new_user
     except HTTPException:
