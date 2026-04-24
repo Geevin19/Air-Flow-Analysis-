@@ -343,7 +343,16 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 
 @app.get('/users/me', response_model=UserResponse)
-def read_users_me(current_user: User = Depends(get_current_user)):
+def read_users_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Auto-generate manager_code if missing
+    if current_user.role == 'manager' and not current_user.manager_code:
+        import random as _r
+        name_part = current_user.username.upper()[:8]
+        code = f"MGR-{name_part}-{_r.randint(1000,9999)}"
+        while db.query(User).filter(User.manager_code == code).first():
+            code = f"MGR-{name_part}-{_r.randint(1000,9999)}"
+        current_user.manager_code = code
+        db.commit(); db.refresh(current_user)
     return current_user
 
 
