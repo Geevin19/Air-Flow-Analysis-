@@ -60,19 +60,7 @@ export default function ManagerDashboard() {
           <span style={s.badge}>Manager</span>
         </div>
 
-        {/* Manager code — prominently shown in nav */}
-        {user?.manager_code && (
-          <div style={{ display:'flex', alignItems:'center', gap:8, background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'8px 16px' }}>
-            <div>
-              <div style={{ fontSize:9, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.08em' }}>Manager Code</div>
-              <div style={{ fontSize:15, fontWeight:800, color:'#1d4ed8', fontFamily:'monospace', letterSpacing:'0.05em' }}>{user.manager_code}</div>
-            </div>
-            <button onClick={() => navigator.clipboard.writeText(user.manager_code)}
-              style={{ fontSize:10, color:'#1d4ed8', background:'#dbeafe', border:'1px solid #bfdbfe', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontFamily:'"Inter",sans-serif', fontWeight:600, whiteSpace:'nowrap' as const }}>
-              Copy
-            </button>
-          </div>
-        )}
+        {/* Profile dropdown only — no code in nav bar */}
 
         <div style={{ display:'flex', alignItems:'center', gap:10, position:'relative' }} data-profile="true">
           <button onClick={() => setShowProfile(v => !v)}
@@ -93,23 +81,21 @@ export default function ManagerDashboard() {
                 <div style={{ fontSize:15, fontWeight:700, color:'#fff' }}>{user?.username}</div>
                 <div style={{ fontSize:12, color:'rgba(255,255,255,.7)', marginTop:2 }}>{user?.email}</div>
               </div>
-              <div style={{ padding:'14px 20px', borderBottom:'1px solid #f1f5f9' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-                  <span style={{ fontSize:12, color:'#94a3b8' }}>Role</span>
-                  <span style={{ fontSize:12, fontWeight:700, color:'#a16207', background:'#fef9c3', padding:'2px 8px', borderRadius:999, border:'1px solid #fde68a' }}>Manager</span>
-                </div>
+              <div style={{ padding:'16px 20px', borderBottom:'1px solid #f1f5f9' }}>
                 {user?.manager_code ? (
-                  <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'12px 14px', marginTop:4 }}>
-                    <div style={{ fontSize:11, color:'#64748b', marginBottom:6, fontWeight:600 }}>Your Manager Code</div>
-                    <div style={{ fontSize:20, fontWeight:800, color:'#1d4ed8', fontFamily:'monospace', letterSpacing:'0.05em', marginBottom:6 }}>{user.manager_code}</div>
-                    <div style={{ fontSize:11, color:'#94a3b8' }}>Share this code with workers during signup</div>
-                    <button onClick={() => { navigator.clipboard.writeText(user.manager_code); }}
-                      style={{ marginTop:8, fontSize:11, color:'#1d4ed8', background:'#dbeafe', border:'1px solid #bfdbfe', borderRadius:6, padding:'4px 12px', cursor:'pointer', fontFamily:'"Inter",sans-serif', fontWeight:600 }}>
-                      Copy Code
-                    </button>
-                  </div>
+                  <>
+                    <div style={{ fontSize:11, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:8 }}>Manager Code</div>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:'#f0f7ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 14px' }}>
+                      <span style={{ fontSize:17, fontWeight:800, color:'#1d4ed8', fontFamily:'monospace', letterSpacing:'0.05em' }}>{user.manager_code}</span>
+                      <button onClick={() => navigator.clipboard.writeText(user.manager_code)}
+                        style={{ fontSize:11, color:'#1d4ed8', background:'#dbeafe', border:'1px solid #bfdbfe', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'"Inter",sans-serif', fontWeight:700 }}>
+                        Copy
+                      </button>
+                    </div>
+                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>Share with workers when they register</div>
+                  </>
                 ) : (
-                  <div style={{ fontSize:12, color:'#94a3b8', marginTop:4 }}>Manager ID: #{user?.id}</div>
+                  <div style={{ fontSize:12, color:'#94a3b8' }}>Generating code…</div>
                 )}
               </div>
               <div style={{ padding:'8px' }}>
