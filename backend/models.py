@@ -22,6 +22,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     purpose         = Column(String(100), nullable=True)
     role            = Column(String(20), default='worker', nullable=False)
+    manager_code    = Column(String(20), unique=True, nullable=True, index=True)
     manager_id      = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     is_verified     = Column(Boolean, default=False, nullable=False)
     otp_code        = Column(String(6), nullable=True)
