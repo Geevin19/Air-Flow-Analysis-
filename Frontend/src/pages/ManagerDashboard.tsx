@@ -11,7 +11,8 @@ export default function ManagerDashboard() {
   const [workers, setWorkers]       = useState<Worker[]>([]);
   const [pending, setPending]       = useState<LimitReq[]>([]);
   const [alerts, setAlerts]         = useState<AlertItem[]>([]);
-  const [tab, setTab]               = useState<'workers'|'approvals'|'alerts'|'iot'>('workers');
+  const [simulations, setSimulations] = useState<any[]>([]);
+  const [tab, setTab]               = useState<'workers'|'iot'|'approvals'|'alerts'|'simulations'>('workers');
   const [loading, setLoading]       = useState(true);
   const [user, setUser]             = useState<any>(null);
   const [workerFilter, setWorkerFilter] = useState('');
@@ -21,17 +22,19 @@ export default function ManagerDashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const [u, w, p, a] = await Promise.all([
+        const [u, w, p, a, sims] = await Promise.all([
           api.get('/users/me'),
           api.get('/manager/workers'),
           api.get('/limits/pending'),
           api.get('/alerts'),
+          api.get('/simulations'),
         ]);
         setUser(u.data);
         if (u.data.role !== 'manager') { navigate('/dashboard'); return; }
         setWorkers(w.data);
         setPending(p.data);
         setAlerts(a.data);
+        setSimulations(sims.data);
       } catch { navigate('/login'); }
       finally { setLoading(false); }
     })();
@@ -56,16 +59,68 @@ export default function ManagerDashboard() {
           <span style={s.logo}>SmartTracker</span>
           <span style={s.badge}>Manager</span>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <span style={{ fontSize:13, color:'#64748b', fontWeight:600 }}>{user?.username}</span>
-          <button style={s.logoutBtn} onClick={logout}>Logout</button>
+
+        {/* Manager code — prominently shown */}
+        {user?.manager_code && (
+          <div style={{ display:'flex', alignItems:'center', gap:8, background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'6px 14px' }}>
+            <span style={{ fontSize:11, color:'#64748b', fontWeight:500 }}>Your Code</span>
+            <span style={{ fontSize:14, fontWeight:800, color:'#1d4ed8', fontFamily:'monospace', letterSpacing:'0.05em' }}>{user.manager_code}</span>
+            <button onClick={() => { navigator.clipboard.writeText(user.manager_code); }}
+              style={{ fontSize:10, color:'#3b82f6', background:'none', border:'none', cursor:'pointer', padding:'2px 6px', borderRadius:4, background:'#dbeafe' }}>
+              Copy
+            </button>
+          </div>
+        )}
+
+        <div style={{ display:'flex', alignItems:'center', gap:10, position:'relative' }} data-profile="true">
+          <button onClick={() => setShowProfile(v => !v)}
+            style={{ display:'flex', alignItems:'center', gap:8, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'7px 14px', cursor:'pointer', fontFamily:'"Inter",sans-serif' }}>
+            <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#f59e0b,#d97706)', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700 }}>
+              {user?.username?.[0]?.toUpperCase()}
+            </div>
+            <span style={{ fontSize:13, fontWeight:600, color:'#374151' }}>{user?.username}</span>
+            <span style={{ fontSize:10, color:'#94a3b8' }}>{showProfile ? '▲' : '▼'}</span>
+          </button>
+
+          {showProfile && (
+            <div style={{ position:'absolute', top:'calc(100% + 8px)', right:0, background:'#fff', border:'1px solid #e2e8f0', borderRadius:14, boxShadow:'0 8px 32px rgba(0,0,0,.12)', minWidth:280, zIndex:100, overflow:'hidden' }}>
+              <div style={{ background:'linear-gradient(135deg,#1e3a8a,#3b82f6)', padding:'18px 20px' }}>
+                <div style={{ width:44, height:44, borderRadius:'50%', background:'rgba(255,255,255,.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, fontWeight:800, color:'#fff', marginBottom:10 }}>
+                  {user?.username?.[0]?.toUpperCase()}
+                </div>
+                <div style={{ fontSize:15, fontWeight:700, color:'#fff' }}>{user?.username}</div>
+                <div style={{ fontSize:12, color:'rgba(255,255,255,.7)', marginTop:2 }}>{user?.email}</div>
+              </div>
+              <div style={{ padding:'14px 20px', borderBottom:'1px solid #f1f5f9' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+                  <span style={{ fontSize:12, color:'#94a3b8' }}>Role</span>
+                  <span style={{ fontSize:12, fontWeight:700, color:'#a16207', background:'#fef9c3', padding:'2px 8px', borderRadius:999, border:'1px solid #fde68a' }}>Manager</span>
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+                  <span style={{ fontSize:12, color:'#94a3b8' }}>Manager ID</span>
+                  <span style={{ fontSize:12, fontWeight:700, color:'#374151', fontFamily:'monospace' }}>#{user?.id}</span>
+                </div>
+                {user?.manager_code && (
+                  <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'10px 12px', marginTop:4 }}>
+                    <div style={{ fontSize:11, color:'#64748b', marginBottom:4 }}>Manager Code — share with workers</div>
+                    <div style={{ fontSize:16, fontWeight:800, color:'#1d4ed8', fontFamily:'monospace', letterSpacing:'0.05em' }}>{user.manager_code}</div>
+                  </div>
+                )}
+              </div>
+              <div style={{ padding:'8px' }}>
+                <button onClick={logout} style={{ width:'100%', padding:'9px 14px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'"Inter",sans-serif', textAlign:'left' as const }}>
+                  Logout
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </nav>
 
       <main style={s.main}>
         <div style={s.header}>
           <h2 style={s.title}>Manager Dashboard</h2>
-          <button style={s.workerBtn} onClick={() => navigate('/iot-live')}>Live IoT</button>
+          <button style={s.workerBtn} onClick={() => navigate('/simulation')}>+ New Simulation</button>
         </div>
 
         {/* Stats */}
@@ -84,12 +139,12 @@ export default function ManagerDashboard() {
 
         {/* Tabs */}
         <div style={s.tabs}>
-          {(['workers','iot','approvals','alerts'] as const).map(t => (
+          {(['workers','simulations','approvals','alerts'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               style={{ ...s.tab, ...(tab===t ? s.tabActive : {}) }}>
-              {t === 'workers' ? `Workers (${workers.length})` :
-               t === 'iot'     ? 'Live IoT' :
-               t === 'approvals' ? `Approvals (${pending.length})` :
+              {t === 'workers'     ? `Workers (${workers.length})` :
+               t === 'simulations' ? `Simulations (${simulations.length})` :
+               t === 'approvals'   ? `Approvals (${pending.length})` :
                `Alerts (${alerts.length})`}
             </button>
           ))}
@@ -114,6 +169,38 @@ export default function ManagerDashboard() {
                   ))}
                 </tbody>
               </table>
+            )}
+          </div>
+        )}
+
+        {/* Simulations tab */}
+        {tab === 'simulations' && (
+          <div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+              <span style={{ fontSize:14, color:'#64748b' }}>{simulations.length} simulations</span>
+              <button style={s.workerBtn} onClick={() => navigate('/simulation')}>+ New Simulation</button>
+            </div>
+            {simulations.length === 0 ? (
+              <div style={{ ...s.card }}>
+                <div style={s.empty}>No simulations yet. Create your first simulation.</div>
+              </div>
+            ) : (
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:16 }}>
+                {simulations.map((sim: any) => (
+                  <div key={sim.id} style={{ background:'#fff', borderRadius:16, padding:'20px', border:'1px solid #e2e8f0', cursor:'pointer', boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}
+                    onClick={() => navigate(`/simulation?id=${sim.id}`)}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:8 }}>Simulation</div>
+                    <h4 style={{ fontSize:15, fontWeight:700, color:'#0f172a', margin:'0 0 6px' }}>{sim.name}</h4>
+                    <p style={{ fontSize:12, color:'#94a3b8', margin:'0 0 14px' }}>{new Date(sim.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })}</p>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:999, background: sim.results?'#dcfce7':'#fef9c3', color: sim.results?'#16a34a':'#a16207', border:`1px solid ${sim.results?'#bbf7d0':'#fde68a'}` }}>
+                        {sim.results ? 'Completed' : 'Pending'}
+                      </span>
+                      <span style={{ fontSize:12, color:'#3b82f6', fontWeight:600 }}>View →</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

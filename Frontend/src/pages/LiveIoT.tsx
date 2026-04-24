@@ -171,13 +171,21 @@ export default function LiveIoT() {
   useEffect(() => { checkRef.current = checkLimits; }, [checkLimits]);
 
   // Check if current user is a worker (needs manager approval for limits)
+  // Managers are blocked from IoT page
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
       fetch(`${API_URL}/users/me`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json()).then(u => setIsWorker(u.role === 'worker')).catch(() => {});
+        .then(r => r.json())
+        .then(u => {
+          if (u.role === 'manager') {
+            navigate('/manager');
+            return;
+          }
+          setIsWorker(u.role === 'worker');
+        }).catch(() => {});
     }
-  }, []);
+  }, [navigate]);
 
   // Push limits to backend — workers request approval, managers set directly
   const pushLimitsToBackend = useCallback(async (key: string, value: string) => {
