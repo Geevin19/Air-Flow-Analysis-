@@ -193,15 +193,17 @@ export default function ManagerDashboard() {
           </div>
         )}
 
-        {/* IoT tab — manager view of worker IoT data */}
+        {/* IoT tab — navigate to dedicated page */}
         {tab === 'iot' && (
-          <ManagerIoTView
-            iotData={iotData} lastTime={iotLastTime}
-            limits={iotLimits} setLimits={setIotLimits}
-            alerted={iotAlerted} setAlerted={setIotAlerted}
-            pipe1D={pipe1D} setPipe1D={setPipe1D}
-            pipe2D={pipe2D} setPipe2D={setPipe2D}
-          />
+          <div style={{ background:'#fff', borderRadius:16, padding:'48px 24px', textAlign:'center', border:'1px solid #e2e8f0' }}>
+            <div style={{ fontSize:48, marginBottom:16 }}>📡</div>
+            <h3 style={{ fontSize:18, fontWeight:700, color:'#0f172a', marginBottom:8 }}>Manager IoT Dashboard</h3>
+            <p style={{ fontSize:14, color:'#64748b', marginBottom:24 }}>View live sensor data from workers, set limits, and analyse pipe physics.</p>
+            <button onClick={() => navigate('/manager/iot')}
+              style={{ padding:'12px 32px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:700, cursor:'pointer', fontFamily:'"Inter",sans-serif', boxShadow:'0 4px 14px rgba(37,99,235,.3)' }}>
+              Open IoT Dashboard →
+            </button>
+          </div>
         )}
 
         {/* Simulations tab */}
