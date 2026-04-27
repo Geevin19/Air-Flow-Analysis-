@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api, iotAPI } from '../services/api';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 const WS_URL  = (API_URL || window.location.origin).replace(/^https/, 'wss').replace(/^http/, 'ws') + '/ws/iot';
@@ -166,14 +167,10 @@ export default function LiveIoT() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
-      fetch(`${API_URL}/users/me`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(u => {
-          if (u.role === 'manager') {
-            navigate('/manager');
-            return;
-          }
-          setIsWorker(u.role === 'worker');
+      api.get('/users/me')
+        .then(r => {
+          if (r.data.role === 'manager') { navigate('/manager'); return; }
+          setIsWorker(r.data.role === 'worker');
         }).catch(() => {});
     }
   }, [navigate]);
@@ -185,29 +182,19 @@ export default function LiveIoT() {
     const token = localStorage.getItem('token');
 
     if (isWorker && token) {
-      // Worker: send limit request for manager approval
       try {
-        await fetch(`${API_URL}/limits/request`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ metric: key, value: val }),
-        });
+        await api.post('/limits/request', { metric: key, value: val });
         setLimitPending(p => new Set([...p, key]));
         const id = ++toastId.current;
         setToasts(p => [...p, { id, msg: `Limit request for ${key} sent to manager for approval`, metric: key }]);
         setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 5000);
       } catch { /* ignore */ }
     } else {
-      // Manager or no auth: set directly
       const body: Record<string, number> = {};
       const metaKey = key === 'temperature' ? 'temp_limit' : key === 'humidity' ? 'humidity_limit' : key.toLowerCase().replace(/ /g, '_') + '_limit';
       body[metaKey] = val;
       try {
-        await fetch(`${API_URL}/iot/config`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
+        await api.post('/iot/config', body);
       } catch { /* ignore */ }
     }
   }, [isWorker]);
@@ -216,20 +203,15 @@ export default function LiveIoT() {
     setStatus('connecting'); setErrorMsg('');
 
     if (isFirstTime) {
-      fetch(`${API_URL}/iot/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_id: deviceId.trim() }),
-      }).then(async r => {
-        if (!r.ok) {
-          const err = await r.json();
+      iotAPI.verify(deviceId.trim())
+        .then(() => {
+          localStorage.setItem('arduino_device_id', deviceId.trim());
+          openWebSocket();
+        })
+        .catch(err => {
           setStatus('error');
-          setErrorMsg(err.detail || 'Device not found. Make sure the Arduino is powered on and sending data.');
-          return;
-        }
-        localStorage.setItem('arduino_device_id', deviceId.trim());
-        openWebSocket();
-      }).catch(() => openWebSocket());
+          setErrorMsg(err.response?.data?.detail || 'Device not found. Make sure the Arduino is powered on and sending data.');
+        });
     } else {
       openWebSocket();
     }

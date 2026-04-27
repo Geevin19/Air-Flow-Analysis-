@@ -60,9 +60,7 @@ export default function ManagerIoT() {
       if (key==='temperature') body['temp_limit'] = numVal;
       else if (key==='humidity') body['humidity_limit'] = numVal;
       else body[key+'_limit'] = numVal;
-      fetch(`${API_URL}/iot/config`, {
-        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
-      }).catch(()=>{});
+      api.post('/iot/config', body).catch(()=>{});
     }
   };
 
