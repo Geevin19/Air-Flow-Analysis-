@@ -220,18 +220,28 @@ export default function LiveIoT() {
     }
   }
 
-  function openWebSocket() {
+  function openWebSocket(attempt = 0) {
     // Close any existing connection first
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.close();
     }
 
+    setStatus('connecting');
+
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
     let intentionalClose = false;
 
+    // Timeout: if onopen doesn't fire in 8s, treat as failure
+    const openTimer = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        ws.close();
+      }
+    }, 8000);
+
     ws.onopen = () => {
+      clearTimeout(openTimer);
       setStatus('connected');
       setErrorMsg('');
     };
@@ -239,7 +249,6 @@ export default function LiveIoT() {
     ws.onmessage = (e) => {
       try {
         const data: Reading = JSON.parse(e.data);
-        // Ignore ping/keepalive messages
         if ((data as any).type === 'ping') return;
         const time = new Date().toLocaleTimeString();
         setLatest(data); setLastTime(time);
@@ -262,24 +271,33 @@ export default function LiveIoT() {
     };
 
     ws.onclose = (e) => {
-      if (intentionalClose) return;   // user clicked Disconnect — do nothing
+      clearTimeout(openTimer);
+      if (intentionalClose) return;
       console.warn('[WS] closed', e.code, e.reason);
-      // Auto-reconnect after 3s
+
+      if (attempt >= 3) {
+        // After 3 failed attempts show error so user can retry manually
+        setStatus('error');
+        setErrorMsg(`WebSocket failed (${WS_URL}). Check that the backend is running and nginx is configured correctly.`);
+        return;
+      }
+
+      // Retry with backoff: 2s, 4s, 6s
+      const delay = (attempt + 1) * 2000;
+      console.log(`[WS] retry ${attempt + 1} in ${delay}ms…`);
       setTimeout(() => {
         if (!intentionalClose && wsRef.current === ws) {
-          console.log('[WS] reconnecting…');
-          openWebSocket();
+          openWebSocket(attempt + 1);
         }
-      }, 3000);
+      }, delay);
     };
 
-    ws.onerror = (e) => {
-      console.error('[WS] error', e);
-      // onclose will fire after onerror — let it handle reconnect
+    ws.onerror = () => {
+      // onclose fires right after — it handles retry/error state
+      console.error('[WS] error connecting to', WS_URL);
     };
 
-    // Expose intentional close so disconnect() can set it
-    (ws as any)._intentionalClose = () => { intentionalClose = true; ws.close(); };
+    (ws as any)._intentionalClose = () => { intentionalClose = true; clearTimeout(openTimer); ws.close(); };
   }
 
   function disconnect() {
@@ -398,6 +416,7 @@ export default function LiveIoT() {
             <div style={{ width:56, height:56, border:'4px solid #e2e8f0', borderTopColor:'#3b82f6', borderRadius:'50%', animation:'spin 1s linear infinite', margin:'0 auto 20px' }} />
             <h2 style={s.idleTitle}>Connecting…</h2>
             <p style={s.idleSub}>Opening WebSocket to backend</p>
+            <p style={{ fontSize:11, color:'#94a3b8', marginTop:8, fontFamily:'monospace', background:'#f1f5f9', padding:'4px 10px', borderRadius:6 }}>{WS_URL}</p>
           </div>
         )}
 
