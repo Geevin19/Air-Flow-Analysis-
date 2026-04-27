@@ -34,7 +34,7 @@ function calcGasPipe(gas: number, pipeD: number) {
     regime: Re < 2300 ? 'Laminar' : Re < 4000 ? 'Transition' : 'Turbulent' };
 }
 
-interface Reading { pressure?: number; temperature?: number; temperature_outside?: number; flow_rate?: number; humidity?: number; airflow?: number; timestamp?: string; }
+interface Reading { pressure?: number; temperature?: number; temperature_outside?: number; flow_rate?: number; humidity?: number; airflow?: number; gas?: number; timestamp?: string; }
 interface HistEntry { time: string; values: Record<string, number>; phys: Record<string, number>; }
 type Status = 'idle' | 'connecting' | 'connected' | 'error' | 'disconnected';
 interface Toast { id: number; msg: string; metric: string; }
@@ -210,7 +210,10 @@ export default function LiveIoT() {
         })
         .catch(err => {
           setStatus('error');
-          setErrorMsg(err.response?.data?.detail || 'Device not found. Make sure the Arduino is powered on and sending data.');
+          setErrorMsg(
+            err.response?.data?.detail ||
+            `Device '${deviceId.trim()}' not found. Make sure the Arduino is powered on and sending data.`
+          );
         });
     } else {
       openWebSocket();
@@ -218,14 +221,26 @@ export default function LiveIoT() {
   }
 
   function openWebSocket() {
+    // Close any existing connection first
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+    }
+
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
+    let intentionalClose = false;
+
     ws.onopen = () => {
       setStatus('connected');
+      setErrorMsg('');
     };
+
     ws.onmessage = (e) => {
       try {
         const data: Reading = JSON.parse(e.data);
+        // Ignore ping/keepalive messages
+        if ((data as any).type === 'ping') return;
         const time = new Date().toLocaleTimeString();
         setLatest(data); setLastTime(time);
         setArduinoActive(true);
@@ -236,7 +251,7 @@ export default function LiveIoT() {
           if (k !== 'timestamp' && typeof v === 'number') values[k] = v;
         const phys: Record<string, number> = {};
         if (data.temperature != null && data.humidity != null) {
-          const p = calcPhysics(data.temperature, data.humidity, data.pressure ?? 101325, data.temperature_outside);
+          const p = calcPhysics(data.temperature, data.humidity, pipe1D, data.pressure ?? 101325);
           phys['Air Flow Velocity'] = p.v; phys['Air Density'] = p.rho;
           phys['Dynamic Pressure'] = p.q; phys['Reynolds Number'] = p.Re;
           phys['Mass Flow Rate'] = p.mdot; phys['Volumetric Flow'] = p.Q;
@@ -245,16 +260,32 @@ export default function LiveIoT() {
         setHistory(prev => { const n = [...prev, { time, values, phys }]; return n.length > MAX_HIST ? n.slice(-MAX_HIST) : n; });
       } catch { /* ignore */ }
     };
-    ws.onclose = () => {
-      setStatus(p => p === 'connecting' ? 'error' : 'disconnected'); setErrorMsg('Connection closed.');
+
+    ws.onclose = (e) => {
+      if (intentionalClose) return;   // user clicked Disconnect — do nothing
+      console.warn('[WS] closed', e.code, e.reason);
+      // Auto-reconnect after 3s
+      setTimeout(() => {
+        if (!intentionalClose && wsRef.current === ws) {
+          console.log('[WS] reconnecting…');
+          openWebSocket();
+        }
+      }, 3000);
     };
-    ws.onerror = () => {
-      setStatus('error'); setErrorMsg('Could not connect to the server.'); ws.close();
+
+    ws.onerror = (e) => {
+      console.error('[WS] error', e);
+      // onclose will fire after onerror — let it handle reconnect
     };
+
+    // Expose intentional close so disconnect() can set it
+    (ws as any)._intentionalClose = () => { intentionalClose = true; ws.close(); };
   }
 
   function disconnect() {
-    wsRef.current?.close();
+    if (wsRef.current) {
+      (wsRef.current as any)._intentionalClose?.();
+    }
     if (timerRef.current) clearTimeout(timerRef.current);
     setStatus('idle'); setLatest(null); setHistory([]); setLastTime(''); setArduinoActive(false);
   }

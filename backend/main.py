@@ -125,8 +125,15 @@ async def iot_websocket(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            await asyncio.sleep(30)   # keep alive
+            # Send a ping every 20s to keep the connection alive through nginx
+            await asyncio.sleep(20)
+            try:
+                await websocket.send_text('{"type":"ping"}')
+            except Exception:
+                break
     except WebSocketDisconnect:
+        pass
+    finally:
         manager.disconnect(websocket)
 
 
