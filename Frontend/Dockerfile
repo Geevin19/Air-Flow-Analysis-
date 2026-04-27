@@ -5,16 +5,15 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
 COPY package.json package-lock.json ./
-
-# Install dependencies
 RUN npm ci --legacy-peer-deps
 
-# Copy source code
 COPY . .
 
-# Build for production
+# Accept build-time API URL (defaults to /api for same-domain nginx proxy)
+ARG VITE_API_URL=/api
+ENV VITE_API_URL=$VITE_API_URL
+
 RUN npm run build
 
 # Verify build output

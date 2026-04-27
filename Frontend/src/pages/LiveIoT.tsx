@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const WS_URL  = (import.meta.env.VITE_API_URL || 'https://hardened-fifth-sprinkler.ngrok-free.dev').replace(/^http/, 'ws') + '/ws/iot';
-const API_URL = import.meta.env.VITE_API_URL || 'https://hardened-fifth-sprinkler.ngrok-free.dev';
+const API_URL = import.meta.env.VITE_API_URL || '';
+const WS_URL  = (API_URL || window.location.origin).replace(/^https/, 'wss').replace(/^http/, 'ws') + '/ws/iot';
 const MAX_HIST = 50;
 
 // ── Physics per pipe ──────────────────────────────────────────────────────────
@@ -88,17 +88,8 @@ export default function LiveIoT() {
   const [limits, setLimits]           = useState<Record<string, string>>({});
   const [showLimits, setShowLimits]   = useState(false);
   const [alertedKeys, setAlertedKeys] = useState<Set<string>>(new Set());
-  const [arduinoIp, setArduinoIp]     = useState(() => localStorage.getItem('arduino_ip') || '192.168.8.102');
-  const [showIpEdit, setShowIpEdit]   = useState(false);
-  const [newIp, setNewIp]             = useState('');
   const [isWorker, setIsWorker]       = useState(false);
   const [limitPending, setLimitPending] = useState<Set<string>>(new Set());
-  const [wifiSsid, setWifiSsid]       = useState(() => localStorage.getItem('arduino_ssid') || '');
-  const [wifiPass, setWifiPass]       = useState('');
-  const [showWifiChange, setShowWifiChange] = useState(false);
-  const [newSsid, setNewSsid]         = useState('');
-  const [newPass, setNewPass]         = useState('');
-  const [wifiMsg, setWifiMsg]         = useState('');
   const [deviceId, setDeviceId]       = useState(() => localStorage.getItem('arduino_device_id') || 'ARDUINO_001');
   const [isFirstTime]                 = useState(() => !localStorage.getItem('arduino_device_id'));
   // Pipe diameters (user adjustable)
@@ -223,36 +214,23 @@ export default function LiveIoT() {
 
   function connect() {
     setStatus('connecting'); setErrorMsg('');
-    // Send WiFi credentials to backend so Arduino can pick them up
-    if (wifiSsid) {
-      fetch(`${API_URL}/iot/wifi`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ssid: wifiSsid, password: wifiPass }),
-      }).catch(() => {});
-    }
 
     if (isFirstTime) {
-      // First time: verify device ID exists before opening dashboard
       fetch(`${API_URL}/iot/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_id: deviceId.trim(), ip: arduinoIp }),
+        body: JSON.stringify({ device_id: deviceId.trim() }),
       }).then(async r => {
         if (!r.ok) {
           const err = await r.json();
           setStatus('error');
-          setErrorMsg(err.detail || 'Device not found. Make sure Arduino is running and sending data.');
+          setErrorMsg(err.detail || 'Device not found. Make sure the Arduino is powered on and sending data.');
           return;
         }
-        // Save credentials for future visits
-        localStorage.setItem('arduino_ip',        arduinoIp);
         localStorage.setItem('arduino_device_id', deviceId.trim());
-        localStorage.setItem('arduino_ssid',      wifiSsid);
         openWebSocket();
       }).catch(() => openWebSocket());
     } else {
-      // Return visit: skip verification, connect directly
       openWebSocket();
     }
   }
@@ -262,35 +240,6 @@ export default function LiveIoT() {
     wsRef.current = ws;
     ws.onopen = () => {
       setStatus('connected');
-      // Also poll /sensors every 3s for Arduino sketches that POST to /update
-      const poll = setInterval(async () => {
-        try {
-          const res = await fetch(`${API_URL}/sensors`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.source === 'wifi') {
-              const time = new Date().toLocaleTimeString();
-              setLatest(data); setLastTime(time);
-              setArduinoActive(true);
-              if (timerRef.current) clearTimeout(timerRef.current);
-              timerRef.current = setTimeout(() => setArduinoActive(false), 5000);
-              const values: Record<string, number> = {};
-              for (const [k, v] of Object.entries(data))
-                if (k !== 'timestamp' && k !== 'source' && typeof v === 'number') values[k] = v;
-              const phys: Record<string, number> = {};
-              if (data.temp != null && data.humidity != null) {
-                const p = calcPhysics(data.temp, data.humidity);
-                phys['Air Flow Velocity'] = p.v; phys['Air Density'] = p.rho;
-                phys['Dynamic Pressure'] = p.q; phys['Reynolds Number'] = p.Re;
-                phys['Mass Flow Rate'] = p.mdot; phys['Volumetric Flow'] = p.Q;
-              }
-              checkRef.current(values, phys);
-              setHistory(prev => { const n = [...prev, { time, values, phys }]; return n.length > MAX_HIST ? n.slice(-MAX_HIST) : n; });
-            }
-          }
-        } catch { /* ignore */ }
-      }, 3000);
-      (wsRef.current as any)._poll = poll;
     };
     ws.onmessage = (e) => {
       try {
@@ -315,12 +264,10 @@ export default function LiveIoT() {
       } catch { /* ignore */ }
     };
     ws.onclose = () => {
-      if ((wsRef.current as any)?._poll) clearInterval((wsRef.current as any)._poll);
       setStatus(p => p === 'connecting' ? 'error' : 'disconnected'); setErrorMsg('Connection closed.');
     };
     ws.onerror = () => {
-      if ((wsRef.current as any)?._poll) clearInterval((wsRef.current as any)._poll);
-      setStatus('error'); setErrorMsg('Could not connect. Is the backend running on port 8000?'); ws.close();
+      setStatus('error'); setErrorMsg('Could not connect to the server.'); ws.close();
     };
   }
 
@@ -387,10 +334,6 @@ export default function LiveIoT() {
         <div style={{ display:'flex', gap:10 }}>
           {status === 'connected' && (
             <>
-              <button onClick={() => setShowWifiChange(v => !v)}
-                style={{ ...s.backBtn, background: showWifiChange ? '#7c3aed' : '#0f172a' }}>
-                WiFi
-              </button>
               <button onClick={() => setShowPipeEdit(v => !v)}
                 style={{ ...s.backBtn, background: showPipeEdit ? '#0369a1' : '#0f172a' }}>
                 Pipes
@@ -411,42 +354,24 @@ export default function LiveIoT() {
           <div style={{ ...s.centerWrap, animation:'fadeUp .4s ease' }}>
             <div style={{ fontSize:56, marginBottom:16 }}>📡</div>
             <h2 style={s.idleTitle}>Connect to Arduino</h2>
-            <p style={s.idleSub}>Enter your Arduino's IP address and WiFi credentials to start receiving live sensor data.</p>
+            <p style={s.idleSub}>Enter your Device ID to start receiving live sensor data. The Arduino connects to WiFi on its own.</p>
 
-            <div style={{ width:'100%', maxWidth:400, textAlign:'left' }}>
-              <div style={{ marginBottom:14 }}>
-                <label style={idleLabel}>
-                  Device ID <span style={{ color:'#ef4444', fontWeight:700 }}>*</span>
-                </label>
-                <input type="text" value={deviceId} onChange={e => setDeviceId(e.target.value.toUpperCase())}
-                  placeholder="e.g. ARDUINO_001"
-                  style={{ ...idleInput, fontFamily:'"JetBrains Mono",monospace', fontWeight:700, letterSpacing:'0.05em' }} />
-                <p style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>
-                  Must match <code style={{ background:'#f1f5f9', padding:'1px 5px', borderRadius:4 }}>device_id</code> in your Arduino sketch
-                </p>
-              </div>
-
-              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px', marginBottom:20 }}>
-                <div style={{ fontSize:12, fontWeight:700, color:'#374151', marginBottom:12 }}>WiFi Credentials (sent to Arduino)</div>
-                <div style={{ marginBottom:10 }}>
-                  <label style={idleLabel}>WiFi SSID</label>
-                  <input type="text" value={wifiSsid} onChange={e => setWifiSsid(e.target.value)}
-                    placeholder="Your WiFi network name"
-                    style={idleInput} />
-                </div>
-                <div>
-                  <label style={idleLabel}>WiFi Password</label>
-                  <input type="password" value={wifiPass} onChange={e => setWifiPass(e.target.value)}
-                    placeholder="Your WiFi password"
-                    style={idleInput} />
-                </div>
-              </div>
+            <div style={{ width:'100%', maxWidth:400, textAlign:'left', marginBottom:20 }}>
+              <label style={idleLabel}>
+                Device ID <span style={{ color:'#ef4444', fontWeight:700 }}>*</span>
+              </label>
+              <input type="text" value={deviceId} onChange={e => setDeviceId(e.target.value.toUpperCase())}
+                placeholder="e.g. ARDUINO_001"
+                style={{ ...idleInput, fontFamily:'"JetBrains Mono",monospace', fontWeight:700, letterSpacing:'0.05em' }} />
+              <p style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>
+                Must match <code style={{ background:'#f1f5f9', padding:'1px 5px', borderRadius:4 }}>DEVICE_ID</code> in your Arduino sketch
+              </p>
             </div>
 
-            <button style={s.connectBtn} onClick={connect}><span>📶</span> Connect via WiFi</button>
+            <button style={s.connectBtn} onClick={connect}><span>📶</span> Connect</button>
 
             {!isFirstTime && (
-              <button onClick={() => { localStorage.removeItem('arduino_device_id'); localStorage.removeItem('arduino_ip'); localStorage.removeItem('arduino_ssid'); window.location.reload(); }}
+              <button onClick={() => { localStorage.removeItem('arduino_device_id'); window.location.reload(); }}
                 style={{ marginTop:12, background:'none', border:'none', color:'#94a3b8', fontSize:12, cursor:'pointer', fontFamily:'"Inter",sans-serif' }}>
                 Reset saved device
               </button>
@@ -482,28 +407,7 @@ export default function LiveIoT() {
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ width:10, height:10, borderRadius:'50%', background: arduinoActive?'#22c55e':'#f59e0b', display:'inline-block', animation: arduinoActive?'glow 2s infinite':'pulse 1.5s infinite' }} />
                 <span style={s.statusTxt}>{arduinoActive ? 'Live — data streaming' : 'Waiting for Arduino…'}</span>
-              <span style={{ fontSize:11, color:'#94a3b8', background:'#f1f5f9', padding:'2px 8px', borderRadius:6, fontFamily:'monospace', fontWeight:700 }}>{deviceId}</span>
-              {arduinoIp && (
-                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  {showIpEdit ? (
-                    <>
-                      <input value={newIp} onChange={e => setNewIp(e.target.value)}
-                        placeholder={arduinoIp}
-                        style={{ fontSize:12, padding:'3px 8px', border:'1px solid #e2e8f0', borderRadius:6, fontFamily:'monospace', width:140, outline:'none' }} />
-                      <button onClick={() => { if (newIp.trim()) setArduinoIp(newIp.trim()); setShowIpEdit(false); setNewIp(''); }}
-                        style={{ fontSize:11, padding:'3px 10px', background:'#dcfce7', color:'#16a34a', border:'1px solid #bbf7d0', borderRadius:6, cursor:'pointer' }}>Save</button>
-                      <button onClick={() => { setShowIpEdit(false); setNewIp(''); }}
-                        style={{ fontSize:11, padding:'3px 8px', background:'#f8fafc', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:6, cursor:'pointer' }}>✕</button>
-                    </>
-                  ) : (
-                    <>
-                      <span style={{ fontSize:11, color:'#94a3b8', background:'#f1f5f9', padding:'2px 8px', borderRadius:6, fontFamily:'monospace' }}>{arduinoIp}</span>
-                      <button onClick={() => { setNewIp(arduinoIp); setShowIpEdit(true); }}
-                        style={{ fontSize:11, padding:'2px 8px', background:'#eff6ff', color:'#3b82f6', border:'1px solid #bfdbfe', borderRadius:6, cursor:'pointer' }}>Change WiFi</button>
-                    </>
-                  )}
-                </div>
-              )}
+                <span style={{ fontSize:11, color:'#94a3b8', background:'#f1f5f9', padding:'2px 8px', borderRadius:6, fontFamily:'monospace', fontWeight:700 }}>{deviceId}</span>
               </div>
               {lastTime && <span style={s.lastTime}>Last update: {lastTime}</span>}
               {alertedKeys.size > 0 && (
@@ -514,47 +418,6 @@ export default function LiveIoT() {
               )}
               <button style={s.disconnectBtn} onClick={disconnect}>Disconnect</button>
             </div>
-
-            {/* WiFi change panel */}
-            {showWifiChange && (
-              <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px', marginBottom:16 }}>
-                <div style={{ fontSize:14, fontWeight:700, color:'#0f172a', marginBottom:12 }}>Change Arduino WiFi</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
-                  <div>
-                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#374151', marginBottom:5 }}>New SSID</label>
-                    <input type="text" value={newSsid} onChange={e => setNewSsid(e.target.value)}
-                      placeholder="WiFi network name"
-                      style={{ width:'100%', padding:'9px 12px', border:'1.5px solid #e2e8f0', borderRadius:8, fontSize:13, fontFamily:'"Inter",sans-serif', outline:'none' }} />
-                  </div>
-                  <div>
-                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#374151', marginBottom:5 }}>New Password</label>
-                    <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)}
-                      placeholder="WiFi password"
-                      style={{ width:'100%', padding:'9px 12px', border:'1.5px solid #e2e8f0', borderRadius:8, fontSize:13, fontFamily:'"Inter",sans-serif', outline:'none' }} />
-                  </div>
-                </div>
-                {wifiMsg && <p style={{ fontSize:12, color: wifiMsg.includes('sent')?'#16a34a':'#dc2626', marginBottom:10 }}>{wifiMsg}</p>}
-                <div style={{ display:'flex', gap:8 }}>
-                  <button onClick={async () => {
-                    if (!newSsid.trim()) { setWifiMsg('SSID is required'); return; }
-                    try {
-                      await fetch(`${API_URL}/iot/wifi`, {
-                        method:'POST', headers:{'Content-Type':'application/json'},
-                        body: JSON.stringify({ ssid: newSsid, password: newPass }),
-                      });
-                      setWifiMsg(`WiFi credentials sent to Arduino — it will reconnect to "${newSsid}"`);
-                      setTimeout(() => { setShowWifiChange(false); setWifiMsg(''); setNewSsid(''); setNewPass(''); }, 3000);
-                    } catch { setWifiMsg('Failed to send credentials'); }
-                  }} style={{ padding:'8px 18px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'"Inter",sans-serif' }}>
-                    Send to Arduino
-                  </button>
-                  <button onClick={() => { setShowWifiChange(false); setWifiMsg(''); }}
-                    style={{ padding:'8px 14px', background:'#f8fafc', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:8, cursor:'pointer', fontSize:13, fontFamily:'"Inter",sans-serif' }}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* Inline active alerts on page */}
             {alertedKeys.size > 0 && (

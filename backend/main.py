@@ -66,10 +66,18 @@ app = FastAPI(
     openapi_url='/openapi.json'
 )
 
-# CORS Middleware - Allow all origins
+# CORS Middleware
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "https://airflowanalysis.xyz")
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+# Always include the production domain
+if "https://airflowanalysis.xyz" not in _allowed_origins:
+    _allowed_origins.append("https://airflowanalysis.xyz")
+if "https://www.airflowanalysis.xyz" not in _allowed_origins:
+    _allowed_origins.append("https://www.airflowanalysis.xyz")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -106,6 +114,9 @@ class ConnectionManager:
         self.active -= dead
 
 manager = ConnectionManager()
+
+# ── Latest Arduino reading (in-memory cache) ──────────────────────────────────
+_latest_arduino: dict = {}
 
 
 # ── WebSocket: browser connects here to receive live data ──
@@ -162,6 +173,9 @@ async def receive_iot_data(payload: SensorPayload):
             data["physics"] = physics
         except Exception as e:
             data["physics_error"] = str(e)
+
+    # Cache latest reading for manager dashboard polling
+    _latest_arduino = data
 
     await manager.broadcast(data)
     return {"status": "ok", "clients": len(manager.active)}
