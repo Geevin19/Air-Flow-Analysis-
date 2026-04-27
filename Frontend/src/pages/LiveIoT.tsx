@@ -1,25 +1,35 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const WS_URL  = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/^http/, 'ws') + '/ws/iot';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const WS_URL  = (import.meta.env.VITE_API_URL || 'https://hardened-fifth-sprinkler.ngrok-free.dev').replace(/^http/, 'ws') + '/ws/iot';
+const API_URL = import.meta.env.VITE_API_URL || 'https://hardened-fifth-sprinkler.ngrok-free.dev';
 const MAX_HIST = 50;
-const PIPE_D = 0.05;
-const K_CAL  = 0.04;
 
+// ── Physics per pipe ──────────────────────────────────────────────────────────
 function satP(Tk: number) {
   const T = Tk - 273.15;
   return 610.78 * Math.exp((17.27 * T) / (T + 237.3));
 }
-function calcPhysics(temp: number, hum: number, pres = 101325, tOut?: number) {
-  const T1 = temp + 273.15, T2 = (tOut ?? temp - 2) + 273.15;
+function calcPhysics(temp: number, hum: number, pipeD: number, pres = 101325) {
+  const K_CAL = 0.04;
+  const T1 = temp + 273.15, T2 = (temp - 2) + 273.15;
   const Pv = (hum / 100) * satP(T1), Pd = pres - Pv;
   const rho = (Pd / (287.05 * T1)) + (Pv / (461.5 * T1));
   const mu = 1.716e-5 * Math.pow(T1 / 273.15, 1.5) * ((273.15 + 110.4) / (T1 + 110.4));
-  const v = T1 > T2 ? Math.sqrt((2 * K_CAL * (T1 - T2)) / rho) : 0;
-  const A = Math.PI * (PIPE_D / 2) ** 2, Q = A * v;
-  const Re = mu > 0 ? (rho * v * PIPE_D) / mu : 0;
+  const v = Math.sqrt((2 * K_CAL * (T1 - T2)) / rho);
+  const A = Math.PI * (pipeD / 2) ** 2, Q = A * v;
+  const Re = mu > 0 ? (rho * v * pipeD) / mu : 0;
   return { rho, v, Q, mdot: rho * Q, q: 0.5 * rho * v * v, Re,
+    regime: Re < 2300 ? 'Laminar' : Re < 4000 ? 'Transition' : 'Turbulent' };
+}
+function calcGasPipe(gas: number, pipeD: number) {
+  // Treat gas value as proportional to flow velocity (calibrated)
+  const v = gas / 1000;  // rough calibration: 1000 ppm ≈ 1 m/s
+  const A = Math.PI * (pipeD / 2) ** 2;
+  const Q = A * v;
+  const rho = 1.2;  // approx air density
+  const Re = (rho * v * pipeD) / 1.8e-5;
+  return { v, Q, rho, Re, q: 0.5 * rho * v * v,
     regime: Re < 2300 ? 'Laminar' : Re < 4000 ? 'Transition' : 'Turbulent' };
 }
 
@@ -31,6 +41,7 @@ interface Toast { id: number; msg: string; metric: string; }
 const SENSOR_META: Record<string, { label: string; unit: string; color: string }> = {
   temperature: { label: 'Temperature', unit: '°C',  color: '#f97316' },
   humidity:    { label: 'Humidity',    unit: '%',   color: '#6366f1' },
+  gas:         { label: 'Gas',         unit: 'ppm', color: '#ef4444' },
   pressure:    { label: 'Pressure',    unit: 'Pa',  color: '#0ea5e9' },
   flow_rate:   { label: 'Flow Rate',   unit: 'm/s', color: '#10b981' },
   airflow:     { label: 'Airflow',     unit: 'm/s', color: '#10b981' },
@@ -77,17 +88,23 @@ export default function LiveIoT() {
   const [limits, setLimits]           = useState<Record<string, string>>({});
   const [showLimits, setShowLimits]   = useState(false);
   const [alertedKeys, setAlertedKeys] = useState<Set<string>>(new Set());
-  const [arduinoIp, setArduinoIp]     = useState('192.168.8.102');
+  const [arduinoIp, setArduinoIp]     = useState(() => localStorage.getItem('arduino_ip') || '192.168.8.102');
   const [showIpEdit, setShowIpEdit]   = useState(false);
   const [newIp, setNewIp]             = useState('');
   const [isWorker, setIsWorker]       = useState(false);
   const [limitPending, setLimitPending] = useState<Set<string>>(new Set());
-  const [wifiSsid, setWifiSsid]       = useState('');
+  const [wifiSsid, setWifiSsid]       = useState(() => localStorage.getItem('arduino_ssid') || '');
   const [wifiPass, setWifiPass]       = useState('');
   const [showWifiChange, setShowWifiChange] = useState(false);
   const [newSsid, setNewSsid]         = useState('');
   const [newPass, setNewPass]         = useState('');
   const [wifiMsg, setWifiMsg]         = useState('');
+  const [deviceId, setDeviceId]       = useState(() => localStorage.getItem('arduino_device_id') || 'ARDUINO_001');
+  const [isFirstTime]                 = useState(() => !localStorage.getItem('arduino_device_id'));
+  // Pipe diameters (user adjustable)
+  const [pipe1D, setPipe1D]           = useState(() => parseFloat(localStorage.getItem('pipe1_d') || '0.05'));
+  const [pipe2D, setPipe2D]           = useState(() => parseFloat(localStorage.getItem('pipe2_d') || '0.05'));
+  const [showPipeEdit, setShowPipeEdit] = useState(false);
   const wsRef       = useRef<WebSocket | null>(null);
   const timerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastId     = useRef(0);
@@ -100,13 +117,21 @@ export default function LiveIoT() {
   useEffect(() => { alertedRef.current = alertedKeys; }, [alertedKeys]);
 
   const sensorKeys = latest
-    ? Object.keys(latest).filter(k => k !== 'timestamp' && typeof (latest as any)[k] === 'number')
+    ? Object.keys(latest).filter(k => !['timestamp','device_id','pipe_diameter_m','flow_angle_deg','k_calibration'].includes(k) && typeof (latest as any)[k] === 'number')
     : [];
 
-  const physics = useMemo(() => {
+  const physics1 = useMemo(() => {
     if (!latest?.temperature || !latest?.humidity) return null;
-    return calcPhysics(latest.temperature, latest.humidity, latest.pressure ?? 101325, latest.temperature_outside);
-  }, [latest]);
+    return calcPhysics(latest.temperature, latest.humidity, pipe1D, latest.pressure ?? 101325);
+  }, [latest, pipe1D]);
+
+  const physics2 = useMemo(() => {
+    if (latest?.gas == null) return null;
+    return calcGasPipe(latest.gas, pipe2D);
+  }, [latest, pipe2D]);
+
+  // Keep backward compat for checkLimits
+  const physics = physics1;
 
   // ── Check limits — always up to date via ref ──
   const checkLimits = useCallback((values: Record<string, number>, physVals: Record<string, number>) => {
@@ -146,13 +171,21 @@ export default function LiveIoT() {
   useEffect(() => { checkRef.current = checkLimits; }, [checkLimits]);
 
   // Check if current user is a worker (needs manager approval for limits)
+  // Managers are blocked from IoT page
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
       fetch(`${API_URL}/users/me`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json()).then(u => setIsWorker(u.role === 'worker')).catch(() => {});
+        .then(r => r.json())
+        .then(u => {
+          if (u.role === 'manager') {
+            navigate('/manager');
+            return;
+          }
+          setIsWorker(u.role === 'worker');
+        }).catch(() => {});
     }
-  }, []);
+  }, [navigate]);
 
   // Push limits to backend — workers request approval, managers set directly
   const pushLimitsToBackend = useCallback(async (key: string, value: string) => {
@@ -198,6 +231,33 @@ export default function LiveIoT() {
         body: JSON.stringify({ ssid: wifiSsid, password: wifiPass }),
       }).catch(() => {});
     }
+
+    if (isFirstTime) {
+      // First time: verify device ID exists before opening dashboard
+      fetch(`${API_URL}/iot/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: deviceId.trim(), ip: arduinoIp }),
+      }).then(async r => {
+        if (!r.ok) {
+          const err = await r.json();
+          setStatus('error');
+          setErrorMsg(err.detail || 'Device not found. Make sure Arduino is running and sending data.');
+          return;
+        }
+        // Save credentials for future visits
+        localStorage.setItem('arduino_ip',        arduinoIp);
+        localStorage.setItem('arduino_device_id', deviceId.trim());
+        localStorage.setItem('arduino_ssid',      wifiSsid);
+        openWebSocket();
+      }).catch(() => openWebSocket());
+    } else {
+      // Return visit: skip verification, connect directly
+      openWebSocket();
+    }
+  }
+
+  function openWebSocket() {
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
     ws.onopen = () => {
@@ -272,6 +332,14 @@ export default function LiveIoT() {
 
   useEffect(() => () => { wsRef.current?.close(); if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
+  // Auto-connect on return visits (skip setup screen)
+  useEffect(() => {
+    if (!isFirstTime) {
+      connect();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const regimeColor = physics?.regime === 'Laminar' ? '#10b981' : physics?.regime === 'Transition' ? '#f59e0b' : '#ef4444';
 
   // All configurable limit keys
@@ -323,6 +391,10 @@ export default function LiveIoT() {
                 style={{ ...s.backBtn, background: showWifiChange ? '#7c3aed' : '#0f172a' }}>
                 WiFi
               </button>
+              <button onClick={() => setShowPipeEdit(v => !v)}
+                style={{ ...s.backBtn, background: showPipeEdit ? '#0369a1' : '#0f172a' }}>
+                Pipes
+              </button>
               <button onClick={() => setShowLimits(v => !v)} style={{ ...s.backBtn, background: showLimits ? '#dc2626' : '#0f172a' }}>
                 Limits
               </button>
@@ -334,7 +406,7 @@ export default function LiveIoT() {
 
       <main style={s.main}>
 
-        {/* IDLE */}
+        {/* IDLE — only shown on first time or after disconnect */}
         {status === 'idle' && (
           <div style={{ ...s.centerWrap, animation:'fadeUp .4s ease' }}>
             <div style={{ fontSize:56, marginBottom:16 }}>📡</div>
@@ -343,11 +415,15 @@ export default function LiveIoT() {
 
             <div style={{ width:'100%', maxWidth:400, textAlign:'left' }}>
               <div style={{ marginBottom:14 }}>
-                <label style={idleLabel}>Arduino IP Address</label>
-                <input type="text" value={arduinoIp} onChange={e => setArduinoIp(e.target.value)}
-                  placeholder="e.g. 192.168.8.102"
-                  style={idleInput} />
-                <p style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>Find this in Arduino Serial Monitor after WiFi connects</p>
+                <label style={idleLabel}>
+                  Device ID <span style={{ color:'#ef4444', fontWeight:700 }}>*</span>
+                </label>
+                <input type="text" value={deviceId} onChange={e => setDeviceId(e.target.value.toUpperCase())}
+                  placeholder="e.g. ARDUINO_001"
+                  style={{ ...idleInput, fontFamily:'"JetBrains Mono",monospace', fontWeight:700, letterSpacing:'0.05em' }} />
+                <p style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>
+                  Must match <code style={{ background:'#f1f5f9', padding:'1px 5px', borderRadius:4 }}>device_id</code> in your Arduino sketch
+                </p>
               </div>
 
               <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px', marginBottom:20 }}>
@@ -368,6 +444,13 @@ export default function LiveIoT() {
             </div>
 
             <button style={s.connectBtn} onClick={connect}><span>📶</span> Connect via WiFi</button>
+
+            {!isFirstTime && (
+              <button onClick={() => { localStorage.removeItem('arduino_device_id'); localStorage.removeItem('arduino_ip'); localStorage.removeItem('arduino_ssid'); window.location.reload(); }}
+                style={{ marginTop:12, background:'none', border:'none', color:'#94a3b8', fontSize:12, cursor:'pointer', fontFamily:'"Inter",sans-serif' }}>
+                Reset saved device
+              </button>
+            )}
           </div>
         )}
 
@@ -399,6 +482,7 @@ export default function LiveIoT() {
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ width:10, height:10, borderRadius:'50%', background: arduinoActive?'#22c55e':'#f59e0b', display:'inline-block', animation: arduinoActive?'glow 2s infinite':'pulse 1.5s infinite' }} />
                 <span style={s.statusTxt}>{arduinoActive ? 'Live — data streaming' : 'Waiting for Arduino…'}</span>
+              <span style={{ fontSize:11, color:'#94a3b8', background:'#f1f5f9', padding:'2px 8px', borderRadius:6, fontFamily:'monospace', fontWeight:700 }}>{deviceId}</span>
               {arduinoIp && (
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                   {showIpEdit ? (
@@ -501,45 +585,50 @@ export default function LiveIoT() {
               <div style={s.limitsCard}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
                   <div>
-                    <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Alert Limits</div>
-                    <div style={{ fontSize:12, color:'#94a3b8', marginTop:2 }}>Set max values — beep + on-page alert when exceeded</div>
+                    <div style={{ fontSize:15, fontWeight:700, color:'#0f172a' }}>Alert Limits — Per Pipe</div>
+                    <div style={{ fontSize:12, color:'#94a3b8', marginTop:2 }}>Set max values per pipe — beep + alert when exceeded</div>
                   </div>
-                  <button onClick={() => { beep(); const id = ++toastId.current; setToasts(p => [...p, { id, msg: 'Test alert — beep and toast are working!', metric: 'test' }]); setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 5000); }}
-                    style={{ fontSize:11, color:'#3b82f6', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'5px 12px', cursor:'pointer' }}>
-                    Test Alert
-                  </button>
-                  <button onClick={() => { alertedRef.current = new Set(); setAlertedKeys(new Set()); }} style={{ fontSize:11, color:'#64748b', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, padding:'5px 12px', cursor:'pointer' }}>Reset alerts</button>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button onClick={() => { beep(); const id = ++toastId.current; setToasts(p => [...p, { id, msg: 'Test alert working!', metric: 'test' }]); setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4000); }}
+                      style={{ fontSize:11, color:'#3b82f6', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'5px 12px', cursor:'pointer' }}>Test</button>
+                    <button onClick={() => { alertedRef.current = new Set(); setAlertedKeys(new Set()); }}
+                      style={{ fontSize:11, color:'#64748b', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:8, padding:'5px 12px', cursor:'pointer' }}>Reset</button>
+                  </div>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:10 }}>
-                  {limitableKeys.map(({ key, label, unit }) => (
-                    <div key={key} style={{ background: alertedKeys.has(key) ? '#fef2f2' : '#f8fafc', border: `1px solid ${alertedKeys.has(key) ? '#fca5a5' : '#e2e8f0'}`, borderRadius:10, padding:'10px 14px' }}>
-                      <div style={{ fontSize:11, fontWeight:600, color: alertedKeys.has(key) ? '#dc2626' : '#64748b', marginBottom:6, display:'flex', justifyContent:'space-between' }}>
-                        <span>{label}</span>
-                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                          {unit && <span style={{ color:'#94a3b8' }}>{unit}</span>}
-                          {limitPending.has(key) && <span style={{ fontSize:10, color:'#f59e0b', fontWeight:700 }}>Pending approval</span>}
-                        </div>
-                      </div>
-                      <input
-                        type="number" placeholder="No limit"
-                        value={limits[key] ?? ''}
-                        onBlur={e => {
-                          if (e.target.value) {
-                            const updated = { ...limits, [key]: e.target.value };
-                            setLimits(updated);
-                            limitsRef.current = updated;
-                            pushLimitsToBackend(key, e.target.value);
-                          }
-                        }}
-                        onChange={e => {
-                          const updated = { ...limits, [key]: e.target.value };
-                          setLimits(updated);
-                          limitsRef.current = updated;
-                        }}
-                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${limitPending.has(key)?'#fde68a':'#e2e8f0'}`, borderRadius:8, fontSize:13, fontFamily:'"JetBrains Mono",monospace', fontWeight:600, outline:'none', background: limitPending.has(key)?'#fefce8':'#fff', color:'#0f172a' }}
-                      />
-                    </div>
-                  ))}
+
+                {/* Pipe 1 limits */}
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#1d4ed8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:10, padding:'6px 12px', background:'#eff6ff', borderRadius:8, border:'1px solid #bfdbfe', display:'inline-block' }}>
+                    Pipe 1 — Temperature · Humidity
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:10 }}>
+                    {[
+                      { key:'temperature', label:'Temperature', unit:'°C' },
+                      { key:'humidity',    label:'Humidity',    unit:'%'  },
+                    ].map(({ key, label, unit }) => (
+                      <LimitInput key={key} metricKey={key} label={label} unit={unit}
+                        limits={limits} setLimits={setLimits} limitsRef={limitsRef}
+                        alertedKeys={alertedKeys} limitPending={limitPending}
+                        pushLimitsToBackend={pushLimitsToBackend} />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Pipe 2 limits */}
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#dc2626', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:10, padding:'6px 12px', background:'#fef2f2', borderRadius:8, border:'1px solid #fecaca', display:'inline-block' }}>
+                    Pipe 2 — Gas Sensor
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:10 }}>
+                    {[
+                      { key:'gas', label:'Gas', unit:'ppm' },
+                    ].map(({ key, label, unit }) => (
+                      <LimitInput key={key} metricKey={key} label={label} unit={unit}
+                        limits={limits} setLimits={setLimits} limitsRef={limitsRef}
+                        alertedKeys={alertedKeys} limitPending={limitPending}
+                        pushLimitsToBackend={pushLimitsToBackend} />
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -553,77 +642,138 @@ export default function LiveIoT() {
               </div>
             )}
 
-            {/* Sensor charts */}
-            {history.length > 1 && (
-              <div style={s.sectionLabel}>Sensor Readings</div>
-            )}
-            {history.length > 1 && (
-              <div style={s.chartsGrid}>
-                {sensorKeys.map(k => {
-                  const meta = SENSOR_META[k] ?? { label: k.replace(/_/g,' '), unit:'', color:'#6366f1' };
-                  const lim = limits[k] ? parseFloat(limits[k]) : undefined;
-                  return (
-                    <SensorChart key={k} label={meta.label} unit={meta.unit} color={meta.color}
-                      current={(latest as any)[k] as number}
-                      data={history.map(r => r.values[k] ?? 0)}
-                      limit={lim} exceeded={alertedKeys.has(k)} />
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Physics panel */}
-            {physics && (
-              <div style={s.physicsCard}>
-                <div style={s.physicsHeader}>
-                  <div>
-                    <div style={s.physicsTitle}>Calculated Physics</div>
-                    <div style={s.physicsSub}>Derived from live sensor readings</div>
-                  </div>
-                  <div style={{ fontSize:12, fontWeight:700, padding:'4px 14px', borderRadius:999, background: regimeColor+'18', color: regimeColor, border:`1px solid ${regimeColor}40` }}>
-                    {physics.regime}
-                  </div>
-                </div>
-                <div style={s.physicsGrid}>
+            {/* ── PIPE DIAMETER EDITOR ── */}
+            {showPipeEdit && (
+              <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px', marginBottom:16 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:'#0f172a', marginBottom:12 }}>Pipe Diameter Settings</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
                   {[
-                    { label:'Air Flow Velocity', value: physics.v.toFixed(4),    unit:'m/s',   formula:'v = √(2k·ΔT / ρ)' },
-                    { label:'Air Density',        value: physics.rho.toFixed(5),  unit:'kg/m³', formula:'ρ = Pd/(Rd·T) + Pv/(Rv·T)' },
-                    { label:'Dynamic Pressure',   value: physics.q.toFixed(4),    unit:'Pa',    formula:'q = ½ρv²' },
-                    { label:'Reynolds Number',    value: physics.Re.toFixed(1),   unit:'',      formula:'Re = ρvD / μ' },
-                    { label:'Mass Flow Rate',     value: physics.mdot.toFixed(6), unit:'kg/s',  formula:'ṁ = ρ · Q' },
-                    { label:'Volumetric Flow',    value: physics.Q.toFixed(6),    unit:'m³/s',  formula:'Q = A · v' },
-                  ].map(m => {
-                    const exceeded = alertedKeys.has(m.label);
-                    return (
-                      <div key={m.label} style={{ ...s.physicsItem, background: exceeded ? '#fef2f2' : '#fff', borderColor: exceeded ? '#fca5a5' : '#f1f5f9' }}>
-                        <div style={s.physicsLabel}>{m.label}</div>
-                        <div style={{ ...s.physicsVal, color: exceeded ? '#dc2626' : '#1e293b' }}>
-                          {m.value}{m.unit && <span style={s.physicsUnit}> {m.unit}</span>}
+                    { label:'Pipe 1 — Temp/Humidity', key:'pipe1', val:pipe1D, set:(v:number)=>{ setPipe1D(v); localStorage.setItem('pipe1_d', String(v)); } },
+                    { label:'Pipe 2 — Gas Sensor',    key:'pipe2', val:pipe2D, set:(v:number)=>{ setPipe2D(v); localStorage.setItem('pipe2_d', String(v)); } },
+                  ].map(p => (
+                    <div key={p.key} style={{ background:'#f8fafc', borderRadius:10, padding:'14px 16px', border:'1px solid #e2e8f0' }}>
+                      <div style={{ fontSize:12, fontWeight:600, color:'#374151', marginBottom:8 }}>{p.label}</div>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <button onClick={() => p.set(Math.max(0.01, parseFloat((p.val - 0.005).toFixed(3))))}
+                          style={{ width:32, height:32, borderRadius:8, border:'1px solid #e2e8f0', background:'#fff', fontSize:18, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+                        <div style={{ flex:1, textAlign:'center', fontSize:18, fontWeight:800, color:'#1d4ed8', fontFamily:'monospace' }}>
+                          {p.val.toFixed(3)} <span style={{ fontSize:12, color:'#94a3b8' }}>m</span>
                         </div>
-                        <div style={s.physicsFormula}>{m.formula}</div>
+                        <button onClick={() => p.set(parseFloat((p.val + 0.005).toFixed(3)))}
+                          style={{ width:32, height:32, borderRadius:8, border:'1px solid #e2e8f0', background:'#fff', fontSize:18, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
                       </div>
-                    );
-                  })}
+                      <input type="range" min="0.01" max="0.5" step="0.005" value={p.val}
+                        onChange={e => p.set(parseFloat(e.target.value))}
+                        style={{ width:'100%', marginTop:8, accentColor:'#3b82f6' }} />
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:'#94a3b8', marginTop:2 }}>
+                        <span>1 cm</span><span>50 cm</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* Physics charts */}
-            {history.length > 1 && history.some(h => Object.keys(h.phys).length > 0) && (
-              <>
-                <div style={s.sectionLabel}>Physics — Live Charts</div>
-                <div style={s.chartsGrid}>
-                  {PHYS_META.map(({ key, unit, color, get: getVal }) => {
-                    const data = history.map(h => h.phys[key] ?? 0);
-                    const current = physics ? getVal(physics) : 0;
-                    const lim = limits[key] ? parseFloat(limits[key]) : undefined;
-                    return (
-                      <SensorChart key={key} label={key} unit={unit} color={color}
-                        current={current} data={data} limit={lim} exceeded={alertedKeys.has(key)} />
-                    );
-                  })}
+            {/* ── 2-PIPE DASHBOARD ── */}
+            {(latest?.temperature != null || latest?.gas != null) && (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:20 }}>
+
+                {/* PIPE 1 — Temp + Humidity */}
+                <div style={{ background:'#fff', borderRadius:16, border:'2px solid #3b82f6', overflow:'hidden' }}>
+                  <div style={{ background:'linear-gradient(135deg,#1e3a8a,#3b82f6)', padding:'14px 20px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:800, color:'#fff' }}>Pipe 1</div>
+                      <div style={{ fontSize:11, color:'rgba(255,255,255,.7)' }}>Temperature · Humidity · Air Flow</div>
+                    </div>
+                    <div style={{ fontSize:11, color:'rgba(255,255,255,.8)', fontFamily:'monospace' }}>Ø {pipe1D*100} cm</div>
+                  </div>
+                  <div style={{ padding:'16px' }}>
+                    {/* Sensor values */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+                      {(['temperature','humidity'] as const).filter(k => latest?.[k] != null).map(k => (
+                        <div key={k} style={{ background:'#f8fafc', borderRadius:10, padding:'16px 14px', border:`1px solid ${alertedKeys.has(k)?'#fca5a5':'#e2e8f0'}`, minHeight:120 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>{SENSOR_META[k]?.label}</div>
+                          <div style={{ fontSize:22, fontWeight:800, color: alertedKeys.has(k)?'#dc2626':SENSOR_META[k]?.color, fontFamily:'monospace' }}>
+                            {((latest as any)[k] as number).toFixed(2)}
+                            <span style={{ fontSize:12, color:'#94a3b8', marginLeft:4 }}>{SENSOR_META[k]?.unit}</span>
+                          </div>
+                          {history.length > 1 && (
+                            <MiniSparkline data={history.map(r => r.values[k] ?? 0)} color={SENSOR_META[k]?.color} limit={limits[k] ? parseFloat(limits[k]) : undefined} />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {/* Physics for pipe 1 */}
+                    {physics1 && (
+                      <div style={{ background:'#f0f9ff', borderRadius:10, padding:'12px 14px', border:'1px solid #bfdbfe' }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:'#1d4ed8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:8, display:'flex', justifyContent:'space-between' }}>
+                          <span>Calculated Physics</span>
+                          <span style={{ background: physics1.regime==='Laminar'?'#dcfce7':physics1.regime==='Transition'?'#fef9c3':'#fef2f2', color: physics1.regime==='Laminar'?'#16a34a':physics1.regime==='Transition'?'#a16207':'#dc2626', padding:'1px 8px', borderRadius:999, fontSize:10 }}>{physics1.regime}</span>
+                        </div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                          {[
+                            { l:'Velocity',    v: physics1.v.toFixed(4),    u:'m/s' },
+                            { l:'Flow Rate Q', v: physics1.Q.toFixed(6),    u:'m³/s' },
+                            { l:'Reynolds',    v: physics1.Re.toFixed(0),   u:'' },
+                            { l:'Mass Flow',   v: physics1.mdot.toFixed(6), u:'kg/s' },
+                          ].map(m => (
+                            <div key={m.l}>
+                              <div style={{ fontSize:9, color:'#64748b', fontWeight:600, textTransform:'uppercase' }}>{m.l}</div>
+                              <div style={{ fontSize:13, fontWeight:700, color:'#1e293b', fontFamily:'monospace' }}>{m.v} <span style={{ fontSize:10, color:'#94a3b8' }}>{m.u}</span></div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </>
+
+                {/* PIPE 2 — Gas */}
+                <div style={{ background:'#fff', borderRadius:16, border:'2px solid #ef4444', overflow:'hidden' }}>
+                  <div style={{ background:'linear-gradient(135deg,#7f1d1d,#ef4444)', padding:'14px 20px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:800, color:'#fff' }}>Pipe 2</div>
+                      <div style={{ fontSize:11, color:'rgba(255,255,255,.7)' }}>Gas Sensor · Flow Analysis</div>
+                    </div>
+                    <div style={{ fontSize:11, color:'rgba(255,255,255,.8)', fontFamily:'monospace' }}>Ø {pipe2D*100} cm</div>
+                  </div>
+                  <div style={{ padding:'16px' }}>
+                    {/* Gas value */}
+                    <div style={{ background:'#fef2f2', borderRadius:10, padding:'16px 14px', border:`1px solid ${alertedKeys.has('gas')?'#fca5a5':'#fecaca'}`, marginBottom:14, minHeight:120 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>Gas Sensor</div>
+                      <div style={{ fontSize:22, fontWeight:800, color: alertedKeys.has('gas')?'#dc2626':'#ef4444', fontFamily:'monospace' }}>
+                        {latest?.gas?.toFixed(0) ?? '—'}
+                        <span style={{ fontSize:12, color:'#94a3b8', marginLeft:4 }}>ppm</span>
+                      </div>
+                      {history.length > 1 && (
+                        <MiniSparkline data={history.map(r => r.values['gas'] ?? 0)} color="#ef4444" limit={limits['gas'] ? parseFloat(limits['gas']) : undefined} />
+                      )}
+                    </div>
+                    {/* Physics for pipe 2 */}
+                    {physics2 && (
+                      <div style={{ background:'#fff5f5', borderRadius:10, padding:'12px 14px', border:'1px solid #fecaca' }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:'#dc2626', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:8, display:'flex', justifyContent:'space-between' }}>
+                          <span>Calculated Physics</span>
+                          <span style={{ background: physics2.regime==='Laminar'?'#dcfce7':physics2.regime==='Transition'?'#fef9c3':'#fef2f2', color: physics2.regime==='Laminar'?'#16a34a':physics2.regime==='Transition'?'#a16207':'#dc2626', padding:'1px 8px', borderRadius:999, fontSize:10 }}>{physics2.regime}</span>
+                        </div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                          {[
+                            { l:'Velocity',    v: physics2.v.toFixed(4),  u:'m/s' },
+                            { l:'Flow Rate Q', v: physics2.Q.toFixed(6),  u:'m³/s' },
+                            { l:'Reynolds',    v: physics2.Re.toFixed(0), u:'' },
+                            { l:'Dyn. Press',  v: physics2.q.toFixed(4),  u:'Pa' },
+                          ].map(m => (
+                            <div key={m.l}>
+                              <div style={{ fontSize:9, color:'#64748b', fontWeight:600, textTransform:'uppercase' }}>{m.l}</div>
+                              <div style={{ fontSize:13, fontWeight:700, color:'#1e293b', fontFamily:'monospace' }}>{m.v} <span style={{ fontSize:10, color:'#94a3b8' }}>{m.u}</span></div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Live feed table */}
@@ -636,13 +786,13 @@ export default function LiveIoT() {
                 <div style={{ overflowX:'auto' }}>
                   <table style={s.table}>
                     <thead>
-                      <tr>{['Time', ...sensorKeys.map(k => SENSOR_META[k]?.label ?? k)].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                      <tr>{['Time','Temperature','Humidity','Gas'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {[...history].reverse().map((r, i) => (
                         <tr key={i} style={{ background: i===0 ? '#f0f9ff' : 'transparent', borderBottom:'1px solid #f1f5f9' }}>
                           <td style={s.td}>{r.time}</td>
-                          {sensorKeys.map(k => (
+                          {['temperature','humidity','gas'].map(k => (
                             <td key={k} style={{ ...s.td, fontWeight: i===0?700:400, color: i===0?'#0369a1':'#334155' }}>
                               {r.values[k] != null ? Number(r.values[k]).toFixed(2) : '—'}
                             </td>
@@ -658,6 +808,63 @@ export default function LiveIoT() {
         )}
       </main>
     </div>
+  );
+}
+
+// ── Reusable limit input ──────────────────────────────────────────────────────
+function LimitInput({ metricKey, label, unit, limits, setLimits, limitsRef, alertedKeys, limitPending, pushLimitsToBackend }: {
+  metricKey: string; label: string; unit: string;
+  limits: Record<string,string>; setLimits: (v: Record<string,string>) => void;
+  limitsRef: React.MutableRefObject<Record<string,string>>;
+  alertedKeys: Set<string>; limitPending: Set<string>;
+  pushLimitsToBackend: (key: string, value: string) => void;
+}) {
+  const exceeded = alertedKeys.has(metricKey);
+  const pending  = limitPending.has(metricKey);
+  return (
+    <div style={{ background: exceeded ? '#fef2f2' : '#f8fafc', border:`1px solid ${exceeded?'#fca5a5':'#e2e8f0'}`, borderRadius:10, padding:'10px 14px' }}>
+      <div style={{ fontSize:11, fontWeight:600, color: exceeded?'#dc2626':'#64748b', marginBottom:6, display:'flex', justifyContent:'space-between' }}>
+        <span>{label}</span>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          {unit && <span style={{ color:'#94a3b8' }}>{unit}</span>}
+          {pending && <span style={{ fontSize:10, color:'#f59e0b', fontWeight:700 }}>Pending</span>}
+        </div>
+      </div>
+      <input type="number" placeholder="No limit" value={limits[metricKey] ?? ''}
+        onBlur={e => { if (e.target.value) { const u = { ...limits, [metricKey]: e.target.value }; setLimits(u); limitsRef.current = u; pushLimitsToBackend(metricKey, e.target.value); } }}
+        onChange={e => { const u = { ...limits, [metricKey]: e.target.value }; setLimits(u); limitsRef.current = u; }}
+        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${pending?'#fde68a':'#e2e8f0'}`, borderRadius:8, fontSize:13, fontFamily:'"JetBrains Mono",monospace', fontWeight:600, outline:'none', background: pending?'#fefce8':'#fff', color:'#0f172a' }} />
+    </div>
+  );
+}
+
+// ── Mini Sparkline (inline chart inside pipe cards) ───────────────────────────
+function MiniSparkline({ data, color, limit }: { data: number[]; color: string; limit?: number }) {
+  if (data.length < 2) return null;
+  const W = 300, H = 40, P = 4;
+  const allVals = limit != null ? [...data, limit] : data;
+  const min = Math.min(...allVals), max = Math.max(...allVals);
+  const range = max - min || 1;
+  const x = (i: number) => P + (i / (data.length - 1)) * (W - P * 2);
+  const y = (v: number) => P + (1 - (v - min) / range) * (H - P * 2);
+  const pts = data.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const gid = `sp${color.replace(/[^a-z0-9]/gi, '')}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width:'100%', height:36, display:'block', marginTop:6 }}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.2" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.01" />
+        </linearGradient>
+      </defs>
+      <path d={`${pts} L${x(data.length-1).toFixed(1)},${H} L${P},${H} Z`} fill={`url(#${gid})`} />
+      <path d={pts} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(data.length-1)} cy={y(data[data.length-1])} r="3" fill={color} stroke="#fff" strokeWidth="1.5" />
+      {limit != null && (
+        <line x1={P} y1={y(limit).toFixed(1)} x2={W-P} y2={y(limit).toFixed(1)}
+          stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4,3" opacity="0.7" />
+      )}
+    </svg>
   );
 }
 

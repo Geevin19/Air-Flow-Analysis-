@@ -15,7 +15,13 @@ export default function LoginPage() {
     try {
       const res = await authAPI.login(username, password);
       localStorage.setItem("token", res.data.access_token);
-      navigate("/dashboard");
+      // Fetch role to redirect correctly
+      const me = await authAPI.getCurrentUser();
+      if (me.data.role === 'manager') {
+        navigate("/manager");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err: any) {
       const msg = err.response?.data?.detail || "Login failed. Please check your credentials.";
       if (msg.includes("verify your email")) {

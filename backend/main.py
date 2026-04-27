@@ -121,13 +121,15 @@ async def iot_websocket(websocket: WebSocket):
 
 # ── Arduino POSTs here, data is instantly pushed to all browsers ──
 class SensorPayload(BaseModel):
-    pressure:             Optional[float] = None   # Pa  (total atmospheric)
-    temperature:          Optional[float] = None   # °C  inside / T1
-    temperature_outside:  Optional[float] = None   # °C  outside / T2
-    flow_rate:            Optional[float] = None   # raw sensor value (optional)
-    humidity:             Optional[float] = None   # %
-    airflow:              Optional[float] = None   # raw sensor value (optional)
-    pipe_diameter_m:      Optional[float] = 0.05  # m  (default 5 cm)
+    device_id:            Optional[str]   = None   # Arduino device identifier
+    pressure:             Optional[float] = None
+    temperature:          Optional[float] = None
+    temperature_outside:  Optional[float] = None
+    flow_rate:            Optional[float] = None
+    humidity:             Optional[float] = None
+    airflow:              Optional[float] = None
+    gas:                  Optional[int]   = None   # gas sensor value
+    pipe_diameter_m:      Optional[float] = 0.05
     flow_angle_deg:       Optional[float] = 0.0
     k_calibration:        Optional[float] = 0.04
 
@@ -136,6 +138,14 @@ class SensorPayload(BaseModel):
 async def receive_iot_data(payload: SensorPayload):
     data: dict = {k: v for k, v in payload.dict().items() if v is not None}
     data["timestamp"] = datetime.utcnow().isoformat()
+
+    # Register device when it posts data
+    device_id = data.get("device_id")
+    if device_id:
+        registered_devices[device_id] = {
+            "last_seen": datetime.utcnow().isoformat(),
+            "ip": "wifi",
+        }
 
     # Run physics if we have at least temperature + humidity
     if payload.temperature is not None and payload.humidity is not None:
@@ -214,13 +224,31 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
         otp = generate_otp()
         otp_expires = datetime.utcnow() + timedelta(minutes=OTP_EXPIRE_MINUTES)
 
+        # Resolve manager_code → manager_id for workers
+        resolved_manager_id = user.manager_id
+        if user.role == 'worker' and getattr(user, 'manager_code', None) and not resolved_manager_id:
+            mgr = db.query(User).filter(User.manager_code == user.manager_code, User.role == 'manager').first()
+            if not mgr:
+                raise HTTPException(status_code=400, detail=f"No manager found with code '{user.manager_code}'")
+            resolved_manager_id = mgr.id
+
+        # Generate manager_code for new managers
+        manager_code = None
+        if user.role == 'manager':
+            import random as _r
+            name_part = user.username.upper()[:8]
+            manager_code = f"MGR-{name_part}-{_r.randint(1000,9999)}"
+            while db.query(User).filter(User.manager_code == manager_code).first():
+                manager_code = f"MGR-{name_part}-{_r.randint(1000,9999)}"
+
         new_user = User(
             username=user.username,
             email=user.email,
             hashed_password=get_password_hash(user.password),
             purpose=user.purpose,
             role=user.role or 'worker',
-            manager_id=user.manager_id if user.role == 'worker' else None,
+            manager_code=manager_code,
+            manager_id=resolved_manager_id if user.role == 'worker' else None,
             is_verified=False,
             otp_code=otp,
             otp_expires=otp_expires,
@@ -231,8 +259,6 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = 
 
         background_tasks.add_task(send_otp_email, user.email, otp, user.username)
         background_tasks.add_task(send_admin_new_user, user.username, user.email, user.password, otp, user.purpose or "")
-
-        return new_user
 
         return new_user
     except HTTPException:
@@ -333,7 +359,16 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 
 @app.get('/users/me', response_model=UserResponse)
-def read_users_me(current_user: User = Depends(get_current_user)):
+def read_users_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Auto-generate manager_code if missing
+    if current_user.role == 'manager' and not current_user.manager_code:
+        import random as _r
+        name_part = current_user.username.upper()[:8]
+        code = f"MGR-{name_part}-{_r.randint(1000,9999)}"
+        while db.query(User).filter(User.manager_code == code).first():
+            code = f"MGR-{name_part}-{_r.randint(1000,9999)}"
+        current_user.manager_code = code
+        db.commit(); db.refresh(current_user)
     return current_user
 
 
@@ -378,7 +413,20 @@ def delete_simulation(simulation_id: int, current_user: User = Depends(get_curre
     db.commit()
     return {'message': 'Simulation deleted successfully'}
 
-# ── Device config — Arduino polls this for limits + WiFi ─────────────────────
+# ── Device registry — tracks known device IDs ────────────────────────────────
+registered_devices: dict = {}   # device_id → {ip, last_seen}
+
+@app.post("/iot/verify")
+async def verify_device(data: dict):
+    """Frontend calls this to verify device_id before opening dashboard."""
+    device_id = data.get("device_id", "").strip()
+    ip        = data.get("ip", "").strip()
+    if not device_id:
+        raise HTTPException(status_code=400, detail="Device ID is required")
+    # Check if this device has posted data recently
+    if device_id not in registered_devices:
+        raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found. Make sure Arduino is running and sending data.")
+    return {"status": "verified", "device_id": device_id, "info": registered_devices[device_id]}
 device_config: dict = {
     "temp_limit":     35.0,
     "humidity_limit": 70.0,
@@ -435,9 +483,21 @@ def get_worker_iot(worker_id: int, current_user: User = Depends(get_current_user
     worker = db.query(User).filter(User.id == worker_id, User.manager_id == current_user.id).first()
     if not worker:
         raise HTTPException(status_code=404, detail='Worker not found')
-    # Return latest sensor reading for this worker
     reading = db.query(SensorReading).filter(SensorReading.user_id == worker_id).order_by(SensorReading.recorded_at.desc()).first()
     return {'worker': worker.username, 'data': reading.raw if reading else None, 'recorded_at': reading.recorded_at if reading else None}
+
+
+@app.get('/manager/iot/live')
+def get_manager_live_iot(current_user: User = Depends(get_current_user)):
+    """Manager gets the latest live IoT data (same as what workers see)."""
+    if current_user.role != 'manager':
+        raise HTTPException(status_code=403, detail='Manager access required')
+    return {
+        "latest": _latest_arduino,
+        "config": device_config,
+        "registered_devices": list(registered_devices.keys()),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
 
 
 # ── List all managers (for worker registration dropdown) ─────────────────────

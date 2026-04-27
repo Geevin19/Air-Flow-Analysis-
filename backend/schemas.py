@@ -16,14 +16,15 @@ class LoginRequest(BaseModel):
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id:         int
-    username:   str
-    email:      str
-    purpose:    Optional[str] = None
-    role:       str = 'worker'
-    manager_id: Optional[int] = None
-    is_verified: bool = False
-    created_at: datetime
+    id:           int
+    username:     str
+    email:        str
+    purpose:      Optional[str] = None
+    role:         str = 'worker'
+    manager_code: Optional[str] = None
+    manager_id:   Optional[int] = None
+    is_verified:  bool = False
+    created_at:   datetime
 
 class Token(BaseModel):
     access_token: str
