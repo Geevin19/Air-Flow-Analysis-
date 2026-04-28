@@ -3,7 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { api, iotAPI } from '../services/api';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
-const WS_URL  = (API_URL || window.location.origin).replace(/^https/, 'wss').replace(/^http/, 'ws') + '/ws/iot';
+// Derive WebSocket URL from the actual page origin — never from API_URL
+// which may be a relative path like '/api'
+const WS_URL = window.location.origin
+  .replace(/^https/, 'wss')
+  .replace(/^http/, 'ws')
+  + '/ws/iot';
 const MAX_HIST = 50;
 
 // ── Physics per pipe ──────────────────────────────────────────────────────────
