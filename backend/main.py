@@ -501,12 +501,13 @@ async def verify_device(data: dict):
 
     return {"status": "verified", "device_id": device_id, "wifi_ssid": stored.get("wifi_ssid", "")}
 device_config: dict = {
-    "temp_limit":     35.0,
-    "humidity_limit": 70.0,
-    "gas_limit":      500,
-    "wifi_ssid":      "",
-    "wifi_password":  "",
-    "wifi_updated":   False,
+    "temp_limit":      35.0,
+    "humidity_limit":  70.0,
+    "gas_limit":       500,
+    "limits_updated":  False,   # Arduino checks this — True means new limits waiting
+    "wifi_ssid":       "",
+    "wifi_password":   "",
+    "wifi_updated":    False,
 }
 
 @app.get("/iot/config")
@@ -516,8 +517,16 @@ def get_config():
 @app.post("/iot/config")
 def update_config(data: dict):
     device_config.update(data)
-    print(f"[Config] Updated limits: temp={device_config.get('temp_limit')} hum={device_config.get('humidity_limit')} gas={device_config.get('gas_limit')}")
+    device_config["limits_updated"] = True   # signal Arduino to apply immediately
+    print(f"[Config] Limits pushed: temp={device_config.get('temp_limit')} "
+          f"hum={device_config.get('humidity_limit')} gas={device_config.get('gas_limit')}")
     return {"status": "updated", "config": device_config}
+
+@app.post("/iot/config/ack")
+def config_ack():
+    """Arduino calls this after applying new limits — resets the flag."""
+    device_config["limits_updated"] = False
+    return {"status": "acknowledged"}
 
 @app.post("/iot/wifi")
 async def update_wifi(data: dict):
