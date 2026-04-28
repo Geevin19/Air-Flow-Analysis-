@@ -97,6 +97,7 @@ export default function LiveIoT() {
   const [isWorker, setIsWorker]       = useState(false);
   const [limitPending, setLimitPending] = useState<Set<string>>(new Set());
   const [deviceId, setDeviceId]       = useState(() => localStorage.getItem('arduino_device_id') || 'ARDUINO_001');
+  const [wifiSsid, setWifiSsid]       = useState(() => localStorage.getItem('arduino_wifi_ssid') || '');
   const [isFirstTime]                 = useState(() => !localStorage.getItem('arduino_device_id'));
   // Pipe diameters (user adjustable)
   const [pipe1D, setPipe1D]           = useState(() => parseFloat(localStorage.getItem('pipe1_d') || '0.05'));
@@ -208,10 +209,11 @@ export default function LiveIoT() {
     setStatus('connecting'); setErrorMsg('');
 
     if (isFirstTime) {
-      iotAPI.verify(deviceId.trim())
-        .then(() => {
+      iotAPI.verify(deviceId.trim(), wifiSsid.trim())
+        .then((res) => {
           localStorage.setItem('arduino_device_id', deviceId.trim());
-          openWebSocket();
+          localStorage.setItem('arduino_wifi_ssid', res.data.wifi_ssid || wifiSsid.trim());
+          openWebSocket(deviceId.trim(), res.data.wifi_ssid || wifiSsid.trim());
         })
         .catch(err => {
           setStatus('error');
@@ -221,12 +223,11 @@ export default function LiveIoT() {
           );
         });
     } else {
-      openWebSocket();
+      openWebSocket(deviceId.trim(), wifiSsid.trim());
     }
   }
 
-  function openWebSocket(attempt = 0) {
-    // Close any existing connection first
+  function openWebSocket(devId = deviceId, ssid = wifiSsid, attempt = 0) {
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.close();
@@ -234,7 +235,9 @@ export default function LiveIoT() {
 
     setStatus('connecting');
 
-    const ws = new WebSocket(WS_URL);
+    // Pass device_id and wifi_ssid as query params — backend validates them
+    const url = `${WS_URL}?device_id=${encodeURIComponent(devId)}&wifi_ssid=${encodeURIComponent(ssid)}`;
+    const ws = new WebSocket(url);
     wsRef.current = ws;
     let intentionalClose = false;
 
@@ -292,7 +295,7 @@ export default function LiveIoT() {
       console.log(`[WS] retry ${attempt + 1} in ${delay}ms…`);
       setTimeout(() => {
         if (!intentionalClose && wsRef.current === ws) {
-          openWebSocket(attempt + 1);
+          openWebSocket(devId, ssid, attempt + 1);
         }
       }, delay);
     };
@@ -390,24 +393,37 @@ export default function LiveIoT() {
           <div style={{ ...s.centerWrap, animation:'fadeUp .4s ease' }}>
             <div style={{ fontSize:56, marginBottom:16 }}>📡</div>
             <h2 style={s.idleTitle}>Connect to Arduino</h2>
-            <p style={s.idleSub}>Enter your Device ID to start receiving live sensor data. The Arduino connects to WiFi on its own.</p>
+            <p style={s.idleSub}>Enter your Device ID and the WiFi network your Arduino is connected to.</p>
 
             <div style={{ width:'100%', maxWidth:400, textAlign:'left', marginBottom:20 }}>
-              <label style={idleLabel}>
-                Device ID <span style={{ color:'#ef4444', fontWeight:700 }}>*</span>
-              </label>
-              <input type="text" value={deviceId} onChange={e => setDeviceId(e.target.value.toUpperCase())}
-                placeholder="e.g. ARDUINO_001"
-                style={{ ...idleInput, fontFamily:'"JetBrains Mono",monospace', fontWeight:700, letterSpacing:'0.05em' }} />
-              <p style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>
-                Must match <code style={{ background:'#f1f5f9', padding:'1px 5px', borderRadius:4 }}>DEVICE_ID</code> in your Arduino sketch
-              </p>
+              <div style={{ marginBottom:14 }}>
+                <label style={idleLabel}>
+                  Device ID <span style={{ color:'#ef4444', fontWeight:700 }}>*</span>
+                </label>
+                <input type="text" value={deviceId} onChange={e => setDeviceId(e.target.value.toUpperCase())}
+                  placeholder="e.g. ARDUINO_001"
+                  style={{ ...idleInput, fontFamily:'"JetBrains Mono",monospace', fontWeight:700, letterSpacing:'0.05em' }} />
+                <p style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>
+                  Must match <code style={{ background:'#f1f5f9', padding:'1px 5px', borderRadius:4 }}>DEVICE_ID</code> in your Arduino sketch
+                </p>
+              </div>
+              <div>
+                <label style={idleLabel}>
+                  WiFi Network (SSID) <span style={{ color:'#ef4444', fontWeight:700 }}>*</span>
+                </label>
+                <input type="text" value={wifiSsid} onChange={e => setWifiSsid(e.target.value)}
+                  placeholder="e.g. HUAWEI-9EC7"
+                  style={idleInput} />
+                <p style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>
+                  Must match <code style={{ background:'#f1f5f9', padding:'1px 5px', borderRadius:4 }}>WIFI_SSID</code> in your Arduino sketch
+                </p>
+              </div>
             </div>
 
             <button style={s.connectBtn} onClick={connect}><span>📶</span> Connect</button>
 
             {!isFirstTime && (
-              <button onClick={() => { localStorage.removeItem('arduino_device_id'); window.location.reload(); }}
+              <button onClick={() => { localStorage.removeItem('arduino_device_id'); localStorage.removeItem('arduino_wifi_ssid'); window.location.reload(); }}
                 style={{ marginTop:12, background:'none', border:'none', color:'#94a3b8', fontSize:12, cursor:'pointer', fontFamily:'"Inter",sans-serif' }}>
                 Reset saved device
               </button>

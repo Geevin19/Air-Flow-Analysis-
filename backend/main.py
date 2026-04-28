@@ -95,15 +95,23 @@ OTP_EXPIRE_MINUTES = 10
 class ConnectionManager:
     def __init__(self):
         self.active: Set[WebSocket] = set()
+        # Maps device_id → set of WebSocket sessions that verified it
+        self.device_sessions: dict = {}
 
-    async def connect(self, ws: WebSocket):
+    async def connect(self, ws: WebSocket, device_id: str):
         await ws.accept()
         self.active.add(ws)
+        if device_id not in self.device_sessions:
+            self.device_sessions[device_id] = set()
+        self.device_sessions[device_id].add(ws)
 
     def disconnect(self, ws: WebSocket):
         self.active.discard(ws)
+        for sessions in self.device_sessions.values():
+            sessions.discard(ws)
 
     async def broadcast(self, data: dict):
+        """Broadcast to ALL connected sessions (used internally)."""
         msg = json.dumps(data)
         dead = set()
         for ws in self.active:
@@ -111,7 +119,25 @@ class ConnectionManager:
                 await ws.send_text(msg)
             except Exception:
                 dead.add(ws)
-        self.active -= dead
+        for ws in dead:
+            self.disconnect(ws)
+
+    async def broadcast_to_device(self, device_id: Optional[str], data: dict):
+        """Only push data to sessions that verified this device_id."""
+        if not device_id:
+            return
+        sessions = self.device_sessions.get(device_id, set()).copy()
+        if not sessions:
+            return
+        msg = json.dumps(data)
+        dead = set()
+        for ws in sessions:
+            try:
+                await ws.send_text(msg)
+            except Exception:
+                dead.add(ws)
+        for ws in dead:
+            self.disconnect(ws)
 
 manager = ConnectionManager()
 
@@ -119,13 +145,25 @@ manager = ConnectionManager()
 _latest_arduino: dict = {}
 
 
-# ── WebSocket: browser connects here to receive live data ──
+# ── WebSocket: browser connects here — must pass device_id + wifi_ssid ────────
 @app.websocket("/ws/iot")
 async def iot_websocket(websocket: WebSocket):
-    await manager.connect(websocket)
+    device_id = websocket.query_params.get("device_id", "").strip()
+    wifi_ssid = websocket.query_params.get("wifi_ssid", "").strip()
+
+    # Validate before accepting
+    if not device_id or device_id not in registered_devices:
+        await websocket.close(code=4001, reason="Device not found")
+        return
+
+    stored = registered_devices[device_id]
+    if wifi_ssid and stored.get("wifi_ssid") and stored["wifi_ssid"] != wifi_ssid:
+        await websocket.close(code=4003, reason="WiFi network mismatch")
+        return
+
+    await manager.connect(websocket, device_id)
     try:
         while True:
-            # Send a ping every 20s to keep the connection alive through nginx
             await asyncio.sleep(20)
             try:
                 await websocket.send_text('{"type":"ping"}')
@@ -139,14 +177,15 @@ async def iot_websocket(websocket: WebSocket):
 
 # ── Arduino POSTs here, data is instantly pushed to all browsers ──
 class SensorPayload(BaseModel):
-    device_id:            Optional[str]   = None   # Arduino device identifier
+    device_id:            Optional[str]   = None
+    wifi_ssid:            Optional[str]   = None   # WiFi network the Arduino is on
     pressure:             Optional[float] = None
     temperature:          Optional[float] = None
     temperature_outside:  Optional[float] = None
     flow_rate:            Optional[float] = None
     humidity:             Optional[float] = None
     airflow:              Optional[float] = None
-    gas:                  Optional[int]   = None   # gas sensor value
+    gas:                  Optional[int]   = None
     pipe_diameter_m:      Optional[float] = 0.05
     flow_angle_deg:       Optional[float] = 0.0
     k_calibration:        Optional[float] = 0.04
@@ -157,12 +196,13 @@ async def receive_iot_data(payload: SensorPayload):
     data: dict = {k: v for k, v in payload.dict().items() if v is not None}
     data["timestamp"] = datetime.utcnow().isoformat()
 
-    # Register device when it posts data
+    # Register device — store device_id + wifi_ssid it's connected to
     device_id = data.get("device_id")
     if device_id:
         registered_devices[device_id] = {
             "last_seen": datetime.utcnow().isoformat(),
             "ip": "wifi",
+            "wifi_ssid": payload.wifi_ssid or "",
         }
 
     # Run physics if we have at least temperature + humidity
@@ -181,10 +221,12 @@ async def receive_iot_data(payload: SensorPayload):
         except Exception as e:
             data["physics_error"] = str(e)
 
-    # Cache latest reading for manager dashboard polling
+    # Cache latest reading per device
+    global _latest_arduino
     _latest_arduino = data
 
-    await manager.broadcast(data)
+    # Only push to WebSocket sessions that verified this specific device
+    await manager.broadcast_to_device(device_id, data)
     return {"status": "ok", "clients": len(manager.active)}
 
 
@@ -439,21 +481,32 @@ registered_devices: dict = {}   # device_id → {ip, last_seen}
 
 @app.post("/iot/verify")
 async def verify_device(data: dict):
-    """Frontend calls this to verify device_id before opening dashboard."""
+    """Frontend calls this to verify device_id + wifi_ssid before opening dashboard."""
     device_id = data.get("device_id", "").strip()
-    ip        = data.get("ip", "").strip()
+    wifi_ssid = data.get("wifi_ssid", "").strip()
+
     if not device_id:
         raise HTTPException(status_code=400, detail="Device ID is required")
-    # Check if this device has posted data recently
     if device_id not in registered_devices:
-        raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found. Make sure Arduino is running and sending data.")
-    return {"status": "verified", "device_id": device_id, "info": registered_devices[device_id]}
+        raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found. Make sure Arduino is powered on and sending data.")
+
+    stored = registered_devices[device_id]
+
+    # If Arduino sent a wifi_ssid and user provided one, they must match
+    if wifi_ssid and stored.get("wifi_ssid") and stored["wifi_ssid"] != wifi_ssid:
+        raise HTTPException(
+            status_code=403,
+            detail=f"WiFi network mismatch. Your device must be on the same WiFi as the Arduino ('{stored['wifi_ssid']}')."
+        )
+
+    return {"status": "verified", "device_id": device_id, "wifi_ssid": stored.get("wifi_ssid", "")}
 device_config: dict = {
     "temp_limit":     35.0,
     "humidity_limit": 70.0,
+    "gas_limit":      500,
     "wifi_ssid":      "",
     "wifi_password":  "",
-    "wifi_updated":   False,   # Arduino checks this flag
+    "wifi_updated":   False,
 }
 
 @app.get("/iot/config")
@@ -463,7 +516,7 @@ def get_config():
 @app.post("/iot/config")
 def update_config(data: dict):
     device_config.update(data)
-    print(f"[Config] Updated: { {k:v for k,v in device_config.items() if k != 'wifi_password'} }")
+    print(f"[Config] Updated limits: temp={device_config.get('temp_limit')} hum={device_config.get('humidity_limit')} gas={device_config.get('gas_limit')}")
     return {"status": "updated", "config": device_config}
 
 @app.post("/iot/wifi")

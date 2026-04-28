@@ -79,8 +79,10 @@ export const simulationAPI = {
   delete:         (id: number) => api.delete(`/simulations/${id}`),
 };
 
+// IoT API
 export const iotAPI = {
   getLatest:  () => api.get('/iot/latest'),
   getHistory: (limit = 50) => api.get(`/iot/data?limit=${limit}`),
-  verify:     (device_id: string) => api.post('/iot/verify', { device_id }),
+  verify:     (device_id: string, wifi_ssid?: string) =>
+    api.post('/iot/verify', { device_id, wifi_ssid: wifi_ssid ?? '' }),
 };
