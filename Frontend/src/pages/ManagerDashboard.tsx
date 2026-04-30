@@ -8,23 +8,26 @@ interface AlertItem { id: number; user_id: number; metric: string; value: number
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
-  const [workers, setWorkers]       = useState<Worker[]>([]);
-  const [pending, setPending]       = useState<LimitReq[]>([]);
-  const [alerts, setAlerts]         = useState<AlertItem[]>([]);
-  const [simulations, setSimulations] = useState<any[]>([]);
-  const [tab, setTab]               = useState<'workers'|'iot'|'approvals'|'alerts'|'simulations'>('workers');
-  const [loading, setLoading]       = useState(true);
-  const [user, setUser]             = useState<any>(null);
-  const [workerFilter, setWorkerFilter] = useState('');
-  const [selectedWorker, setSelectedWorker] = useState<number|null>(null);
-  const [showProfile, setShowProfile] = useState(false);
-  // IoT state for manager view
-  const [iotData, setIotData]         = useState<any>(null);
-  const [iotLimits, setIotLimits]     = useState<Record<string,string>>({});
-  const [iotAlerted, setIotAlerted]   = useState<Set<string>>(new Set());
-  const [iotLastTime, setIotLastTime] = useState('');
-  const [pipe1D, setPipe1D]           = useState(0.05);
-  const [pipe2D, setPipe2D]           = useState(0.05);
+  const [workers, setWorkers]           = useState<Worker[]>([]);
+  const [pending, setPending]           = useState<LimitReq[]>([]);
+  const [alerts, setAlerts]             = useState<AlertItem[]>([]);
+  const [simulations, setSimulations]   = useState<any[]>([]);
+  const [tab, setTab]                   = useState<'workers'|'iot'|'approvals'|'alerts'|'simulations'>('workers');
+  const [loading, setLoading]           = useState(true);
+  const [user, setUser]                 = useState<any>(null);
+  const [showProfile, setShowProfile]   = useState(false);
+  const [selectedWorker, setSelectedWorker] = useState<Worker|null>(null);
+  const [workerIot, setWorkerIot]       = useState<any>(null);
+  const [workerIotLoading, setWorkerIotLoading] = useState(false);
+  // Limits (manager sets these — synced to Arduino + worker pages)
+  const [limits, setLimits]             = useState({ temp: '', hum: '', gas: '' });
+  const [limitSaving, setLimitSaving]   = useState(false);
+  const [limitMsg, setLimitMsg]         = useState('');
+  // IoT state
+  const [iotData, setIotData]           = useState<any>(null);
+  const [iotLastTime, setIotLastTime]   = useState('');
+  const [pipe1D, setPipe1D]             = useState(0.05);
+  const [pipe2D, setPipe2D]             = useState(0.05);
   const iotPollRef = useRef<ReturnType<typeof setInterval>|null>(null);
 
   useEffect(() => {
@@ -43,6 +46,13 @@ export default function ManagerDashboard() {
         setPending(p.data);
         setAlerts(a.data);
         setSimulations(sims.data);
+        // Load current limits from backend
+        const cfg = await api.get('/iot/config');
+        setLimits({
+          temp: cfg.data.temp_limit?.toString() || '',
+          hum:  cfg.data.humidity_limit?.toString() || '',
+          gas:  cfg.data.gas_limit?.toString() || '',
+        });
       } catch { navigate('/login'); }
       finally { setLoading(false); }
     })();
@@ -51,6 +61,37 @@ export default function ManagerDashboard() {
   const review = async (id: number, action: 'approved'|'rejected') => {
     await api.post(`/limits/${id}/review?action=${action}`);
     setPending(p => p.filter(r => r.id !== id));
+  };
+
+  const removeWorker = async (workerId: number) => {
+    if (!confirm('Remove this worker from your team?')) return;
+    await api.delete(`/manager/workers/${workerId}`);
+    setWorkers(w => w.filter(x => x.id !== workerId));
+    if (selectedWorker?.id === workerId) setSelectedWorker(null);
+  };
+
+  const openWorker = async (worker: Worker) => {
+    setSelectedWorker(worker);
+    setWorkerIotLoading(true);
+    try {
+      const r = await api.get(`/manager/workers/${worker.id}/iot`);
+      setWorkerIot(r.data);
+    } catch { setWorkerIot(null); }
+    finally { setWorkerIotLoading(false); }
+  };
+
+  const saveLimits = async () => {
+    setLimitSaving(true); setLimitMsg('');
+    try {
+      await api.post('/iot/config', {
+        temp_limit:     parseFloat(limits.temp) || 35,
+        humidity_limit: parseFloat(limits.hum)  || 70,
+        gas_limit:      parseInt(limits.gas)    || 500,
+      });
+      setLimitMsg('✓ Limits saved and sent to Arduino');
+      setTimeout(() => setLimitMsg(''), 3000);
+    } catch { setLimitMsg('Failed to save limits'); }
+    finally { setLimitSaving(false); }
   };
 
   // Poll IoT data when on IoT tab
@@ -172,24 +213,95 @@ export default function ManagerDashboard() {
 
         {/* Workers tab */}
         {tab === 'workers' && (
-          <div style={s.card}>
-            {workers.length === 0 ? (
-              <div style={s.empty}>No workers registered under your account yet.</div>
-            ) : (
-              <table style={s.table}>
-                <thead><tr>{['Username','Email','Purpose','Joined'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr></thead>
-                <tbody>
-                  {workers.map(w => (
-                    <tr key={w.id} style={s.tr}>
-                      <td style={s.td}><strong>{w.username}</strong></td>
-                      <td style={s.td}>{w.email}</td>
-                      <td style={s.td}>{w.purpose || '—'}</td>
-                      <td style={s.td}>{new Date(w.created_at).toLocaleDateString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div>
+            {/* Limits panel — manager sets, syncs to Arduino + workers */}
+            <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:16, padding:'20px 24px', marginBottom:20 }}>
+              <div style={{ fontSize:15, fontWeight:700, color:'#0f172a', marginBottom:4 }}>Alert Limits</div>
+              <div style={{ fontSize:12, color:'#64748b', marginBottom:16 }}>Set limits here — instantly sent to Arduino and visible on all worker pages</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr auto', gap:12, alignItems:'end' }}>
+                {[
+                  { label:'Temperature (°C)', key:'temp' as const, placeholder:'e.g. 35' },
+                  { label:'Humidity (%)',      key:'hum'  as const, placeholder:'e.g. 70' },
+                  { label:'Gas (ppm)',         key:'gas'  as const, placeholder:'e.g. 500' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#374151', marginBottom:6 }}>{f.label}</label>
+                    <input type="number" placeholder={f.placeholder} value={limits[f.key]}
+                      onChange={e => setLimits(l => ({ ...l, [f.key]: e.target.value }))}
+                      style={{ width:'100%', padding:'9px 12px', border:'1.5px solid #e2e8f0', borderRadius:8, fontSize:14, fontFamily:'monospace', fontWeight:600, outline:'none', color:'#0f172a' }} />
+                  </div>
+                ))}
+                <button onClick={saveLimits} disabled={limitSaving}
+                  style={{ padding:'9px 20px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'"Inter",sans-serif', whiteSpace:'nowrap' as const }}>
+                  {limitSaving ? 'Saving…' : 'Save & Send'}
+                </button>
+              </div>
+              {limitMsg && <p style={{ fontSize:12, color: limitMsg.startsWith('✓') ? '#16a34a' : '#dc2626', marginTop:10, fontWeight:600 }}>{limitMsg}</p>}
+            </div>
+
+            {/* Worker detail panel */}
+            {selectedWorker && (
+              <div style={{ background:'#f0f9ff', border:'1.5px solid #bfdbfe', borderRadius:16, padding:'20px 24px', marginBottom:20 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+                  <div>
+                    <div style={{ fontSize:15, fontWeight:700, color:'#1d4ed8' }}>{selectedWorker.username}</div>
+                    <div style={{ fontSize:12, color:'#64748b' }}>{selectedWorker.email}</div>
+                  </div>
+                  <button onClick={() => setSelectedWorker(null)}
+                    style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'#94a3b8' }}>✕</button>
+                </div>
+                {workerIotLoading ? (
+                  <div style={{ fontSize:13, color:'#64748b' }}>Loading sensor data…</div>
+                ) : workerIot?.data ? (
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
+                    {[
+                      { label:'Temperature', value: workerIot.data.temperature?.toFixed(1), unit:'°C', color:'#f97316' },
+                      { label:'Humidity',    value: workerIot.data.humidity?.toFixed(1),    unit:'%',  color:'#6366f1' },
+                      { label:'Gas',         value: workerIot.data.gas?.toFixed(0),         unit:'ppm',color:'#ef4444' },
+                    ].map(m => (
+                      <div key={m.label} style={{ background:'#fff', borderRadius:10, padding:'14px 16px', border:'1px solid #dbeafe' }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', marginBottom:4 }}>{m.label}</div>
+                        <div style={{ fontSize:22, fontWeight:800, color:m.color, fontFamily:'monospace' }}>
+                          {m.value ?? '—'} <span style={{ fontSize:12, color:'#94a3b8' }}>{m.unit}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize:13, color:'#64748b' }}>No live sensor data available for this worker yet.</div>
+                )}
+              </div>
             )}
+
+            {/* Workers table */}
+            <div style={s.card}>
+              {workers.length === 0 ? (
+                <div style={s.empty}>No workers registered under your account yet.</div>
+              ) : (
+                <table style={s.table}>
+                  <thead>
+                    <tr>{['Username','Email','Purpose','Joined','Actions'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {workers.map(w => (
+                      <tr key={w.id} style={{ ...s.tr, background: selectedWorker?.id === w.id ? '#eff6ff' : 'transparent', cursor:'pointer' }}
+                        onClick={() => openWorker(w)}>
+                        <td style={s.td}><strong style={{ color:'#1d4ed8' }}>{w.username}</strong></td>
+                        <td style={s.td}>{w.email}</td>
+                        <td style={s.td}>{w.purpose || '—'}</td>
+                        <td style={s.td}>{new Date(w.created_at).toLocaleDateString()}</td>
+                        <td style={s.td} onClick={e => e.stopPropagation()}>
+                          <button onClick={() => removeWorker(w.id)}
+                            style={{ padding:'4px 12px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'"Inter",sans-serif' }}>
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         )}
 

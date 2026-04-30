@@ -515,11 +515,18 @@ def get_config():
     return device_config
 
 @app.post("/iot/config")
-def update_config(data: dict):
+async def update_config(data: dict):
     device_config.update(data)
-    device_config["limits_updated"] = True   # signal Arduino to apply immediately
+    device_config["limits_updated"] = True
     print(f"[Config] Limits pushed: temp={device_config.get('temp_limit')} "
           f"hum={device_config.get('humidity_limit')} gas={device_config.get('gas_limit')}")
+    # Broadcast new limits to all connected browser sessions so worker pages update instantly
+    await manager.broadcast({
+        "type": "config_update",
+        "temp_limit":     device_config["temp_limit"],
+        "humidity_limit": device_config["humidity_limit"],
+        "gas_limit":      device_config["gas_limit"],
+    })
     return {"status": "updated", "config": device_config}
 
 @app.post("/iot/config/ack")
@@ -558,6 +565,19 @@ def get_workers(current_user: User = Depends(get_current_user), db: Session = De
     return db.query(User).filter(User.manager_id == current_user.id).all()
 
 
+# ── Manager: remove a worker ──────────────────────────────────────────────────
+@app.delete('/manager/workers/{worker_id}')
+def remove_worker(worker_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != 'manager':
+        raise HTTPException(status_code=403, detail='Manager access required')
+    worker = db.query(User).filter(User.id == worker_id, User.manager_id == current_user.id).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail='Worker not found')
+    worker.manager_id = None   # unlink — don't delete the account
+    db.commit()
+    return {'status': 'removed', 'worker_id': worker_id}
+
+
 # ── Manager: get a specific worker's latest IoT data ─────────────────────────
 @app.get('/manager/workers/{worker_id}/iot')
 def get_worker_iot(worker_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -566,8 +586,13 @@ def get_worker_iot(worker_id: int, current_user: User = Depends(get_current_user
     worker = db.query(User).filter(User.id == worker_id, User.manager_id == current_user.id).first()
     if not worker:
         raise HTTPException(status_code=404, detail='Worker not found')
-    reading = db.query(SensorReading).filter(SensorReading.user_id == worker_id).order_by(SensorReading.recorded_at.desc()).first()
-    return {'worker': worker.username, 'data': reading.raw if reading else None, 'recorded_at': reading.recorded_at if reading else None}
+    # Return latest live data + current limits
+    return {
+        'worker_id': worker_id,
+        'worker': worker.username,
+        'data': _latest_arduino if _latest_arduino else None,
+        'config': device_config,
+    }
 
 
 @app.get('/manager/iot/live')

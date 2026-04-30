@@ -258,6 +258,18 @@ export default function LiveIoT() {
       try {
         const data: Reading = JSON.parse(e.data);
         if ((data as any).type === 'ping') return;
+
+        // Manager pushed new limits — update local limit state
+        if ((data as any).type === 'config_update') {
+          const cfg = data as any;
+          setLimits(prev => ({
+            ...prev,
+            temperature: cfg.temp_limit?.toString()     ?? prev.temperature,
+            humidity:    cfg.humidity_limit?.toString() ?? prev.humidity,
+            gas:         cfg.gas_limit?.toString()      ?? prev.gas,
+          }));
+          return;
+        }
         const time = new Date().toLocaleTimeString();
         setLatest(data); setLastTime(time);
         setArduinoActive(true);
