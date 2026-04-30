@@ -3,12 +3,13 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 class UserCreate(BaseModel):
-    username:   str
-    email:      EmailStr
-    password:   str
-    purpose:    Optional[str] = None
-    role:       Optional[str] = 'worker'   # 'manager' or 'worker'
-    manager_id: Optional[int] = None       # required if role=worker
+    username:     str
+    email:        EmailStr
+    password:     str
+    purpose:      Optional[str] = None
+    role:         Optional[str] = 'worker'
+    manager_id:   Optional[int] = None
+    manager_code: Optional[str] = None   # worker enters this to link to a manager
 
 class LoginRequest(BaseModel):
     username: str
