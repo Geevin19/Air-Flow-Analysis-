@@ -17,8 +17,6 @@ export default function ManagerDashboard() {
   const [user, setUser]                 = useState<any>(null);
   const [showProfile, setShowProfile]   = useState(false);
   const [selectedWorker, setSelectedWorker] = useState<Worker|null>(null);
-  const [workerIot, setWorkerIot]       = useState<any>(null);
-  const [workerIotLoading, setWorkerIotLoading] = useState(false);
   // Limits (manager sets these — synced to Arduino + worker pages)
   const [limits, setLimits]             = useState({ temp: '', hum: '', gas: '' });
   const [limitSaving, setLimitSaving]   = useState(false);
@@ -70,14 +68,8 @@ export default function ManagerDashboard() {
     if (selectedWorker?.id === workerId) setSelectedWorker(null);
   };
 
-  const openWorker = async (worker: Worker) => {
-    setSelectedWorker(worker);
-    setWorkerIotLoading(true);
-    try {
-      const r = await api.get(`/manager/workers/${worker.id}/iot`);
-      setWorkerIot(r.data);
-    } catch { setWorkerIot(null); }
-    finally { setWorkerIotLoading(false); }
+  const openWorker = (worker: Worker) => {
+    navigate(`/manager/worker/${worker.id}`);
   };
 
   const saveLimits = async () => {
@@ -238,40 +230,6 @@ export default function ManagerDashboard() {
               </div>
               {limitMsg && <p style={{ fontSize:12, color: limitMsg.startsWith('✓') ? '#16a34a' : '#dc2626', marginTop:10, fontWeight:600 }}>{limitMsg}</p>}
             </div>
-
-            {/* Worker detail panel */}
-            {selectedWorker && (
-              <div style={{ background:'#f0f9ff', border:'1.5px solid #bfdbfe', borderRadius:16, padding:'20px 24px', marginBottom:20 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-                  <div>
-                    <div style={{ fontSize:15, fontWeight:700, color:'#1d4ed8' }}>{selectedWorker.username}</div>
-                    <div style={{ fontSize:12, color:'#64748b' }}>{selectedWorker.email}</div>
-                  </div>
-                  <button onClick={() => setSelectedWorker(null)}
-                    style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'#94a3b8' }}>✕</button>
-                </div>
-                {workerIotLoading ? (
-                  <div style={{ fontSize:13, color:'#64748b' }}>Loading sensor data…</div>
-                ) : workerIot?.data ? (
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
-                    {[
-                      { label:'Temperature', value: workerIot.data.temperature?.toFixed(1), unit:'°C', color:'#f97316' },
-                      { label:'Humidity',    value: workerIot.data.humidity?.toFixed(1),    unit:'%',  color:'#6366f1' },
-                      { label:'Gas',         value: workerIot.data.gas?.toFixed(0),         unit:'ppm',color:'#ef4444' },
-                    ].map(m => (
-                      <div key={m.label} style={{ background:'#fff', borderRadius:10, padding:'14px 16px', border:'1px solid #dbeafe' }}>
-                        <div style={{ fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', marginBottom:4 }}>{m.label}</div>
-                        <div style={{ fontSize:22, fontWeight:800, color:m.color, fontFamily:'monospace' }}>
-                          {m.value ?? '—'} <span style={{ fontSize:12, color:'#94a3b8' }}>{m.unit}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ fontSize:13, color:'#64748b' }}>No live sensor data available for this worker yet.</div>
-                )}
-              </div>
-            )}
 
             {/* Workers table */}
             <div style={s.card}>
