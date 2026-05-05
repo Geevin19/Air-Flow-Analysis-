@@ -166,6 +166,37 @@ void setup() {
   dht.begin();
   delay(2500);
   connectWiFi();
+
+  // ── Connectivity diagnostic ───────────────────────────────────────────────
+  Serial.println("\n[DIAG] Testing connectivity...");
+  Serial.print("[DIAG] Server: "); Serial.println(SERVER);
+  Serial.print("[DIAG] Port:   "); Serial.println(PORT);
+
+  // Test port 80
+  WiFiClient testClient;
+  Serial.print("[DIAG] TCP connect port 80... ");
+  if (testClient.connect(SERVER, 80)) {
+    Serial.println("OK");
+    testClient.stop();
+  } else {
+    Serial.println("FAILED — port 80 blocked or server unreachable");
+  }
+
+  // Test port 443
+  WiFiClient testClient2;
+  Serial.print("[DIAG] TCP connect port 443... ");
+  if (testClient2.connect(SERVER, 443)) {
+    Serial.println("OK");
+    testClient2.stop();
+  } else {
+    Serial.println("FAILED — port 443 blocked");
+  }
+
+  Serial.print("[DIAG] Arduino IP: "); Serial.println(WiFi.localIP());
+  Serial.print("[DIAG] Gateway:    "); Serial.println(WiFi.gatewayIP());
+  Serial.println("[DIAG] Done.\n");
+  // ─────────────────────────────────────────────────────────────────────────
+
   pollConfig();
   lcdShow("Ready", DEVICE_ID);
   delay(800);
