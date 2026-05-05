@@ -5,12 +5,12 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-// ───────── WiFi ───────────────────────────────────────────────────────────────
+// ───────── Config ─────────────────────────────────────────────────────────────
 char WIFI_SSID[64] = "Testwifi";
 char WIFI_PASS[64] = "12345678";
 
 const char* SERVER    = "airflowanalysis.xyz";
-const int   PORT      = 443;
+const int   PORT      = 80;          // ← HTTP port 80, nginx handles HTTPS termination
 const char* DEVICE_ID = "ARDUINO_001";
 
 #define DHT_PIN   4
@@ -23,7 +23,6 @@ const char* DEVICE_ID = "ARDUINO_001";
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 DHT               dht(DHT_PIN, DHT_TYPE);
 
-// One shared SSL client — recreated per request to avoid state corruption
 unsigned long lastSend      = 0;
 unsigned long lastConfig    = 0;
 unsigned long lastLcdSwitch = 0;
@@ -32,6 +31,13 @@ bool          lcdPage       = false;
 float tempLimit = 35.0;
 float humLimit  = 70.0;
 int   gasLimit  = 500;
+
+// ── Forward declarations ──────────────────────────────────────────────────────
+void sendData();
+void pollConfig();
+bool doPost(const char* path, const String& body, String& respBody);
+bool doGet(const char* path, String& respBody);
+void connectWiFi();
 
 // ─────────────────────────────────────────────────────────────────────────────
 void setAlert(bool on) {
@@ -52,7 +58,7 @@ void connectWiFi() {
   int t = 0;
   while (WiFi.status() != WL_CONNECTED && t < 40) { delay(500); Serial.print("."); t++; }
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n[WiFi] Connected");
+    Serial.println("\n[WiFi] Connected: " + WiFi.localIP().toString());
     lcdShow("WiFi Connected!", "");
     delay(1000);
   } else {
@@ -62,9 +68,89 @@ void connectWiFi() {
   }
 }
 
-// ── Forward declarations ──────────────────────────────────────────────────────
-void sendData();
-void pollConfig();
+// ── Single HTTP POST using plain WiFiClient (HTTP, not HTTPS) ─────────────────
+// nginx on the server handles HTTPS — Arduino talks plain HTTP to port 80
+bool doPost(const char* path, const String& body, String& respBody) {
+  WiFiClient client;
+  if (!client.connect(SERVER, PORT)) {
+    Serial.println("[HTTP] Connect failed");
+    return false;
+  }
+
+  // Send request
+  client.print(String("POST ") + path + " HTTP/1.1\r\n");
+  client.print(String("Host: ") + SERVER + "\r\n");
+  client.print("Content-Type: application/json\r\n");
+  client.print("Connection: close\r\n");
+  client.print("Content-Length: " + String(body.length()) + "\r\n");
+  client.print("\r\n");
+  client.print(body);
+
+  // Wait for response
+  unsigned long timeout = millis();
+  while (!client.available() && millis() - timeout < 5000) delay(10);
+
+  // Read status line
+  String statusLine = client.readStringUntil('\n');
+  int code = -1;
+  if (statusLine.startsWith("HTTP/")) {
+    int sp1 = statusLine.indexOf(' ');
+    int sp2 = statusLine.indexOf(' ', sp1 + 1);
+    code = statusLine.substring(sp1 + 1, sp2).toInt();
+  }
+
+  // Skip headers
+  while (client.available()) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") break;
+  }
+
+  // Read body
+  respBody = "";
+  while (client.available()) respBody += (char)client.read();
+  client.stop();
+
+  Serial.print("[HTTP POST] "); Serial.print(path);
+  Serial.print(" → "); Serial.println(code);
+  return (code >= 200 && code < 300);
+}
+
+bool doGet(const char* path, String& respBody) {
+  WiFiClient client;
+  if (!client.connect(SERVER, PORT)) {
+    Serial.println("[HTTP] Connect failed");
+    return false;
+  }
+
+  client.print(String("GET ") + path + " HTTP/1.1\r\n");
+  client.print(String("Host: ") + SERVER + "\r\n");
+  client.print("Connection: close\r\n");
+  client.print("\r\n");
+
+  unsigned long timeout = millis();
+  while (!client.available() && millis() - timeout < 5000) delay(10);
+
+  String statusLine = client.readStringUntil('\n');
+  int code = -1;
+  if (statusLine.startsWith("HTTP/")) {
+    int sp1 = statusLine.indexOf(' ');
+    int sp2 = statusLine.indexOf(' ', sp1 + 1);
+    code = statusLine.substring(sp1 + 1, sp2).toInt();
+  }
+
+  while (client.available()) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") break;
+  }
+
+  respBody = "";
+  while (client.available()) respBody += (char)client.read();
+  client.stop();
+
+  Serial.print("[HTTP GET] "); Serial.print(path);
+  Serial.print(" → "); Serial.println(code);
+  return (code >= 200 && code < 300);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 void setup() {
@@ -103,14 +189,13 @@ void sendData() {
   float temp = dht.readTemperature();
   float hum  = dht.readHumidity();
 
-  // One retry on bad read
   if (isnan(temp) || isnan(hum)) {
     delay(200);
     temp = dht.readTemperature();
     hum  = dht.readHumidity();
   }
   if (isnan(temp) || isnan(hum)) {
-    Serial.println("[DHT] Failed");
+    Serial.println("[DHT] Failed — check wiring on pin 4");
     lcdShow("DHT Error!", "Check pin 4");
     return;
   }
@@ -119,7 +204,7 @@ void sendData() {
   bool exceeded = (temp > tempLimit) || (hum > humLimit) || (gas > gasLimit);
   setAlert(exceeded);
 
-  // LCD display
+  // LCD
   char l1[17], l2[17];
   if (!lcdPage) {
     snprintf(l1, 17, "T:%.1fC H:%.1f%%", temp, hum);
@@ -132,7 +217,7 @@ void sendData() {
   lcd.setCursor(0, 0); lcd.print(l1);
   lcd.setCursor(0, 1); lcd.print(l2);
 
-  // Build JSON payload
+  // JSON body
   JsonDocument doc;
   doc["device_id"]   = DEVICE_ID;
   doc["wifi_ssid"]   = WIFI_SSID;
@@ -142,21 +227,10 @@ void sendData() {
   String body;
   serializeJson(doc, body);
 
-  // Fresh SSL client per request — avoids stale connection issues
-  WiFiSSLClient ssl;
-  HttpClient    http(ssl, SERVER, PORT);
-  http.beginRequest();
-  http.post("/api/iot/data");
-  http.sendHeader("Content-Type", "application/json");
-  http.sendHeader("Content-Length", (int)body.length());
-  http.beginBody();
-  http.print(body);
-  http.endRequest();
+  String resp;
+  bool ok = doPost("/api/iot/data", body, resp);
 
-  int code = http.responseStatusCode();
-  http.responseBody();  // must drain
-
-  Serial.print("[SEND] "); Serial.print(code);
+  Serial.print("[SEND] "); Serial.print(ok ? "OK" : "FAIL");
   Serial.print(" T="); Serial.print(temp, 1);
   Serial.print(" H="); Serial.print(hum, 1);
   Serial.print(" G="); Serial.print(gas);
@@ -166,16 +240,9 @@ void sendData() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 void pollConfig() {
-  WiFiSSLClient ssl;
-  HttpClient    http(ssl, SERVER, PORT);
+  String payload;
+  if (!doGet("/api/iot/config", payload)) return;
 
-  http.get("/api/iot/config");
-  int code = http.responseStatusCode();
-  Serial.print("[CONFIG] HTTP: "); Serial.println(code);
-
-  if (code != 200) { http.responseBody(); return; }
-
-  String payload = http.responseBody();
   Serial.print("[CONFIG] Raw: "); Serial.println(payload);
 
   JsonDocument doc;
@@ -190,52 +257,31 @@ void pollConfig() {
   bool  limUpdated  = doc["limits_updated"]  | false;
   bool  wifiUpdated = doc["wifi_updated"]    | false;
 
-  Serial.print("[CONFIG] T<"); Serial.print(nT);
-  Serial.print(" H<"); Serial.print(nH);
-  Serial.print(" G<"); Serial.print(nG);
-  Serial.print(" limUpd="); Serial.print(limUpdated);
-  Serial.print(" wifiUpd="); Serial.println(wifiUpdated);
-
   if (nT != tempLimit || nH != humLimit || nG != gasLimit) {
     tempLimit = nT; humLimit = nH; gasLimit = nG;
-    Serial.println("[CONFIG] Limits applied!");
+    Serial.print("[CONFIG] Limits → T<"); Serial.print(nT);
+    Serial.print(" H<"); Serial.print(nH);
+    Serial.print(" G<"); Serial.println(nG);
     lcdShow("Limits Updated!", "");
     delay(600);
   }
 
-  // ACK limits — fresh client, no shared state
   if (limUpdated) {
-    WiFiSSLClient ackSsl;
-    HttpClient    ack(ackSsl, SERVER, PORT);
-    ack.beginRequest();
-    ack.post("/api/iot/config/ack");
-    ack.sendHeader("Content-Length", "0");
-    ack.endRequest();
-    ack.responseBody();
+    String r;
+    doPost("/api/iot/config/ack", "{}", r);
     Serial.println("[CONFIG] Limits acked");
   }
 
-  // ACK wifi + reconnect
   if (wifiUpdated) {
-    // Extract strings safely — copy before doc goes out of scope
     String newSsid = doc["wifi_ssid"]     | "";
     String newPass = doc["wifi_password"] | "";
     if (newSsid.length() > 0) {
       Serial.print("[WiFi] Switching to: "); Serial.println(newSsid);
       lcdShow("WiFi Changing...", newSsid.c_str());
-
-      WiFiSSLClient ackSsl;
-      HttpClient    ack(ackSsl, SERVER, PORT);
-      ack.beginRequest();
-      ack.post("/api/iot/wifi/ack");
-      ack.sendHeader("Content-Length", "0");
-      ack.endRequest();
-      ack.responseBody();
-
-      strncpy(WIFI_SSID, newSsid.c_str(), 63);
-      strncpy(WIFI_PASS, newPass.c_str(), 63);
-      WIFI_SSID[63] = '\0';
-      WIFI_PASS[63] = '\0';
+      String r;
+      doPost("/api/iot/wifi/ack", "{}", r);
+      strncpy(WIFI_SSID, newSsid.c_str(), 63); WIFI_SSID[63] = '\0';
+      strncpy(WIFI_PASS, newPass.c_str(), 63); WIFI_PASS[63] = '\0';
       WiFi.disconnect();
       delay(500);
       connectWiFi();
