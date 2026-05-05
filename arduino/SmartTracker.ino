@@ -6,8 +6,8 @@
 #include <LiquidCrystal_I2C.h>
 
 // ───────── Config ─────────────────────────────────────────────────────────────
-char WIFI_SSID[64] = "Testwifi";
-char WIFI_PASS[64] = "12345678";
+char WIFI_SSID[64] = "HUAWEI-9EC7";
+char WIFI_PASS[64] = "30632718";
 
 const char* SERVER    = "airflowanalysis.xyz";
 const int   PORT      = 80;          // ← HTTP port 80, nginx handles HTTPS termination
