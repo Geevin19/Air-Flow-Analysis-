@@ -10,7 +10,7 @@ import json
 import asyncio
 import os
 
-from database import engine, get_db, Base, check_db_health
+from database import engine, get_db, Base, check_db_health, SessionLocal
 from sqlalchemy import text, inspect
 from models import User, Simulation, LimitRequest, Alert, SensorReading
 from schemas import (
@@ -230,6 +230,22 @@ async def receive_iot_data(payload: SensorPayload):
     # Cache latest reading per device
     global _latest_arduino
     _latest_arduino = data
+
+    # Store reading in database
+    try:
+        db = SessionLocal()
+        reading = SensorReading(
+            raw=data,
+            temperature=str(payload.temperature) if payload.temperature is not None else None,
+            humidity=str(payload.humidity) if payload.humidity is not None else None,
+            flow_rate=str(payload.flow_rate) if payload.flow_rate is not None else None,
+            pressure=str(payload.pressure) if payload.pressure is not None else None,
+        )
+        db.add(reading)
+        db.commit()
+        db.close()
+    except Exception as e:
+        print(f"[DB] Failed to store reading: {e}")
 
     # Only push to WebSocket sessions that verified this specific device
     await manager.broadcast_to_device(device_id, data)

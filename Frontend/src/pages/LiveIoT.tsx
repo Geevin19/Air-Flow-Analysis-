@@ -95,7 +95,6 @@ export default function LiveIoT() {
   const [showLimits, setShowLimits]   = useState(false);
   const [alertedKeys, setAlertedKeys] = useState<Set<string>>(new Set());
   const [isWorker, setIsWorker]       = useState(false);
-  const [limitPending, setLimitPending] = useState<Set<string>>(new Set());
   // WiFi change
   const [showWifiChange, setShowWifiChange] = useState(false);
   const [newSsid, setNewSsid]         = useState('');
@@ -212,29 +211,19 @@ export default function LiveIoT() {
     }
   }, [navigate]);
 
-  // Push limits to backend — workers request approval, managers set directly
+  // Push limits directly to backend → Arduino (no approval needed)
   const pushLimitsToBackend = useCallback(async (key: string, value: string) => {
     const val = parseFloat(value);
     if (isNaN(val)) return;
-    const token = localStorage.getItem('token');
-
-    if (isWorker && token) {
-      try {
-        await api.post('/limits/request', { metric: key, value: val });
-        setLimitPending(p => new Set([...p, key]));
-        const id = ++toastId.current;
-        setToasts(p => [...p, { id, msg: `Limit request for ${key} sent to manager for approval`, metric: key }]);
-        setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 5000);
-      } catch { /* ignore */ }
-    } else {
-      const body: Record<string, number> = {};
-      const metaKey = key === 'temperature' ? 'temp_limit' : key === 'humidity' ? 'humidity_limit' : key.toLowerCase().replace(/ /g, '_') + '_limit';
-      body[metaKey] = val;
-      try {
-        await api.post('/iot/config', body);
-      } catch { /* ignore */ }
-    }
-  }, [isWorker]);
+    const body: Record<string, number> = {};
+    const metaKey = key === 'temperature' ? 'temp_limit'
+                  : key === 'humidity'    ? 'humidity_limit'
+                  : key.toLowerCase().replace(/ /g, '_') + '_limit';
+    body[metaKey] = val;
+    try {
+      await api.post('/iot/config', body);
+    } catch { /* ignore */ }
+  }, []);
 
   function connect() {
     setStatus('connecting'); setErrorMsg('');
@@ -616,7 +605,7 @@ export default function LiveIoT() {
                     ].map(({ key, label, unit }) => (
                       <LimitInput key={key} metricKey={key} label={label} unit={unit}
                         limits={limits} setLimits={setLimits} limitsRef={limitsRef}
-                        alertedKeys={alertedKeys} limitPending={limitPending}
+                        alertedKeys={alertedKeys}
                         pushLimitsToBackend={pushLimitsToBackend} />
                     ))}
                   </div>
@@ -633,7 +622,7 @@ export default function LiveIoT() {
                     ].map(({ key, label, unit }) => (
                       <LimitInput key={key} metricKey={key} label={label} unit={unit}
                         limits={limits} setLimits={setLimits} limitsRef={limitsRef}
-                        alertedKeys={alertedKeys} limitPending={limitPending}
+                        alertedKeys={alertedKeys}
                         pushLimitsToBackend={pushLimitsToBackend} />
                     ))}
                   </div>
@@ -823,28 +812,24 @@ export default function LiveIoT() {
 }
 
 // ── Reusable limit input ──────────────────────────────────────────────────────
-function LimitInput({ metricKey, label, unit, limits, setLimits, limitsRef, alertedKeys, limitPending, pushLimitsToBackend }: {
+function LimitInput({ metricKey, label, unit, limits, setLimits, limitsRef, alertedKeys, pushLimitsToBackend }: {
   metricKey: string; label: string; unit: string;
   limits: Record<string,string>; setLimits: (v: Record<string,string>) => void;
   limitsRef: React.MutableRefObject<Record<string,string>>;
-  alertedKeys: Set<string>; limitPending: Set<string>;
+  alertedKeys: Set<string>;
   pushLimitsToBackend: (key: string, value: string) => void;
 }) {
   const exceeded = alertedKeys.has(metricKey);
-  const pending  = limitPending.has(metricKey);
   return (
     <div style={{ background: exceeded ? '#fef2f2' : '#f8fafc', border:`1px solid ${exceeded?'#fca5a5':'#e2e8f0'}`, borderRadius:10, padding:'10px 14px' }}>
       <div style={{ fontSize:11, fontWeight:600, color: exceeded?'#dc2626':'#64748b', marginBottom:6, display:'flex', justifyContent:'space-between' }}>
         <span>{label}</span>
-        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-          {unit && <span style={{ color:'#94a3b8' }}>{unit}</span>}
-          {pending && <span style={{ fontSize:10, color:'#f59e0b', fontWeight:700 }}>Pending</span>}
-        </div>
+        {unit && <span style={{ color:'#94a3b8' }}>{unit}</span>}
       </div>
       <input type="number" placeholder="No limit" value={limits[metricKey] ?? ''}
         onBlur={e => { if (e.target.value) { const u = { ...limits, [metricKey]: e.target.value }; setLimits(u); limitsRef.current = u; pushLimitsToBackend(metricKey, e.target.value); } }}
         onChange={e => { const u = { ...limits, [metricKey]: e.target.value }; setLimits(u); limitsRef.current = u; }}
-        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${pending?'#fde68a':'#e2e8f0'}`, borderRadius:8, fontSize:13, fontFamily:'"JetBrains Mono",monospace', fontWeight:600, outline:'none', background: pending?'#fefce8':'#fff', color:'#0f172a' }} />
+        style={{ width:'100%', padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:8, fontSize:13, fontFamily:'"JetBrains Mono",monospace', fontWeight:600, outline:'none', background:'#fff', color:'#0f172a' }} />
     </div>
   );
 }
