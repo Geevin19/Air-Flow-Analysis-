@@ -10,6 +10,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import ManagerIoT from "./pages/ManagerIoT";
 import WorkerIoT from "./pages/WorkerIoT";
+import Calculator from "./pages/Calculator";
 
 function App() {
   return (

@@ -144,6 +144,9 @@ manager = ConnectionManager()
 # ── Latest Arduino reading (in-memory cache) ──────────────────────────────────
 _latest_arduino: dict = {}
 
+# ── Device registry — tracks known device IDs ────────────────────────────────
+registered_devices: dict = {}   # device_id → {ip, last_seen, wifi_ssid}
+
 
 # ── WebSocket: browser connects here — must pass device_id + wifi_ssid ────────
 @app.websocket("/ws/iot")
@@ -151,15 +154,18 @@ async def iot_websocket(websocket: WebSocket):
     device_id = websocket.query_params.get("device_id", "").strip()
     wifi_ssid = websocket.query_params.get("wifi_ssid", "").strip()
 
-    # Validate before accepting
-    if not device_id or device_id not in registered_devices:
-        await websocket.close(code=4001, reason="Device not found")
+    # Accept connection even if device hasn't posted yet —
+    # it will start receiving data as soon as Arduino sends its first reading
+    if not device_id:
+        await websocket.close(code=4001, reason="Device ID is required")
         return
 
-    stored = registered_devices[device_id]
-    if wifi_ssid and stored.get("wifi_ssid") and stored["wifi_ssid"] != wifi_ssid:
-        await websocket.close(code=4003, reason="WiFi network mismatch")
-        return
+    # If device is registered, optionally check WiFi match
+    if device_id in registered_devices and wifi_ssid:
+        stored_ssid = registered_devices[device_id].get("wifi_ssid", "")
+        if stored_ssid and stored_ssid != wifi_ssid:
+            await websocket.close(code=4003, reason="WiFi network mismatch")
+            return
 
     await manager.connect(websocket, device_id)
     try:
@@ -475,9 +481,6 @@ def delete_simulation(simulation_id: int, current_user: User = Depends(get_curre
     db.delete(simulation)
     db.commit()
     return {'message': 'Simulation deleted successfully'}
-
-# ── Device registry — tracks known device IDs ────────────────────────────────
-registered_devices: dict = {}   # device_id → {ip, last_seen}
 
 @app.post("/iot/verify")
 async def verify_device(data: dict):

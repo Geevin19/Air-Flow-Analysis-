@@ -305,7 +305,7 @@ export default function LiveIoT() {
         setLatest(data); setLastTime(time);
         setArduinoActive(true);
         if (timerRef.current) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setArduinoActive(false), 5000);
+        timerRef.current = setTimeout(() => setArduinoActive(false), 10000);
         const values: Record<string, number> = {};
         for (const [k, v] of Object.entries(data))
           if (k !== 'timestamp' && typeof v === 'number') values[k] = v;
