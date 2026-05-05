@@ -516,13 +516,16 @@ def get_config():
 
 @app.post("/iot/config")
 async def update_config(data: dict):
-    device_config.update(data)
+    # Only update limit keys — don't overwrite wifi/flags with garbage
+    if "temp_limit"     in data: device_config["temp_limit"]     = float(data["temp_limit"])
+    if "humidity_limit" in data: device_config["humidity_limit"] = float(data["humidity_limit"])
+    if "gas_limit"      in data: device_config["gas_limit"]      = int(data["gas_limit"])
     device_config["limits_updated"] = True
-    print(f"[Config] Limits pushed: temp={device_config.get('temp_limit')} "
-          f"hum={device_config.get('humidity_limit')} gas={device_config.get('gas_limit')}")
-    # Broadcast new limits to all connected browser sessions so worker pages update instantly
+    print(f"[Config] Limits → temp={device_config['temp_limit']} "
+          f"hum={device_config['humidity_limit']} gas={device_config['gas_limit']}")
+    # Push to all browser sessions instantly
     await manager.broadcast({
-        "type": "config_update",
+        "type":           "config_update",
         "temp_limit":     device_config["temp_limit"],
         "humidity_limit": device_config["humidity_limit"],
         "gas_limit":      device_config["gas_limit"],

@@ -96,6 +96,14 @@ export default function LiveIoT() {
   const [alertedKeys, setAlertedKeys] = useState<Set<string>>(new Set());
   const [isWorker, setIsWorker]       = useState(false);
   const [limitPending, setLimitPending] = useState<Set<string>>(new Set());
+  // WiFi change
+  const [showWifiChange, setShowWifiChange] = useState(false);
+  const [newSsid, setNewSsid]         = useState('');
+  const [newPass, setNewPass]         = useState('');
+  const [wifiMsg, setWifiMsg]         = useState('');
+  // Track when each metric first exceeded its limit (for 2-min email)
+  const exceededSinceRef = useRef<Record<string, number>>({});
+  const emailSentRef     = useRef<Set<string>>(new Set());
   const [deviceId, setDeviceId]       = useState(() => localStorage.getItem('arduino_device_id') || 'ARDUINO_001');
   const [wifiSsid, setWifiSsid]       = useState(() => localStorage.getItem('arduino_wifi_ssid') || '');
   const [isFirstTime]                 = useState(() => !localStorage.getItem('arduino_device_id'));
@@ -137,6 +145,7 @@ export default function LiveIoT() {
     const currentLimits  = limitsRef.current;
     const currentAlerted = new Set(alertedRef.current);
     let changed = false;
+    const now = Date.now();
 
     Object.entries(currentLimits).forEach(([key, limitStr]) => {
       const lim = parseFloat(limitStr);
@@ -144,18 +153,40 @@ export default function LiveIoT() {
       const val = all[key];
       if (val == null) return;
 
-      if (val > lim && !currentAlerted.has(key)) {
-        currentAlerted.add(key);
-        changed = true;
-        beep();
-        const meta = SENSOR_META[key] ?? PHYS_META.find(m => m.key === key);
-        const unit = (meta as any)?.unit ?? '';
-        const id = ++toastId.current;
-        setToasts(p => [...p, { id, msg: `${key} exceeded limit — ${val.toFixed(4)} ${unit} (limit: ${lim} ${unit})`, metric: key }]);
-        setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 8000);
-      } else if (val <= lim && currentAlerted.has(key)) {
-        currentAlerted.delete(key);
-        changed = true;
+      if (val > lim) {
+        if (!currentAlerted.has(key)) {
+          currentAlerted.add(key);
+          changed = true;
+          beep();
+          const meta = SENSOR_META[key] ?? PHYS_META.find(m => m.key === key);
+          const unit = (meta as any)?.unit ?? '';
+          const id = ++toastId.current;
+          setToasts(p => [...p, { id, msg: `${key} exceeded limit — ${val.toFixed(2)} ${unit} (limit: ${lim} ${unit})`, metric: key }]);
+          setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 8000);
+        }
+        // Track when this metric first exceeded
+        if (!exceededSinceRef.current[key]) {
+          exceededSinceRef.current[key] = now;
+        }
+        // Send email after 2 minutes of continuous exceedance
+        const exceededFor = now - exceededSinceRef.current[key];
+        if (exceededFor >= 120_000 && !emailSentRef.current.has(key)) {
+          emailSentRef.current.add(key);
+          const meta = SENSOR_META[key] ?? PHYS_META.find(m => m.key === key);
+          const unit = (meta as any)?.unit ?? '';
+          api.post('/iot/alert', { metric: key, value: val, limit: lim, unit })
+            .then(() => {
+              const id = ++toastId.current;
+              setToasts(p => [...p, { id, msg: `📧 Alert email sent — ${key} has been above limit for 2 minutes`, metric: key }]);
+              setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 6000);
+            })
+            .catch(() => {});
+        }
+      } else {
+        // Value back within limit — reset timers
+        if (currentAlerted.has(key)) { currentAlerted.delete(key); changed = true; }
+        delete exceededSinceRef.current[key];
+        emailSentRef.current.delete(key);
       }
     });
 
@@ -385,6 +416,10 @@ export default function LiveIoT() {
         <div style={{ display:'flex', gap:10 }}>
           {status === 'connected' && (
             <>
+              <button onClick={() => setShowWifiChange(v => !v)}
+                style={{ ...s.backBtn, background: showWifiChange ? '#7c3aed' : '#0f172a' }}>
+                📶 WiFi
+              </button>
               <button onClick={() => setShowPipeEdit(v => !v)}
                 style={{ ...s.backBtn, background: showPipeEdit ? '#0369a1' : '#0f172a' }}>
                 Pipes
@@ -458,8 +493,20 @@ export default function LiveIoT() {
           <div style={{ ...s.centerWrap, animation:'fadeUp .4s ease' }}>
             <div style={{ fontSize:52, marginBottom:16 }}>⚠️</div>
             <h2 style={{ ...s.idleTitle, color:'#ef4444' }}>Connection Failed</h2>
-            <p style={s.idleSub}>{errorMsg}</p>
-            <button style={s.connectBtn} onClick={connect}><span>🔄</span> Retry</button>
+            <p style={s.idleSub}>
+              {errorMsg.includes('not found')
+                ? `Device '${deviceId}' hasn't sent any data yet. Make sure the Arduino is powered on, connected to WiFi, and running the sketch.`
+                : errorMsg.includes('WiFi')
+                ? `WiFi network mismatch. Make sure your computer is on the same WiFi as the Arduino (${wifiSsid}).`
+                : errorMsg.includes('WebSocket')
+                ? 'Cannot reach the server. Check your internet connection and try again.'
+                : errorMsg || 'Connection closed unexpectedly.'}
+            </p>
+            <div style={{ display:'flex', flexDirection:'column', gap:8, alignItems:'center', marginTop:8, fontSize:12, color:'#94a3b8' }}>
+              {errorMsg.includes('not found') && <span>💡 Check Serial Monitor — Arduino should show <code style={{background:'#f1f5f9',padding:'1px 6px',borderRadius:4}}>[SEND] 200</code></span>}
+              {errorMsg.includes('WiFi')      && <span>💡 Connect your computer to <strong>{wifiSsid}</strong> then retry</span>}
+            </div>
+            <button style={{ ...s.connectBtn, marginTop:20 }} onClick={connect}><span>🔄</span> Retry</button>
           </div>
         )}
 
@@ -483,6 +530,39 @@ export default function LiveIoT() {
               )}
               <button style={s.disconnectBtn} onClick={disconnect}>Disconnect</button>
             </div>
+
+            {/* WiFi change panel */}
+            {showWifiChange && (
+              <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px', marginBottom:16 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:'#0f172a', marginBottom:4 }}>Change Arduino WiFi</div>
+                <div style={{ fontSize:12, color:'#64748b', marginBottom:14 }}>New credentials will be sent to the Arduino — it will reconnect automatically within 3 seconds</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:12, alignItems:'end' }}>
+                  <div>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#374151', marginBottom:5 }}>New WiFi SSID</label>
+                    <input type="text" value={newSsid} onChange={e => setNewSsid(e.target.value)}
+                      placeholder="Network name"
+                      style={{ width:'100%', padding:'9px 12px', border:'1.5px solid #e2e8f0', borderRadius:8, fontSize:13, outline:'none' }} />
+                  </div>
+                  <div>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#374151', marginBottom:5 }}>New Password</label>
+                    <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)}
+                      placeholder="WiFi password"
+                      style={{ width:'100%', padding:'9px 12px', border:'1.5px solid #e2e8f0', borderRadius:8, fontSize:13, outline:'none' }} />
+                  </div>
+                  <button onClick={async () => {
+                    if (!newSsid.trim()) { setWifiMsg('SSID is required'); return; }
+                    try {
+                      await api.post('/iot/wifi', { ssid: newSsid.trim(), password: newPass });
+                      setWifiMsg(`✓ Sent to Arduino — reconnecting to "${newSsid}"`);
+                      setTimeout(() => { setShowWifiChange(false); setWifiMsg(''); setNewSsid(''); setNewPass(''); }, 3000);
+                    } catch { setWifiMsg('Failed to send credentials'); }
+                  }} style={{ padding:'9px 18px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:600, whiteSpace:'nowrap' as const }}>
+                    Send to Arduino
+                  </button>
+                </div>
+                {wifiMsg && <p style={{ fontSize:12, marginTop:10, fontWeight:600, color: wifiMsg.startsWith('✓') ? '#16a34a' : '#dc2626' }}>{wifiMsg}</p>}
+              </div>
+            )}
 
             {/* Inline active alerts on page */}
             {alertedKeys.size > 0 && (
@@ -566,7 +646,10 @@ export default function LiveIoT() {
               <div style={s.waitCard}>
                 <div style={{ width:48, height:48, borderRadius:'50%', background:'rgba(99,102,241,.1)', margin:'0 auto 16px', animation:'pulse 1.5s infinite' }} />
                 <p style={{ fontSize:16, fontWeight:700, color:'#1e293b', margin:'0 0 6px' }}>Waiting for sensor data…</p>
-                <p style={{ fontSize:13, color:'#64748b', margin:0 }}>WebSocket open — listening for readings</p>
+                <p style={{ fontSize:13, color:'#64748b', margin:'0 0 4px' }}>WebSocket connected — listening for Arduino readings</p>
+                <p style={{ fontSize:12, color:'#94a3b8', margin:0 }}>
+                  Make sure the Arduino sketch is running and showing <code style={{background:'#f1f5f9',padding:'1px 6px',borderRadius:4}}>[SEND] 200</code> in Serial Monitor
+                </p>
               </div>
             )}
 
