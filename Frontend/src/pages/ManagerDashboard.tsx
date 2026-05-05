@@ -61,6 +61,17 @@ export default function ManagerDashboard() {
     setPending(p => p.filter(r => r.id !== id));
   };
 
+  // Auto-refresh pending requests every 5s so new worker requests appear
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const r = await api.get('/limits/pending');
+        setPending(r.data);
+      } catch { /* ignore */ }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   const removeWorker = async (workerId: number) => {
     if (!confirm('Remove this worker from your team?')) return;
     await api.delete(`/manager/workers/${workerId}`);

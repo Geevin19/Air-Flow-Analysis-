@@ -651,7 +651,7 @@ def get_pending_limits(current_user: User = Depends(get_current_user), db: Sessi
 
 # ── Manager: approve or reject a limit request ───────────────────────────────
 @app.post('/limits/{request_id}/review')
-def review_limit(request_id: int, action: str, reason: Optional[str] = None,
+async def review_limit(request_id: int, action: str, reason: Optional[str] = None,
                  current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role != 'manager':
         raise HTTPException(status_code=403, detail='Manager access required')
@@ -664,6 +664,29 @@ def review_limit(request_id: int, action: str, reason: Optional[str] = None,
     req.reason = reason
     req.reviewed_at = datetime.utcnow()
     db.commit()
+
+    # ── If approved → push limit to device_config so Arduino picks it up ──────
+    if action == 'approved':
+        metric = req.metric.lower()
+        if metric == 'temperature':
+            device_config['temp_limit'] = float(req.value)
+        elif metric == 'humidity':
+            device_config['humidity_limit'] = float(req.value)
+        elif metric == 'gas':
+            device_config['gas_limit'] = int(req.value)
+        else:
+            # generic: store as-is
+            device_config[f'{metric}_limit'] = req.value
+        device_config['limits_updated'] = True
+        print(f"[Approval] Limit approved → {metric}={req.value} pushed to Arduino")
+        # Broadcast to all browser sessions instantly
+        await manager.broadcast({
+            "type":           "config_update",
+            "temp_limit":     device_config["temp_limit"],
+            "humidity_limit": device_config["humidity_limit"],
+            "gas_limit":      device_config["gas_limit"],
+        })
+
     # Notify worker
     worker = db.query(User).filter(User.id == req.worker_id).first()
     if worker:
