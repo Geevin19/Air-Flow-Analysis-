@@ -1265,7 +1265,7 @@ export default function Simulation() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
               {(['pressure','velocity','friction','material'] as const).map(m => (
                 <button key={m} onClick={()=>setColorMode(m)}
-                  style={{ padding:'9px 6px', borderRadius:'9px', border:`1px solid ${colorMode===m?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: colorMode===m?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: colorMode===m?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                  style={{ padding:'9px 6px', borderRadius:'9px', border:'1px solid ' + (colorMode===m?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')), background: colorMode===m?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: colorMode===m?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' as const }}>
                   {m}
                 </button>
               ))}
@@ -1281,7 +1281,7 @@ export default function Simulation() {
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                   {(['rainbow','blue','fire','cyan','purple'] as const).map(scheme => (
                     <button key={scheme} onClick={()=>setParticleColorScheme(scheme)}
-                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleColorScheme===scheme?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: particleColorScheme===scheme?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleColorScheme===scheme?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                      style={{ padding:'7px 6px', borderRadius:'8px', border:'1px solid ' + (particleColorScheme===scheme?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')), background: particleColorScheme===scheme?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleColorScheme===scheme?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' as const }}>
                       {scheme}
                     </button>
                   ))}
@@ -1292,7 +1292,7 @@ export default function Simulation() {
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'6px' }}>
                   {(['small','medium','large'] as const).map(size => (
                     <button key={size} onClick={()=>setParticleSize(size)}
-                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleSize===size?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: particleSize===size?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleSize===size?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                      style={{ padding:'7px 6px', borderRadius:'8px', border:'1px solid ' + (particleSize===size?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')), background: particleSize===size?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleSize===size?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' as const }}>
                       {size}
                     </button>
                   ))}
