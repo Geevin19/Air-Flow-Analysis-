@@ -1,6 +1,107 @@
-import { useState, useEffect, useRef, useMemo, } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { simulationAPI } from '../services/api';
+
+// ─── Multi-pipe segment types ─────────────────────────────────────────────────
+interface PipeSegment {
+  id: string;
+  name: string;
+  shape: PipeShape;
+  length: number;
+  innerD: number;
+  material: string;
+  flowRate: number;
+}
+
+// ─── PDF Report generator (print-based, no external lib) ─────────────────────
+function downloadReport(params: any, computed: any, name: string, segments: PipeSegment[]) {
+  const win = window.open('', '_blank');
+  if (!win) return;
+  const now = new Date().toLocaleString();
+  const segRows = segments.map(s => {
+    const area = Math.PI * (s.innerD / 2) ** 2;
+    const v = area > 0 ? s.flowRate / area : 0;
+    const rho = params.air.density_kg_m3;
+    const mu = params.air.dynamic_viscosity_Pa_s;
+    const Re = mu > 0 ? (rho * v * s.innerD) / mu : 0;
+    const regime = Re < 2300 ? 'Laminar' : Re < 4000 ? 'Transition' : 'Turbulent';
+    return `<tr>
+      <td>${s.name}</td><td>${s.shape}</td><td>${s.length} m</td>
+      <td>${s.innerD * 1000} mm</td><td>${s.material}</td>
+      <td>${v.toFixed(3)} m/s</td><td>${Re.toFixed(0)}</td><td>${regime}</td>
+    </tr>`;
+  }).join('');
+
+  win.document.write(`<!DOCTYPE html><html><head>
+    <title>Simulation Report — ${name}</title>
+    <style>
+      body{font-family:'Segoe UI',Arial,sans-serif;margin:40px;color:#111;background:#fff;}
+      h1{color:#1d4ed8;font-size:22px;margin-bottom:4px;}
+      .sub{color:#6b7280;font-size:13px;margin-bottom:28px;}
+      .section{margin-bottom:24px;}
+      .section h2{font-size:14px;font-weight:700;color:#374151;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:12px;text-transform:uppercase;letter-spacing:.06em;}
+      .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
+      .metric{background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:12px;}
+      .metric .label{font-size:10px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
+      .metric .value{font-size:18px;font-weight:700;color:#111;margin-top:4px;}
+      .metric .unit{font-size:11px;color:#9ca3af;}
+      table{width:100%;border-collapse:collapse;font-size:12px;}
+      th{background:#1d4ed8;color:#fff;padding:8px 10px;text-align:left;font-size:11px;}
+      td{padding:7px 10px;border-bottom:1px solid #e5e7eb;}
+      tr:nth-child(even) td{background:#f8fafc;}
+      .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;}
+      .laminar{background:#dbeafe;color:#1d4ed8;}
+      .turbulent{background:#fee2e2;color:#dc2626;}
+      .transition{background:#fef9c3;color:#a16207;}
+      @media print{body{margin:20px;} button{display:none;}}
+    </style>
+  </head><body>
+    <h1>📊 Airflow Simulation Report</h1>
+    <div class="sub">Simulation: <b>${name || 'Untitled'}</b> &nbsp;·&nbsp; Generated: ${now}</div>
+
+    <div class="section">
+      <h2>Pipe Configuration</h2>
+      <div class="grid">
+        <div class="metric"><div class="label">Shape</div><div class="value">${params.pipe.shape}</div></div>
+        <div class="metric"><div class="label">Length</div><div class="value">${params.pipe.length_m}<span class="unit"> m</span></div></div>
+        <div class="metric"><div class="label">Inner Diameter</div><div class="value">${(params.pipe.inner_diameter_m*1000).toFixed(1)}<span class="unit"> mm</span></div></div>
+        <div class="metric"><div class="label">Material</div><div class="value">${params.pipe.material}</div></div>
+        <div class="metric"><div class="label">Roughness ε</div><div class="value">${params.pipe.absolute_roughness_m}<span class="unit"> m</span></div></div>
+        <div class="metric"><div class="label">Temperature</div><div class="value">${params.air.temperature_C}<span class="unit"> °C</span></div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Flow Results</h2>
+      <div class="grid">
+        <div class="metric"><div class="label">Avg Velocity</div><div class="value">${computed.velocity.toFixed(4)}<span class="unit"> m/s</span></div></div>
+        <div class="metric"><div class="label">Reynolds Number</div><div class="value">${computed.reynolds.toFixed(0)}</div></div>
+        <div class="metric"><div class="label">Flow Regime</div><div class="value"><span class="badge ${computed.flowRegime}">${computed.flowRegime}</span></div></div>
+        <div class="metric"><div class="label">Total Pressure Drop</div><div class="value">${(computed.pressureDrop/1000).toFixed(4)}<span class="unit"> kPa</span></div></div>
+        <div class="metric"><div class="label">Friction Factor f</div><div class="value">${computed.frictionFactor.toFixed(6)}</div></div>
+        <div class="metric"><div class="label">Mass Flow Rate</div><div class="value">${computed.massFlow.toFixed(4)}<span class="unit"> kg/s</span></div></div>
+        <div class="metric"><div class="label">Air Density</div><div class="value">${computed.density.toFixed(4)}<span class="unit"> kg/m³</span></div></div>
+        <div class="metric"><div class="label">Wall Shear Stress</div><div class="value">${computed.wallShear.toFixed(4)}<span class="unit"> Pa</span></div></div>
+        <div class="metric"><div class="label">Minor Loss Δp</div><div class="value">${(computed.minorDrop/1000).toFixed(4)}<span class="unit"> kPa</span></div></div>
+      </div>
+    </div>
+
+    ${segments.length > 0 ? `
+    <div class="section">
+      <h2>Connected Pipe Segments (${segments.length})</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Shape</th><th>Length</th><th>Diameter</th><th>Material</th><th>Velocity</th><th>Reynolds</th><th>Regime</th></tr></thead>
+        <tbody>${segRows}</tbody>
+      </table>
+    </div>` : ''}
+
+    <div style="margin-top:40px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;">
+      SmartTracker — Airflow Analysis Platform &nbsp;·&nbsp; ${now}
+    </div>
+    <script>window.onload=()=>window.print();</script>
+  </body></html>`);
+  win.document.close();
+}
 
 /* ─────────────────────────────────────────────────────────────────────────────
    THREE.JS loaded from CDN via script tag injection
@@ -711,6 +812,109 @@ export default function Simulation() {
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [backendResult,   setBackendResult]   = useState<any>(null);
 
+  // ── multi-pipe segments ──
+  const [segments, setSegments] = useState<PipeSegment[]>([]);
+  const [showSegments, setShowSegments] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const addSegment = useCallback(() => {
+    setSegments(prev => [...prev, {
+      id: Math.random().toString(36).slice(2),
+      name: `Pipe ${prev.length + 1}`,
+      shape: 'straight',
+      length: pipeLengthM,
+      innerD: pipeInnerDiameterM,
+      material: pipeMaterial,
+      flowRate: volumetricFlowRateM3S,
+    }]);
+  }, [pipeLengthM, pipeInnerDiameterM, pipeMaterial, volumetricFlowRateM3S]);
+
+  const removeSegment = useCallback((id: string) => {
+    setSegments(prev => prev.filter(s => s.id !== id));
+  }, []);
+
+  const updateSegment = useCallback((id: string, field: keyof PipeSegment, val: any) => {
+    setSegments(prev => prev.map(s => s.id === id ? { ...s, [field]: val } : s));
+  }, []);
+
+  // Combined pressure drop across all segments in series
+  const totalSegmentDrop = useMemo(() => {
+    const rho = computeAirDensity(airTemperatureC, airPressurePa);
+    const mu  = computeDynamicViscosity(airTemperatureC);
+    return segments.reduce((sum, s) => {
+      const area = Math.PI * (s.innerD / 2) ** 2;
+      const v = area > 0 ? s.flowRate / area : 0;
+      const Re = computeRe(rho, v, s.innerD, mu);
+      const f  = computeFF(Re, MATERIALS[s.material]?.roughness ?? 0.000045, s.innerD);
+      return sum + computeDP(f, s.length, s.innerD, rho, v);
+    }, 0);
+  }, [segments, airTemperatureC, airPressurePa]);
+
+  // File upload: parse JSON or CSV pipe definition
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string;
+        let parsed: any = null;
+
+        if (file.name.endsWith('.json')) {
+          parsed = JSON.parse(text);
+        } else if (file.name.endsWith('.csv')) {
+          // CSV format: name,shape,length_m,inner_diameter_m,material,flow_rate_m3s
+          const lines = text.trim().split('\n');
+          const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+          const rows = lines.slice(1).map(l => {
+            const vals = l.split(',').map(v => v.trim());
+            const obj: any = {};
+            headers.forEach((h, i) => obj[h] = vals[i]);
+            return obj;
+          });
+          parsed = { segments: rows };
+        }
+
+        if (!parsed) { setError('Could not parse file. Use JSON or CSV format.'); return; }
+
+        // Single pipe definition
+        if (parsed.pipe || parsed.length_m || parsed.inner_diameter_m) {
+          const p = parsed.pipe || parsed;
+          if (p.length_m)           setPipeLengthM(Number(p.length_m));
+          if (p.inner_diameter_m)   setPipeInnerDiameterM(Number(p.inner_diameter_m));
+          if (p.outer_diameter_m)   setPipeOuterDiameterM(Number(p.outer_diameter_m));
+          if (p.material && MATERIALS[p.material]) setPipeMaterial(p.material);
+          if (p.shape && PIPE_SHAPES[p.shape as PipeShape]) setPipeShape(p.shape);
+          if (parsed.air?.temperature_C) setAirTemperatureC(Number(parsed.air.temperature_C));
+          if (parsed.air?.pressure_Pa)   setAirPressurePa(Number(parsed.air.pressure_Pa));
+          if (parsed.flow?.volumetric_flow_rate_m3_s) setVolumetricFlowRateM3S(Number(parsed.flow.volumetric_flow_rate_m3_s));
+          if (parsed.name) setName(parsed.name);
+          setError(null);
+        }
+
+        // Multi-segment definition
+        if (parsed.segments && Array.isArray(parsed.segments)) {
+          const newSegs: PipeSegment[] = parsed.segments.map((s: any, i: number) => ({
+            id: Math.random().toString(36).slice(2),
+            name: s.name || `Pipe ${i + 1}`,
+            shape: (PIPE_SHAPES[s.shape as PipeShape] ? s.shape : 'straight') as PipeShape,
+            length: Number(s.length_m || s.length || 10),
+            innerD: Number(s.inner_diameter_m || s.inner_d || 0.1),
+            material: MATERIALS[s.material] ? s.material : 'Steel',
+            flowRate: Number(s.flow_rate_m3s || s.flow_rate || 0.25),
+          }));
+          setSegments(newSegs);
+          setShowSegments(true);
+          setError(null);
+        }
+      } catch {
+        setError('Failed to parse file. Check the format and try again.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }, []);
+
   useEffect(() => {
     setPipeAbsoluteRoughnessM(MATERIALS[pipeMaterial]?.roughness ?? 0.000045);
   }, [pipeMaterial]);
@@ -853,6 +1057,19 @@ export default function Simulation() {
               {saving ? '⏳ Saving…' : saved ? '✓ Saved!' : '⊕ Save'}
             </button>
           )}
+          {/* Download Report */}
+          <button onClick={() => downloadReport(generatedParameters, computed, name, segments)}
+            title="Download PDF report"
+            style={{ ...C.saveBtn, background:'rgba(16,185,129,0.15)', borderColor:'rgba(16,185,129,0.4)', color:'#34d399' }}>
+            ↓ Report
+          </button>
+          {/* File Upload */}
+          <input ref={fileInputRef} type="file" accept=".json,.csv" style={{ display:'none' }} onChange={handleFileUpload} />
+          <button onClick={() => fileInputRef.current?.click()}
+            title="Import pipe definition from JSON or CSV"
+            style={{ ...C.saveBtn, background:'rgba(99,102,241,0.15)', borderColor:'rgba(99,102,241,0.4)', color:'#a5b4fc' }}>
+            ↑ Import
+          </button>
         </div>
       </nav>
 
@@ -1031,6 +1248,120 @@ export default function Simulation() {
               </div>
             </div>
           )}
+
+          {/* ── Multi-pipe connector ── */}
+          <div style={{ ...C.card, ...(isDark ? {} : LT.card) }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                <div style={{ width:'26px', height:'26px', background: isDark?'rgba(99,102,241,0.2)':'rgba(99,102,241,0.1)', border: isDark?'1px solid rgba(99,102,241,0.3)':'1px solid #e5e7eb', borderRadius:'7px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px' }}>🔗</div>
+                <span style={{ fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', letterSpacing:'0.12em', textTransform:'uppercase', color: isDark?'rgba(160,200,255,0.7)':'#374151' }}>Pipe Network</span>
+              </div>
+              <button onClick={() => setShowSegments(v => !v)}
+                style={{ background:'none', border:'none', color: isDark?'rgba(160,200,255,0.5)':'#6b7280', cursor:'pointer', fontSize:'14px', padding:'2px 6px' }}>
+                {showSegments ? '▲' : '▼'}
+              </button>
+            </div>
+
+            {showSegments && (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                <p style={{ fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(150,170,210,0.5)':'#9ca3af', margin:0 }}>
+                  Add pipe segments in series. Import from JSON/CSV or add manually.
+                </p>
+
+                <button onClick={addSegment}
+                  style={{ padding:'7px', background: isDark?'rgba(99,102,241,0.15)':'#ede9fe', border: isDark?'1px solid rgba(99,102,241,0.3)':'1px solid #c4b5fd', borderRadius:'8px', color: isDark?'#a5b4fc':'#6d28d9', fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer' }}>
+                  + Add Segment
+                </button>
+
+                {segments.length === 0 && (
+                  <div style={{ textAlign:'center', padding:'12px', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(150,170,210,0.4)':'#9ca3af' }}>
+                    No segments yet. Add one or import a file.
+                  </div>
+                )}
+
+                {segments.map((seg, idx) => (
+                  <div key={seg.id} style={{ background: isDark?'rgba(4,12,30,0.6)':'#f9fafb', border: isDark?'1px solid rgba(80,120,200,0.15)':'1px solid #e5e7eb', borderRadius:'8px', padding:'8px' }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                        <span style={{ fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(99,162,255,0.7)':'#6366f1', fontWeight:'700' }}>#{idx+1}</span>
+                        <input value={seg.name} onChange={e => updateSegment(seg.id, 'name', e.target.value)}
+                          style={{ background:'transparent', border:'none', borderBottom: isDark?'1px solid rgba(80,120,200,0.2)':'1px solid #d1d5db', color: isDark?'#e8f0ff':'#111827', fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'600', outline:'none', width:'80px', padding:'1px 0' }} />
+                      </div>
+                      <button onClick={() => removeSegment(seg.id)}
+                        style={{ background:'none', border:'none', color:'#f87171', cursor:'pointer', fontSize:'13px', padding:'0 2px' }}>✕</button>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px' }}>
+                      <div>
+                        <div style={{ fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(150,170,210,0.5)':'#9ca3af', marginBottom:'2px' }}>SHAPE</div>
+                        <select value={seg.shape} onChange={e => updateSegment(seg.id, 'shape', e.target.value)}
+                          style={{ width:'100%', padding:'4px 6px', background: isDark?'rgba(10,20,40,0.6)':'#fff', border: isDark?'1px solid rgba(80,120,200,0.2)':'1px solid #d1d5db', borderRadius:'5px', color: isDark?'#e8f0ff':'#111827', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace' }}>
+                          {Object.entries(PIPE_SHAPES).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(150,170,210,0.5)':'#9ca3af', marginBottom:'2px' }}>MATERIAL</div>
+                        <select value={seg.material} onChange={e => updateSegment(seg.id, 'material', e.target.value)}
+                          style={{ width:'100%', padding:'4px 6px', background: isDark?'rgba(10,20,40,0.6)':'#fff', border: isDark?'1px solid rgba(80,120,200,0.2)':'1px solid #d1d5db', borderRadius:'5px', color: isDark?'#e8f0ff':'#111827', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace' }}>
+                          {Object.keys(MATERIALS).map(k => <option key={k} value={k}>{k}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(150,170,210,0.5)':'#9ca3af', marginBottom:'2px' }}>LENGTH (m)</div>
+                        <input type="number" value={seg.length} min={0.1} step={0.5}
+                          onChange={e => updateSegment(seg.id, 'length', Number(e.target.value))}
+                          style={{ width:'100%', padding:'4px 6px', background: isDark?'rgba(10,20,40,0.6)':'#fff', border: isDark?'1px solid rgba(80,120,200,0.2)':'1px solid #d1d5db', borderRadius:'5px', color: isDark?'#e8f0ff':'#111827', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(150,170,210,0.5)':'#9ca3af', marginBottom:'2px' }}>INNER Ø (m)</div>
+                        <input type="number" value={seg.innerD} min={0.001} step={0.01}
+                          onChange={e => updateSegment(seg.id, 'innerD', Number(e.target.value))}
+                          style={{ width:'100%', padding:'4px 6px', background: isDark?'rgba(10,20,40,0.6)':'#fff', border: isDark?'1px solid rgba(80,120,200,0.2)':'1px solid #d1d5db', borderRadius:'5px', color: isDark?'#e8f0ff':'#111827', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace' }} />
+                      </div>
+                    </div>
+                    {/* Per-segment result */}
+                    {(() => {
+                      const rho = computeAirDensity(airTemperatureC, airPressurePa);
+                      const mu  = computeDynamicViscosity(airTemperatureC);
+                      const area = Math.PI * (seg.innerD / 2) ** 2;
+                      const v = area > 0 ? seg.flowRate / area : 0;
+                      const Re = computeRe(rho, v, seg.innerD, mu);
+                      const f  = computeFF(Re, MATERIALS[seg.material]?.roughness ?? 0.000045, seg.innerD);
+                      const dp = computeDP(f, seg.length, seg.innerD, rho, v);
+                      const regime = getRegime(Re);
+                      const rc = regime === 'laminar' ? '#4fbbf7' : regime === 'transition' ? '#f7c14f' : '#f7614f';
+                      return (
+                        <div style={{ marginTop:'6px', display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'4px' }}>
+                          <div style={{ background: isDark?'rgba(0,8,24,0.5)':'#f3f4f6', borderRadius:'5px', padding:'4px 6px', fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace' }}>
+                            <div style={{ color: isDark?'rgba(150,170,210,0.4)':'#9ca3af' }}>v</div>
+                            <div style={{ color: isDark?'#e8f0ff':'#111', fontWeight:'700' }}>{v.toFixed(2)} m/s</div>
+                          </div>
+                          <div style={{ background: isDark?'rgba(0,8,24,0.5)':'#f3f4f6', borderRadius:'5px', padding:'4px 6px', fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace' }}>
+                            <div style={{ color: isDark?'rgba(150,170,210,0.4)':'#9ca3af' }}>Δp</div>
+                            <div style={{ color:'#f7614f', fontWeight:'700' }}>{(dp/1000).toFixed(3)} kPa</div>
+                          </div>
+                          <div style={{ background: isDark?'rgba(0,8,24,0.5)':'#f3f4f6', borderRadius:'5px', padding:'4px 6px', fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace' }}>
+                            <div style={{ color: isDark?'rgba(150,170,210,0.4)':'#9ca3af' }}>Re</div>
+                            <div style={{ color: rc, fontWeight:'700' }}>{Re > 1000 ? (Re/1000).toFixed(1)+'k' : Re.toFixed(0)}</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ))}
+
+                {segments.length > 0 && (
+                  <div style={{ background: isDark?'rgba(247,97,79,0.1)':'#fef2f2', border: isDark?'1px solid rgba(247,97,79,0.3)':'1px solid #fecaca', borderRadius:'8px', padding:'10px' }}>
+                    <div style={{ fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', textTransform:'uppercase', letterSpacing:'.08em', color: isDark?'rgba(247,97,79,0.8)':'#dc2626', marginBottom:'4px' }}>
+                      Total Network Δp ({segments.length} segments in series)
+                    </div>
+                    <div style={{ fontSize:'20px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', color:'#f7614f' }}>
+                      {(totalSegmentDrop/1000).toFixed(4)} <span style={{ fontSize:'12px', color: isDark?'rgba(247,97,79,0.6)':'#ef4444' }}>kPa</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>{/* end RIGHT */}
 
       </div>{/* end body */}

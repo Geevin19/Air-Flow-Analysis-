@@ -72,10 +72,18 @@ void connectWiFi() {
 // nginx on the server handles HTTPS — Arduino talks plain HTTP to port 80
 bool doPost(const char* path, const String& body, String& respBody) {
   WiFiClient client;
+  client.setTimeout(8000);
+
+  Serial.print("[TCP] Connecting to "); Serial.print(SERVER); Serial.print(":"); Serial.println(PORT);
   if (!client.connect(SERVER, PORT)) {
-    Serial.println("[HTTP] Connect failed");
-    return false;
+    // Retry once after short delay
+    delay(1000);
+    if (!client.connect(SERVER, PORT)) {
+      Serial.println("[HTTP] Connect failed (2 attempts)");
+      return false;
+    }
   }
+  Serial.println("[TCP] Connected");
 
   // Send request
   client.print(String("POST ") + path + " HTTP/1.1\r\n");
@@ -88,7 +96,7 @@ bool doPost(const char* path, const String& body, String& respBody) {
 
   // Wait for response
   unsigned long timeout = millis();
-  while (!client.available() && millis() - timeout < 5000) delay(10);
+  while (!client.available() && millis() - timeout < 8000) delay(10);
 
   // Read status line
   String statusLine = client.readStringUntil('\n');
@@ -117,9 +125,14 @@ bool doPost(const char* path, const String& body, String& respBody) {
 
 bool doGet(const char* path, String& respBody) {
   WiFiClient client;
+  client.setTimeout(8000);
+
   if (!client.connect(SERVER, PORT)) {
-    Serial.println("[HTTP] Connect failed");
-    return false;
+    delay(1000);
+    if (!client.connect(SERVER, PORT)) {
+      Serial.println("[HTTP] Connect failed");
+      return false;
+    }
   }
 
   client.print(String("GET ") + path + " HTTP/1.1\r\n");
@@ -128,7 +141,7 @@ bool doGet(const char* path, String& respBody) {
   client.print("\r\n");
 
   unsigned long timeout = millis();
-  while (!client.available() && millis() - timeout < 5000) delay(10);
+  while (!client.available() && millis() - timeout < 8000) delay(10);
 
   String statusLine = client.readStringUntil('\n');
   int code = -1;
@@ -171,29 +184,28 @@ void setup() {
   Serial.println("\n[DIAG] Testing connectivity...");
   Serial.print("[DIAG] Server: "); Serial.println(SERVER);
   Serial.print("[DIAG] Port:   "); Serial.println(PORT);
+  Serial.print("[DIAG] Arduino IP: "); Serial.println(WiFi.localIP());
+  Serial.print("[DIAG] Gateway:    "); Serial.println(WiFi.gatewayIP());
+  Serial.print("[DIAG] DNS:        "); Serial.println(WiFi.dnsIP());
 
   // Test port 80
   WiFiClient testClient;
+  testClient.setTimeout(8000);
   Serial.print("[DIAG] TCP connect port 80... ");
   if (testClient.connect(SERVER, 80)) {
     Serial.println("OK");
     testClient.stop();
   } else {
-    Serial.println("FAILED — port 80 blocked or server unreachable");
+    Serial.println("FAILED");
+    Serial.println("[DIAG] DNS may be failing — try using IP directly");
+    // Print what IP WiFi resolved to
+    IPAddress ip;
+    if (WiFi.hostByName(SERVER, ip)) {
+      Serial.print("[DIAG] Resolved IP: "); Serial.println(ip);
+    } else {
+      Serial.println("[DIAG] DNS resolution FAILED — no internet or DNS blocked");
+    }
   }
-
-  // Test port 443
-  WiFiClient testClient2;
-  Serial.print("[DIAG] TCP connect port 443... ");
-  if (testClient2.connect(SERVER, 443)) {
-    Serial.println("OK");
-    testClient2.stop();
-  } else {
-    Serial.println("FAILED — port 443 blocked");
-  }
-
-  Serial.print("[DIAG] Arduino IP: "); Serial.println(WiFi.localIP());
-  Serial.print("[DIAG] Gateway:    "); Serial.println(WiFi.gatewayIP());
   Serial.println("[DIAG] Done.\n");
   // ─────────────────────────────────────────────────────────────────────────
 

@@ -7,9 +7,6 @@ import LandingPage from "./pages/LandingPage";
 import LiveIoT from "./pages/LiveIoT";
 import VerifyOTP from "./pages/VerifyOTP";
 import ForgotPassword from "./pages/ForgotPassword";
-import ManagerDashboard from "./pages/ManagerDashboard";
-import ManagerIoT from "./pages/ManagerIoT";
-import WorkerIoT from "./pages/WorkerIoT";
 import Calculator from "./pages/Calculator";
 
 function App() {
@@ -22,12 +19,9 @@ function App() {
         <Route path="/verify-otp" element={<VerifyOTP />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/manager" element={<ManagerDashboard />} />
-        <Route path="/manager/iot" element={<ManagerIoT />} />
         <Route path="/simulation" element={<Simulation />} />
         <Route path="/iot-live" element={<LiveIoT />} />
         <Route path="/calculator" element={<Calculator />} />
-        <Route path="/manager/worker/:workerId" element={<WorkerIoT />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>

@@ -77,6 +77,40 @@ function beep() {
   } catch { /* ignore */ }
 }
 
+// ── Excel (CSV) report download ───────────────────────────────────────────────
+function downloadExcel(history: HistEntry[], deviceId: string) {
+  if (history.length === 0) return;
+  const headers = ['Time', 'Temperature (°C)', 'Humidity (%)', 'Gas (ppm)',
+    'Air Flow Velocity (m/s)', 'Air Density (kg/m³)', 'Dynamic Pressure (Pa)',
+    'Reynolds Number', 'Mass Flow Rate (kg/s)', 'Volumetric Flow (m³/s)'];
+  const rows = [...history].reverse().map(r => [
+    r.time,
+    r.values['temperature']?.toFixed(2) ?? '',
+    r.values['humidity']?.toFixed(2) ?? '',
+    r.values['gas']?.toFixed(0) ?? '',
+    r.phys['Air Flow Velocity']?.toFixed(4) ?? '',
+    r.phys['Air Density']?.toFixed(5) ?? '',
+    r.phys['Dynamic Pressure']?.toFixed(4) ?? '',
+    r.phys['Reynolds Number']?.toFixed(0) ?? '',
+    r.phys['Mass Flow Rate']?.toFixed(6) ?? '',
+    r.phys['Volumetric Flow']?.toFixed(6) ?? '',
+  ]);
+  const csv = [
+    `SmartTracker IoT Report — Device: ${deviceId}`,
+    `Generated: ${new Date().toLocaleString()}`,
+    '',
+    headers.join(','),
+    ...rows.map(r => r.join(',')),
+  ].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `iot-report-${deviceId}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Shared idle input styles ──────────────────────────────────────────────────
 const idleLabel: React.CSSProperties = { display:'block', fontSize:12, fontWeight:600, color:'#374151', marginBottom:6 };
 const idleInput: React.CSSProperties = { width:'100%', padding:'10px 14px', border:'1.5px solid #e2e8f0', borderRadius:10, fontSize:14, color:'#0f172a', background:'#f8fafc', fontFamily:'"Inter",sans-serif', outline:'none' };
@@ -94,7 +128,6 @@ export default function LiveIoT() {
   const [limits, setLimits]           = useState<Record<string, string>>({});
   const [showLimits, setShowLimits]   = useState(false);
   const [alertedKeys, setAlertedKeys] = useState<Set<string>>(new Set());
-  const [isWorker, setIsWorker]       = useState(false);
   // WiFi change
   const [showWifiChange, setShowWifiChange] = useState(false);
   const [newSsid, setNewSsid]         = useState('');
@@ -185,7 +218,7 @@ export default function LiveIoT() {
         // Value back within limit — reset timers
         if (currentAlerted.has(key)) { currentAlerted.delete(key); changed = true; }
         delete exceededSinceRef.current[key];
-        emailSentRef.current.delete(key);
+        emailSentRef.current.delete(key); // allow re-alert next time it exceeds
       }
     });
 
@@ -198,20 +231,7 @@ export default function LiveIoT() {
   // Keep checkRef always pointing to latest checkLimits
   useEffect(() => { checkRef.current = checkLimits; }, [checkLimits]);
 
-  // Check if current user is a worker (needs manager approval for limits)
-  // Managers are blocked from IoT page
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      api.get('/users/me')
-        .then(r => {
-          if (r.data.role === 'manager') { navigate('/manager'); return; }
-          setIsWorker(r.data.role === 'worker');
-        }).catch(() => {});
-    }
-  }, [navigate]);
-
-  // Push limits directly to backend → Arduino (no approval needed)
+  // Push limits directly to backend → Arduino
   const pushLimitsToBackend = useCallback(async (key: string, value: string) => {
     const val = parseFloat(value);
     if (isNaN(val)) return;
@@ -416,6 +436,12 @@ export default function LiveIoT() {
               <button onClick={() => setShowLimits(v => !v)} style={{ ...s.backBtn, background: showLimits ? '#dc2626' : '#0f172a' }}>
                 Limits
               </button>
+              {history.length > 0 && (
+                <button onClick={() => downloadExcel(history, deviceId)}
+                  style={{ ...s.backBtn, background:'#065f46', border:'1px solid #34d399' }}>
+                  ↓ Excel
+                </button>
+              )}
             </>
           )}
           <button onClick={() => navigate('/dashboard')} style={s.backBtn}>← Dashboard</button>

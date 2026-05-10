@@ -14,7 +14,6 @@ export default function Dashboard() {
       try {
         const [u, s] = await Promise.all([authAPI.getCurrentUser(), simulationAPI.getSimulations()]);
         setUser(u.data);
-        if (u.data.role === 'manager') { navigate('/manager'); return; }
         setSimulations(s.data);
       } catch { navigate('/login'); }
       finally { setLoading(false); }
