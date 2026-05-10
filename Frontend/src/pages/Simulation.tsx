@@ -1136,7 +1136,7 @@ export default function Simulation() {
           {loadingExisting && <span style={{ fontSize:'11px', fontFamily:'"IBM Plex Mono"', color:'rgba(160,200,255,0.5)', animation:'pulse 1.5s infinite' }}>Loading…</span>}
           {/* Theme toggle */}
           <button onClick={toggleTheme} title="Toggle theme"
-            style={{ width:'34px', height:'34px', borderRadius:'50%', border:`1px solid ${isDark?'rgba(80,120,200,0.3)':'#d1d5db'}`, background: isDark?'rgba(80,120,200,0.1)':'#f3f4f6', cursor:'pointer', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s' }}>
+            style={{ width:'34px', height:'34px', borderRadius:'50%', border:'1px solid ' + (isDark?'rgba(80,120,200,0.3)':'#d1d5db'), background: isDark?'rgba(80,120,200,0.1)':'#f3f4f6', cursor:'pointer', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s' }}>
             {isDark ? '☀️' : '🌙'}
           </button>
           <div style={{ ...C.regimeBadge, borderColor: reColor+'60', color: reColor }}>
