@@ -1118,7 +1118,7 @@ export default function Simulation() {
         @media(max-width:480px){
           .sim-viewport{height:240px!important;min-height:240px!important;}
           .sim-card-grid{grid-template-columns:1fr!important;}
-        }`}</style>
+        }</style>
       <div style={{ ...C.bg, ...(isDark ? {} : { background: 'radial-gradient(ellipse 80% 60% at 50% -10%,rgba(200,220,255,0.4) 0%,transparent 70%)' }) }}/>
       <div style={{ ...C.gridBg, ...(isDark ? {} : { backgroundImage: 'linear-gradient(rgba(36,99,235,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(36,99,235,0.06) 1px,transparent 1px)' }) }}/>
 
@@ -1136,7 +1136,7 @@ export default function Simulation() {
           {loadingExisting && <span style={{ fontSize:'11px', fontFamily:'"IBM Plex Mono"', color:'rgba(160,200,255,0.5)', animation:'pulse 1.5s infinite' }}>Loading…</span>}
           {/* Theme toggle */}
           <button onClick={toggleTheme} title="Toggle theme"
-            style={{ width:'34px', height:'34px', borderRadius:'50%', border:'1px solid ' + (isDark?'rgba(80,120,200,0.3)':'#d1d5db'), background: isDark?'rgba(80,120,200,0.1)':'#f3f4f6', cursor:'pointer', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s' }}>
+            style={{ width:'34px', height:'34px', borderRadius:'50%', border:`1px solid ${isDark?'rgba(80,120,200,0.3)':'#d1d5db'}`, background: isDark?'rgba(80,120,200,0.1)':'#f3f4f6', cursor:'pointer', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s' }}>
             {isDark ? '☀️' : '🌙'}
           </button>
           <div style={{ ...C.regimeBadge, borderColor: reColor+'60', color: reColor }}>
@@ -1265,7 +1265,7 @@ export default function Simulation() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
               {(['pressure','velocity','friction','material'] as const).map(m => (
                 <button key={m} onClick={()=>setColorMode(m)}
-                  style={{ padding:'9px 6px', borderRadius:'9px', border:'1px solid ' + (colorMode===m?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')), background: colorMode===m?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: colorMode===m?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' as const }}>
+                  style={{ padding:'9px 6px', borderRadius:'9px', border:`1px solid ${colorMode===m?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: colorMode===m?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: colorMode===m?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
                   {m}
                 </button>
               ))}
@@ -1281,7 +1281,7 @@ export default function Simulation() {
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                   {(['rainbow','blue','fire','cyan','purple'] as const).map(scheme => (
                     <button key={scheme} onClick={()=>setParticleColorScheme(scheme)}
-                      style={{ padding:'7px 6px', borderRadius:'8px', border:'1px solid ' + (particleColorScheme===scheme?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')), background: particleColorScheme===scheme?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleColorScheme===scheme?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' as const }}>
+                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleColorScheme===scheme?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: particleColorScheme===scheme?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleColorScheme===scheme?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
                       {scheme}
                     </button>
                   ))}
@@ -1292,7 +1292,7 @@ export default function Simulation() {
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'6px' }}>
                   {(['small','medium','large'] as const).map(size => (
                     <button key={size} onClick={()=>setParticleSize(size)}
-                      style={{ padding:'7px 6px', borderRadius:'8px', border:'1px solid ' + (particleSize===size?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')), background: particleSize===size?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleSize===size?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' as const }}>
+                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleSize===size?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: particleSize===size?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleSize===size?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
                       {size}
                     </button>
                   ))}
