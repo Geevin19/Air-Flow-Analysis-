@@ -80,33 +80,53 @@ function beep() {
 // ── Excel (CSV) report download ───────────────────────────────────────────────
 function downloadExcel(history: HistEntry[], deviceId: string) {
   if (history.length === 0) return;
-  const headers = ['Time', 'Temperature (°C)', 'Humidity (%)', 'Gas (ppm)',
-    'Air Flow Velocity (m/s)', 'Air Density (kg/m³)', 'Dynamic Pressure (Pa)',
-    'Reynolds Number', 'Mass Flow Rate (kg/s)', 'Volumetric Flow (m³/s)'];
+  const headers = [
+    'Time',
+    'Temperature (°C)',
+    'Humidity (%)',
+    'Gas (ppm)',
+    'Air Flow Velocity (m/s)',
+    'Air Density (kg/m3)',
+    'Dynamic Pressure (Pa)',
+    'Reynolds Number',
+    'Mass Flow Rate (kg/s)',
+    'Volumetric Flow (m3/s)',
+  ];
+
   const rows = [...history].reverse().map(r => [
-    r.time,
-    r.values['temperature']?.toFixed(2) ?? '',
-    r.values['humidity']?.toFixed(2) ?? '',
-    r.values['gas']?.toFixed(0) ?? '',
-    r.phys['Air Flow Velocity']?.toFixed(4) ?? '',
-    r.phys['Air Density']?.toFixed(5) ?? '',
-    r.phys['Dynamic Pressure']?.toFixed(4) ?? '',
-    r.phys['Reynolds Number']?.toFixed(0) ?? '',
-    r.phys['Mass Flow Rate']?.toFixed(6) ?? '',
-    r.phys['Volumetric Flow']?.toFixed(6) ?? '',
+    `"${r.time}"`,                                              // quoted so Excel treats as text
+    r.values['temperature']  != null ? r.values['temperature'].toFixed(2)  : '',
+    r.values['humidity']     != null ? r.values['humidity'].toFixed(2)     : '',
+    r.values['gas']          != null ? r.values['gas'].toFixed(0)          : '',
+    r.phys['Air Flow Velocity']  != null ? r.phys['Air Flow Velocity'].toFixed(4)  : '',
+    r.phys['Air Density']        != null ? r.phys['Air Density'].toFixed(5)        : '',
+    r.phys['Dynamic Pressure']   != null ? r.phys['Dynamic Pressure'].toFixed(4)   : '',
+    r.phys['Reynolds Number']    != null ? r.phys['Reynolds Number'].toFixed(0)    : '',
+    r.phys['Mass Flow Rate']     != null ? r.phys['Mass Flow Rate'].toFixed(6)     : '',
+    r.phys['Volumetric Flow']    != null ? r.phys['Volumetric Flow'].toFixed(6)    : '',
   ]);
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+  const timeStr = now.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
   const csv = [
-    `SmartTracker IoT Report — Device: ${deviceId}`,
-    `Generated: ${new Date().toLocaleString()}`,
+    `"SmartTracker IoT Report"`,
+    `"Device: ${deviceId}"`,
+    `"Generated: ${dateStr}  ${timeStr}"`,
+    `"Total Readings: ${history.length}"`,
     '',
     headers.join(','),
     ...rows.map(r => r.join(',')),
-  ].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  ].join('\r\n');  // \r\n for proper Excel line endings
+
+  // BOM prefix so Excel opens UTF-8 correctly
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `iot-report-${deviceId}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `SmartTracker_${deviceId}_${now.toISOString().slice(0,10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
