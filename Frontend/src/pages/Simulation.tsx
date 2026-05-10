@@ -1117,11 +1117,11 @@ export default function Simulation() {
         <div style={{ display:'flex', alignItems:'center', gap:'10px' }} className="sim-nav-btns">
           {loadingExisting && <span style={{ fontSize:'11px', fontFamily:'"IBM Plex Mono"', color:'rgba(160,200,255,0.5)', animation:'pulse 1.5s infinite' }}>Loading…</span>}
           {/* Theme toggle */}
-          <button onClick={toggleTheme} title="Toggle theme"
-            style={{ width:'34px', height:'34px', borderRadius:'50%', border: isDark ? '1px solid rgba(80,120,200,0.3)' : '1px solid #d1d5db', background: isDark?'rgba(80,120,200,0.1)':'#f3f4f6', cursor:'pointer', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s' }}>
-            {isDark ? '☀️' : '🌙'}
+          <button onClick={toggleTheme} title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+            style={{ padding:'7px 14px', borderRadius:10, border: isDark ? '1px solid rgba(80,120,200,0.3)' : '1px solid #e2e8f0', background: isDark ? 'rgba(80,120,200,0.15)' : '#f1f5f9', cursor:'pointer', fontSize:'13px', display:'flex', alignItems:'center', gap:6, color: isDark ? '#a0c4ff' : '#374151', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'600', transition:'all .2s', whiteSpace:'nowrap' as const }}>
+            {isDark ? '☀️' : '🌙'} <span>{isDark ? 'Light' : 'Dark'}</span>
           </button>
-          <div style={{ ...C.regimeBadge, borderColor: reColor+'60', color: reColor }}>
+          <div style={{ ...C.regimeBadge, borderColor: reColor + '60', color: reColor, background: isDark ? 'rgba(2,12,30,0.6)' : '#fff' }}>
             <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:reColor, animation:'pulse 2s infinite' }}/>
             {computed.flowRegime.charAt(0).toUpperCase()+computed.flowRegime.slice(1)}
           </div>
