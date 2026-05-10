@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
 
 export default function LandingPage() {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div style={s.page}>
       <style>{`
@@ -16,23 +18,56 @@ export default function LandingPage() {
         .sec-btn:hover { background: #f0f7ff !important; }
         .feat-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,.08) !important; }
         .nav-link:hover { color: #3b82f6 !important; }
+        @media(max-width:767px){
+          .landing-nav{padding:12px 16px!important;}
+          .landing-nav-links{display:none!important;}
+          .landing-hero{padding:48px 16px 36px!important;}
+          .landing-hero-title{font-size:clamp(28px,8vw,48px)!important;}
+          .landing-hero-sub{font-size:15px!important;}
+          .landing-hero-btns{flex-direction:column!important;align-items:center!important;}
+          .landing-hero-btns a{width:100%!important;max-width:300px!important;justify-content:center!important;}
+          .landing-stats{grid-template-columns:1fr 1fr!important;gap:0!important;}
+          .landing-stats>div{border-right:none!important;border-bottom:1px solid #f1f5f9;padding:14px 0!important;}
+          .landing-feat-grid{grid-template-columns:1fr!important;}
+          .landing-steps{flex-direction:column!important;gap:20px!important;}
+          .landing-step-arrow{display:none!important;}
+          .landing-cta{padding:40px 16px!important;}
+          .landing-footer{padding:16px!important;flex-direction:column!important;text-align:center!important;}
+          .landing-feat-section{padding:48px 16px!important;}
+          .landing-how-section{padding:48px 16px!important;}
+        }
       `}</style>
 
       {/* ── NAV ── */}
-      <nav style={s.nav}>
+      <nav style={s.nav} className="landing-nav">
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <img src="/logo.png" alt="" style={{ width:34, height:34, objectFit:'contain', borderRadius:8 }} />
           <span style={s.logo}>SmartTracker</span>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+        {/* Desktop links */}
+        <div style={{ display:'flex', alignItems:'center', gap:8 }} className="landing-nav-links">
           <Link to="/calculator" className="nav-link" style={s.navLink}>Calculator</Link>
           <Link to="/login" className="nav-link" style={s.navLink}>Sign In</Link>
           <Link to="/register" className="hero-btn" style={s.navCta}>Get Started →</Link>
         </div>
+        {/* Mobile hamburger */}
+        <button onClick={() => setMenuOpen(v => !v)}
+          style={{ display:'none', background:'none', border:'1px solid #e2e8f0', borderRadius:8, padding:'6px 10px', cursor:'pointer', fontSize:18, color:'#374151' }}
+          className="show-mobile">
+          {menuOpen ? '✕' : '☰'}
+        </button>
       </nav>
+      {/* Mobile menu dropdown */}
+      {menuOpen && (
+        <div style={{ background:'#fff', borderBottom:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', flexDirection:'column', gap:8, zIndex:49, position:'relative' }}>
+          <Link to="/calculator" style={{ padding:'10px 14px', borderRadius:8, color:'#374151', textDecoration:'none', fontWeight:600, fontSize:14, background:'#f8fafc' }} onClick={() => setMenuOpen(false)}>Calculator</Link>
+          <Link to="/login" style={{ padding:'10px 14px', borderRadius:8, color:'#374151', textDecoration:'none', fontWeight:600, fontSize:14, background:'#f8fafc' }} onClick={() => setMenuOpen(false)}>Sign In</Link>
+          <Link to="/register" style={{ padding:'12px 14px', borderRadius:10, color:'#fff', textDecoration:'none', fontWeight:700, fontSize:14, background:'linear-gradient(135deg,#2563eb,#7c3aed)', textAlign:'center' as const }} onClick={() => setMenuOpen(false)}>Get Started →</Link>
+        </div>
+      )}
 
       {/* ── HERO ── */}
-      <section style={s.hero}>
+      <section style={s.hero} className="landing-hero">
         {/* Background grid */}
         <div style={s.gridBg} />
         <div style={s.gradBlob1} />
@@ -44,17 +79,17 @@ export default function LandingPage() {
             Live IoT · Real-time CFD · Physics Engine
           </div>
 
-          <h1 style={s.heroTitle}>
+          <h1 style={s.heroTitle} className="landing-hero-title">
             Airflow Analysis<br />
             <span style={s.heroAccent}>Reimagined</span>
           </h1>
 
-          <p style={s.heroSub}>
+          <p style={s.heroSub} className="landing-hero-sub">
             Stream live sensor data from Arduino, compute fluid dynamics in real-time,<br />
             and visualise 3D pipe flow — all in one platform.
           </p>
 
-          <div style={{ display:'flex', gap:14, justifyContent:'center', flexWrap:'wrap' }}>
+          <div style={{ display:'flex', gap:14, justifyContent:'center', flexWrap:'wrap' }} className="landing-hero-btns">
             <Link to="/register" className="hero-btn" style={s.primaryBtn}>
               Get Started — it's free
             </Link>
@@ -67,7 +102,7 @@ export default function LandingPage() {
           </div>
 
           {/* Stats row */}
-          <div style={s.statsRow}>
+          <div style={s.statsRow} className="landing-stats">
             {[
               { val:'Real-time', label:'Data Streaming' },
               { val:'6+',        label:'Physics Metrics' },
@@ -84,14 +119,14 @@ export default function LandingPage() {
       </section>
 
       {/* ── FEATURES ── */}
-      <section style={s.featSection}>
+      <section style={s.featSection} className="landing-feat-section">
         <div style={{ textAlign:'center', marginBottom:56 }}>
           <div style={s.sectionTag}>What's inside</div>
           <h2 style={s.sectionTitle}>Everything you need</h2>
           <p style={s.sectionSub}>From raw sensor bytes to publication-ready physics — in seconds.</p>
         </div>
 
-        <div style={s.featGrid}>
+        <div style={s.featGrid} className="landing-feat-grid">
           {[
             {
               icon: '⚡',
@@ -156,12 +191,12 @@ export default function LandingPage() {
       </section>
 
       {/* ── HOW IT WORKS ── */}
-      <section style={s.howSection}>
+      <section style={s.howSection} className="landing-how-section">
         <div style={{ textAlign:'center', marginBottom:52 }}>
           <div style={s.sectionTag}>Workflow</div>
           <h2 style={s.sectionTitle}>How it works</h2>
         </div>
-        <div style={s.stepsRow}>
+        <div style={s.stepsRow} className="landing-steps">
           {[
             { n:'1', title:'Connect Arduino', desc:'Flash your ESP32/Arduino with the WebSocket client sketch and connect to WiFi.' },
             { n:'2', title:'Stream Live Data', desc:'Sensor readings (temp, humidity, pressure) are pushed to the backend instantly.' },
@@ -174,14 +209,14 @@ export default function LandingPage() {
                 <div style={s.stepTitle}>{step.title}</div>
                 <div style={s.stepDesc}>{step.desc}</div>
               </div>
-              {i < 3 && <div style={s.stepArrow}>→</div>}
+              {i < 3 && <div style={s.stepArrow} className="landing-step-arrow">→</div>}
             </div>
           ))}
         </div>
       </section>
 
       {/* ── CTA BANNER ── */}
-      <section style={s.ctaBanner}>
+      <section style={s.ctaBanner} className="landing-cta">
         <div style={s.ctaGlow} />
         <div style={{ position:'relative', zIndex:1, textAlign:'center' }}>
           <h2 style={s.ctaTitle}>Ready to analyse airflow?</h2>
@@ -193,7 +228,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer style={s.footer}>
+      <footer style={s.footer} className="landing-footer">
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <img src="/logo.png" alt="" style={{ width:22, height:22, objectFit:'contain', borderRadius:4, opacity:.7 }} />
           <span style={{ fontWeight:700, color:'#94a3b8' }}>SmartTracker</span>

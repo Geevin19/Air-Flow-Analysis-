@@ -266,25 +266,31 @@ export default function LiveIoT() {
   }, []);
 
   function connect() {
+    if (!deviceId.trim()) {
+      setStatus('error');
+      setErrorMsg('Please enter your Device ID. It must match the DEVICE_ID in your Arduino sketch.');
+      return;
+    }
     setStatus('connecting'); setErrorMsg('');
 
-    if (isFirstTime) {
-      iotAPI.verify(deviceId.trim(), wifiSsid.trim())
-        .then((res) => {
-          localStorage.setItem('arduino_device_id', deviceId.trim());
-          localStorage.setItem('arduino_wifi_ssid', res.data.wifi_ssid || wifiSsid.trim());
-          openWebSocket(deviceId.trim(), res.data.wifi_ssid || wifiSsid.trim());
-        })
-        .catch(err => {
-          setStatus('error');
-          setErrorMsg(
-            err.response?.data?.detail ||
-            `Device '${deviceId.trim()}' not found. Make sure the Arduino is powered on and sending data.`
-          );
-        });
-    } else {
-      openWebSocket(deviceId.trim(), wifiSsid.trim());
-    }
+    // Always verify device ID before connecting — never skip
+    iotAPI.verify(deviceId.trim(), wifiSsid.trim())
+      .then((res) => {
+        localStorage.setItem('arduino_device_id', deviceId.trim());
+        localStorage.setItem('arduino_wifi_ssid', res.data.wifi_ssid || wifiSsid.trim());
+        openWebSocket(deviceId.trim(), res.data.wifi_ssid || wifiSsid.trim());
+      })
+      .catch(err => {
+        setStatus('error');
+        const detail: string = err.response?.data?.detail || '';
+        if (detail.toLowerCase().includes('wifi') || detail.toLowerCase().includes('network')) {
+          setErrorMsg('wifi_mismatch');
+        } else if (detail.toLowerCase().includes('not found') || err.response?.status === 404) {
+          setErrorMsg('device_not_found');
+        } else {
+          setErrorMsg(detail || 'device_not_found');
+        }
+      });
   }
 
   function openWebSocket(devId = deviceId, ssid = wifiSsid, attempt = 0) {
@@ -417,9 +423,21 @@ export default function LiveIoT() {
         @keyframes glow{0%,100%{box-shadow:0 0 6px #22c55e80}50%{box-shadow:0 0 16px #22c55e}}
         @keyframes slideIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
         @keyframes slideOut{to{opacity:0;transform:translateX(40px)}}
+        @media(max-width:767px){
+          .iot-nav{padding:10px 12px!important;flex-wrap:wrap;gap:6px;}
+          .iot-nav-btns{gap:6px!important;flex-wrap:wrap;}
+          .iot-nav-btns button{padding:6px 10px!important;font-size:11px!important;}
+          .iot-main{padding:10px!important;}
+          .iot-status{flex-wrap:wrap!important;gap:6px!important;padding:10px 12px!important;}
+          .iot-pipes{grid-template-columns:1fr!important;}
+          .iot-sensor-grid{grid-template-columns:1fr!important;}
+          .iot-wifi-panel{grid-template-columns:1fr!important;}
+          .iot-limits-grid{grid-template-columns:1fr!important;}
+          .iot-toast-wrap{max-width:calc(100vw - 24px)!important;right:12px!important;left:12px!important;}
+        }
       `}</style>
 
-          <div style={{ position:'fixed', top:20, right:20, zIndex:1000, display:'flex', flexDirection:'column', gap:10, maxWidth:380 }}>
+          <div style={{ position:'fixed', top:20, right:20, zIndex:1000, display:'flex', flexDirection:'column', gap:10, maxWidth:380 }} className="iot-toast-wrap">
             {toasts.map(t => (
               <div key={t.id} style={{ background:'#fff', border:'1.5px solid #fca5a5', borderLeft:'4px solid #ef4444', borderRadius:12, padding:'14px 18px', boxShadow:'0 8px 24px rgba(0,0,0,.12)', animation:'slideIn .3s ease', display:'flex', alignItems:'flex-start', gap:12 }}>
                 <div style={{ width:32, height:32, borderRadius:8, background:'#fef2f2', border:'1px solid #fecaca', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -436,40 +454,40 @@ export default function LiveIoT() {
           </div>
 
       {/* NAV */}
-      <nav style={s.nav}>
+      <nav style={s.nav} className="iot-nav">
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           <img src="/logo.png" alt="" style={{ width:32, height:32, objectFit:'contain', borderRadius:8 }} />
           <span style={s.logo}>SmartTracker</span>
           <span style={s.navBadge}>Live IoT</span>
         </div>
-        <div style={{ display:'flex', gap:10 }}>
+        <div style={{ display:'flex', gap:10 }} className="iot-nav-btns">
           {status === 'connected' && (
             <>
               <button onClick={() => setShowWifiChange(v => !v)}
-                style={{ ...s.backBtn, background: showWifiChange ? '#7c3aed' : '#f1f5f9', color: showWifiChange ? '#fff' : '#374151', border: showWifiChange ? 'none' : '1px solid #e2e8f0' }}>
-                📶 WiFi
+                style={{ ...s.navBtn, background: showWifiChange ? 'linear-gradient(135deg,#7c3aed,#6d28d9)' : s.navBtn.background }}>
+                WiFi
               </button>
               <button onClick={() => setShowPipeEdit(v => !v)}
-                style={{ ...s.backBtn, background: showPipeEdit ? '#2563eb' : '#f1f5f9', color: showPipeEdit ? '#fff' : '#374151', border: showPipeEdit ? 'none' : '1px solid #e2e8f0' }}>
+                style={{ ...s.navBtn, background: showPipeEdit ? 'linear-gradient(135deg,#2563eb,#1d4ed8)' : s.navBtn.background }}>
                 Pipes
               </button>
               <button onClick={() => setShowLimits(v => !v)}
-                style={{ ...s.backBtn, background: showLimits ? '#dc2626' : '#f1f5f9', color: showLimits ? '#fff' : '#374151', border: showLimits ? 'none' : '1px solid #e2e8f0' }}>
+                style={{ ...s.navBtn, background: showLimits ? 'linear-gradient(135deg,#dc2626,#b91c1c)' : s.navBtn.background }}>
                 Limits
               </button>
               {history.length > 0 && (
                 <button onClick={() => downloadExcel(history, deviceId)}
-                  style={{ ...s.backBtn, background:'#dcfce7', color:'#16a34a', border:'1px solid #bbf7d0' }}>
-                  ↓ Excel
+                  style={{ ...s.navBtn, background:'linear-gradient(135deg,#059669,#047857)' }}>
+                  Download Excel
                 </button>
               )}
             </>
           )}
-          <button onClick={() => navigate('/dashboard')} style={{ ...s.backBtn, background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0' }}>← Dashboard</button>
+          <button onClick={() => navigate('/dashboard')} style={s.navBtn}>Dashboard</button>
         </div>
       </nav>
 
-      <main style={s.main}>
+      <main style={s.main} className="iot-main">
 
         {/* IDLE — only shown on first time or after disconnect */}
         {status === 'idle' && (
@@ -503,7 +521,7 @@ export default function LiveIoT() {
               </div>
             </div>
 
-            <button style={s.connectBtn} onClick={connect}><span>📶</span> Connect</button>
+            <button style={s.connectBtn} onClick={connect}>Connect</button>
 
             {!isFirstTime && (
               <button onClick={() => { localStorage.removeItem('arduino_device_id'); localStorage.removeItem('arduino_wifi_ssid'); window.location.reload(); }}
@@ -527,22 +545,46 @@ export default function LiveIoT() {
         {/* ERROR */}
         {(status === 'error' || status === 'disconnected') && (
           <div style={{ ...s.centerWrap, animation:'fadeUp .4s ease' }}>
-            <div style={{ fontSize:52, marginBottom:16 }}>⚠️</div>
-            <h2 style={{ ...s.idleTitle, color:'#ef4444' }}>Connection Failed</h2>
-            <p style={s.idleSub}>
-              {errorMsg.includes('not found')
-                ? `Device '${deviceId}' hasn't sent any data yet. Make sure the Arduino is powered on, connected to WiFi, and running the sketch.`
-                : errorMsg.includes('WiFi')
-                ? `WiFi network mismatch. Make sure your computer is on the same WiFi as the Arduino (${wifiSsid}).`
-                : errorMsg.includes('WebSocket')
-                ? 'Cannot reach the server. Check your internet connection and try again.'
-                : errorMsg || 'Connection closed unexpectedly.'}
-            </p>
-            <div style={{ display:'flex', flexDirection:'column', gap:8, alignItems:'center', marginTop:8, fontSize:12, color:'#94a3b8' }}>
-              {errorMsg.includes('not found') && <span>💡 Check Serial Monitor — Arduino should show <code style={{background:'#f1f5f9',padding:'1px 6px',borderRadius:4}}>[SEND] 200</code></span>}
-              {errorMsg.includes('WiFi')      && <span>💡 Connect your computer to <strong>{wifiSsid}</strong> then retry</span>}
+            <div style={{ fontSize:52, marginBottom:16 }}>
+              {errorMsg === 'wifi_mismatch' ? '📶' : errorMsg === 'device_not_found' ? '🔌' : '⚠️'}
             </div>
-            <button style={{ ...s.connectBtn, marginTop:20 }} onClick={connect}><span>🔄</span> Retry</button>
+            <h2 style={{ ...s.idleTitle, color:'#ef4444' }}>
+              {errorMsg === 'wifi_mismatch' ? 'WiFi Network Mismatch'
+               : errorMsg === 'device_not_found' ? 'Arduino Not Found'
+               : 'Connection Failed'}
+            </h2>
+            <div style={{ background: errorMsg === 'wifi_mismatch' ? '#fffbeb' : '#fef2f2', border: `1px solid ${errorMsg === 'wifi_mismatch' ? '#fde68a' : '#fecaca'}`, borderRadius:12, padding:'16px 20px', marginBottom:20, textAlign:'left' }}>
+              {errorMsg === 'wifi_mismatch' ? (
+                <>
+                  <p style={{ fontSize:14, fontWeight:700, color:'#92400e', marginBottom:8 }}>Your device is on a different WiFi network</p>
+                  <p style={{ fontSize:13, color:'#78350f', lineHeight:1.6, marginBottom:10 }}>
+                    The Arduino is connected to <strong>{wifiSsid || 'a different network'}</strong> but your browser may be on a different network. Both must be on the same WiFi.
+                  </p>
+                  <p style={{ fontSize:12, color:'#92400e', fontWeight:600 }}>Fix: Connect your phone/laptop to the same WiFi as the Arduino, then retry.</p>
+                </>
+              ) : errorMsg === 'device_not_found' ? (
+                <>
+                  <p style={{ fontSize:14, fontWeight:700, color:'#991b1b', marginBottom:8 }}>Device ID <code style={{ background:'#fee2e2', padding:'1px 6px', borderRadius:4 }}>{deviceId}</code> not found</p>
+                  <p style={{ fontSize:13, color:'#7f1d1d', lineHeight:1.6, marginBottom:10 }}>
+                    The backend has not received any data from this Arduino yet. This means either:
+                  </p>
+                  <ul style={{ fontSize:13, color:'#7f1d1d', lineHeight:1.8, paddingLeft:18, marginBottom:8 }}>
+                    <li>The Arduino is not powered on</li>
+                    <li>The Arduino sketch has a different <code style={{ background:'#fee2e2', padding:'1px 4px', borderRadius:3 }}>DEVICE_ID</code> — check your sketch</li>
+                    <li>The Arduino WiFi is not connected — check Serial Monitor for <code style={{ background:'#fee2e2', padding:'1px 4px', borderRadius:3 }}>[WiFi] Connected</code></li>
+                    <li>The Arduino is sending to the wrong server URL</li>
+                  </ul>
+                  <p style={{ fontSize:12, color:'#991b1b', fontWeight:600 }}>Fix: Open Serial Monitor at 115200 baud and confirm you see <code style={{ background:'#fee2e2', padding:'1px 4px', borderRadius:3 }}>[SEND] OK</code></p>
+                </>
+              ) : (
+                <p style={{ fontSize:13, color:'#7f1d1d', lineHeight:1.6 }}>{errorMsg || 'Connection closed unexpectedly. Please retry.'}</p>
+              )}
+            </div>
+            <button style={s.connectBtn} onClick={connect}>Retry</button>
+            <button onClick={() => { setStatus('idle'); setErrorMsg(''); }}
+              style={{ marginTop:10, background:'none', border:'none', color:'#94a3b8', fontSize:13, cursor:'pointer' }}>
+              Change Device ID
+            </button>
           </div>
         )}
 
@@ -551,7 +593,7 @@ export default function LiveIoT() {
           <div style={{ animation:'fadeUp .35s ease' }}>
 
             {/* Status bar */}
-            <div style={s.statusBar}>
+            <div style={s.statusBar} className="iot-status">
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ width:10, height:10, borderRadius:'50%', background: arduinoActive?'#22c55e':'#f59e0b', display:'inline-block', animation: arduinoActive?'glow 2s infinite':'pulse 1.5s infinite' }} />
                 <span style={s.statusTxt}>{arduinoActive ? 'Live — data streaming' : 'Waiting for Arduino…'}</span>
@@ -572,7 +614,7 @@ export default function LiveIoT() {
               <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 20px', marginBottom:16 }}>
                 <div style={{ fontSize:14, fontWeight:700, color:'#0f172a', marginBottom:4 }}>Change Arduino WiFi</div>
                 <div style={{ fontSize:12, color:'#64748b', marginBottom:14 }}>New credentials will be sent to the Arduino — it will reconnect automatically within 3 seconds</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:12, alignItems:'end' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:12, alignItems:'end' }} className="iot-wifi-panel">
                   <div>
                     <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#374151', marginBottom:5 }}>New WiFi SSID</label>
                     <input type="text" value={newSsid} onChange={e => setNewSsid(e.target.value)}
@@ -723,7 +765,7 @@ export default function LiveIoT() {
 
             {/* ── 2-PIPE DASHBOARD ── */}
             {(latest?.temperature != null || latest?.gas != null) && (
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:20 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:20 }} className="iot-pipes">
 
                 {/* PIPE 1 — Temp + Humidity */}
                 <div style={{ background:'#fff', borderRadius:16, border:'2px solid #3b82f6', overflow:'hidden' }}>
@@ -981,12 +1023,13 @@ const s: Record<string, React.CSSProperties> = {
   logo:     { fontSize:17, fontWeight:800, color:'#0f172a' },
   navBadge: { fontSize:11, padding:'3px 10px', borderRadius:999, background:'#eff6ff', color:'#3b82f6', fontWeight:700, border:'1px solid #bfdbfe' },
   backBtn:  { padding:'8px 18px', background:'#0f172a', color:'#fff', border:'none', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:600 },
+  navBtn:   { padding:'8px 18px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:600, boxShadow:'0 2px 8px rgba(37,99,235,.2)' } as React.CSSProperties,
   main:     { maxWidth:1100, margin:'0 auto', padding:'32px 24px' },
 
   centerWrap: { maxWidth:460, margin:'80px auto 0', textAlign:'center' },
   idleTitle:  { fontSize:22, fontWeight:800, color:'#0f172a', margin:'0 0 10px' },
   idleSub:    { fontSize:14, color:'#64748b', lineHeight:1.7, margin:'0 0 28px' },
-  connectBtn: { display:'inline-flex', alignItems:'center', gap:10, padding:'13px 32px', background:'linear-gradient(135deg,#3b82f6,#6366f1)', color:'#fff', border:'none', borderRadius:12, cursor:'pointer', fontSize:15, fontWeight:700, boxShadow:'0 4px 16px rgba(99,102,241,.35)' },
+  connectBtn: { display:'inline-flex', alignItems:'center', gap:10, padding:'13px 32px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:12, cursor:'pointer', fontSize:15, fontWeight:700, boxShadow:'0 4px 16px rgba(37,99,235,.3)' },
 
   statusBar:    { display:'flex', alignItems:'center', gap:12, background:'#fff', padding:'12px 20px', borderRadius:12, marginBottom:20, border:'1px solid #e2e8f0', flexWrap:'wrap' },
   statusTxt:    { fontSize:13, fontWeight:600, color:'#1e293b' },

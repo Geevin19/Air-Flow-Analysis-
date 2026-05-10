@@ -1,0 +1,388 @@
+/* ─── SmartTracker — Mobile-first responsive overrides ─────────────────────── */
+
+/* Viewport meta is set in index.html — this handles all layout breakpoints */
+
+/* ── Base mobile resets ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+img, video { max-width: 100%; height: auto; }
+
+/* ── Utility: hide on mobile / show on mobile ────────────────────────────────── */
+@media (max-width: 767px) {
+  .hide-mobile { display: none !important; }
+  .show-mobile { display: flex !important; }
+}
+@media (min-width: 768px) {
+  .show-mobile { display: none !important; }
+  .landing-nav-links { display: flex !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   LANDING PAGE
+═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* Nav */
+  nav[style*="padding:'18px 48px'"],
+  nav[style*="padding: 18px 48px"] {
+    padding: 12px 16px !important;
+  }
+
+  /* Hero */
+  section[style*="padding:'100px"] {
+    padding: 48px 16px 40px !important;
+  }
+
+  /* Stats row — stack vertically */
+  div[style*="borderRight:'1px solid #f1f5f9'"] {
+    border-right: none !important;
+    border-bottom: 1px solid #f1f5f9;
+    padding: 16px 0 !important;
+  }
+
+  /* Feature grid — single column */
+  div[style*="minmax(300px,1fr)"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Steps — stack vertically */
+  div[style*="stepsRow"] {
+    flex-direction: column !important;
+  }
+
+  /* CTA banner */
+  section[style*="padding:'80px 48px'"] {
+    padding: 48px 20px !important;
+  }
+
+  /* Footer */
+  footer[style*="padding:'24px 48px'"] {
+    padding: 20px 16px !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    text-align: center;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   AUTH PAGES (Login / Register / VerifyOTP / ForgotPassword)
+═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  /* Auth card — full width with small padding */
+  div[style*="maxWidth:420"],
+  div[style*="maxWidth:460"],
+  div[style*="maxWidth: 420"],
+  div[style*="maxWidth: 460"] {
+    max-width: 100% !important;
+    border-radius: 0 !important;
+    padding: 28px 20px !important;
+    min-height: 100vh;
+    box-shadow: none !important;
+  }
+
+  /* Auth page — no padding on very small screens */
+  div[style*="padding:24"][style*="minHeight:'100vh'"] {
+    padding: 0 !important;
+    align-items: flex-start !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   DASHBOARD
+═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* Nav — reduce padding, hide nav tabs text */
+  nav[style*="padding:'14px 32px'"] {
+    padding: 10px 16px !important;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Nav tabs — smaller */
+  div[style*="navTabs"] button {
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+  }
+
+  /* Main content — reduce padding */
+  main[style*="maxWidth:1100"] {
+    padding: 16px !important;
+  }
+
+  /* Header — stack on mobile */
+  div[style*="justifyContent:'space-between'"][style*="marginBottom:28"] {
+    flex-direction: column !important;
+    gap: 12px !important;
+    align-items: flex-start !important;
+  }
+
+  /* Stats — 1 column on mobile */
+  div[style*="repeat(3,1fr)"] {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* Quick actions — 1 column */
+  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="marginBottom:8"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Simulation cards — 1 column */
+  div[style*="minmax(240px,1fr)"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Profile dropdown — full width */
+  div[style*="minWidth:240"] {
+    min-width: calc(100vw - 32px) !important;
+    right: -8px !important;
+  }
+
+  /* Logout button — hide on mobile (use profile dropdown) */
+  button[style*="color:'#ef4444'"][style*="border:'1px solid #fecaca'"] {
+    display: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   LIVE IoT PAGE
+═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* Toast notifications — full width */
+  div[style*="maxWidth:380"][style*="position:'fixed'"] {
+    max-width: calc(100vw - 24px) !important;
+    right: 12px !important;
+    left: 12px !important;
+  }
+
+  /* Status bar — wrap */
+  div[style*="statusBar"] {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    padding: 10px 14px !important;
+  }
+
+  /* 2-pipe dashboard — stack vertically */
+  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="marginBottom:20"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* WiFi change panel — stack */
+  div[style*="gridTemplateColumns:'1fr 1fr auto'"] {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* Pipe edit panel — stack */
+  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="gap:16"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Limits grid — 1 column */
+  div[style*="minmax(200px,1fr)"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Main padding */
+  main[style*="maxWidth:1100"][style*="padding:'32px 24px'"] {
+    padding: 12px !important;
+  }
+
+  /* Sensor value cards — 1 column */
+  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="marginBottom:14"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Table — horizontal scroll */
+  div[style*="overflowX:'auto'"] {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SIMULATION PAGE — hide 3-panel layout on mobile, show scrollable single column
+═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  /* Override the 3-column grid to single column */
+  div[style*="gridTemplateColumns:'240px 1fr 220px'"] {
+    grid-template-columns: 1fr !important;
+    overflow: auto !important;
+    height: auto !important;
+  }
+
+  /* Left sidebar — full width, not scrollable panel */
+  div[style*="borderRight:'1px solid rgba(80,120,200,0.12)'"] {
+    border-right: none !important;
+    border-bottom: 1px solid rgba(80,120,200,0.12);
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Viewport — fixed height on mobile */
+  div[style*="background:'#040a18'"][style*="overflow:'hidden'"],
+  div[style*="background:'#dde6f0'"][style*="overflow:'hidden'"] {
+    height: 320px !important;
+    min-height: 320px !important;
+  }
+
+  /* Right sidebar — full width */
+  div[style*="borderLeft:'1px solid rgba(80,120,200,0.12)'"] {
+    border-left: none !important;
+    border-top: 1px solid rgba(80,120,200,0.12);
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Nav — reduce padding */
+  nav[style*="padding:'14px 24px'"] {
+    padding: 10px 14px !important;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Metrics grid — 2 columns on tablet */
+  div[style*="gridTemplateColumns:'1fr 1fr'"][style*="gap:'8px'"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Simulation nav buttons — icon only */
+  nav[style*="padding:'14px 24px'"] button span:not(:first-child) {
+    display: none;
+  }
+
+  /* Viewport height on small phones */
+  div[style*="background:'#040a18'"][style*="overflow:'hidden'"],
+  div[style*="background:'#dde6f0'"][style*="overflow:'hidden'"] {
+    height: 260px !important;
+    min-height: 260px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GLOBAL NAV RESPONSIVE
+═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* All sticky navs */
+  nav {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  /* Logo text — keep visible */
+  span[style*="fontWeight:800"][style*="color:'#0f172a'"] {
+    font-size: 15px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TOUCH IMPROVEMENTS
+═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* Minimum touch target size */
+  button, a, input[type="checkbox"], input[type="radio"] {
+    min-height: 44px;
+  }
+
+  /* Inputs — prevent zoom on iOS */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  select,
+  textarea {
+    font-size: 16px !important; /* prevents iOS zoom */
+  }
+
+  /* Remove hover transforms on touch */
+  button:hover {
+    transform: none !important;
+  }
+
+  /* Scrollable tables */
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   LANDING PAGE — MOBILE SPECIFIC OVERRIDES
+═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* Nav links — hide on mobile, show hamburger */
+  .landing-nav-links { display: none !important; }
+
+  /* Hero buttons — stack */
+  div[style*="justifyContent:'center'"][style*="flexWrap:'wrap'"] {
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 10px !important;
+  }
+
+  /* Hero buttons — full width */
+  a[style*="padding:'14px 32px'"] {
+    width: 100% !important;
+    max-width: 320px !important;
+    justify-content: center !important;
+  }
+
+  /* Stats row — 2x2 grid */
+  div[style*="justifyContent:'center'"][style*="marginTop:64"] {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0 !important;
+  }
+
+  /* Steps — vertical */
+  div[style*="stepsRow"],
+  div[style*="gap:0"][style*="maxWidth:1100"] {
+    flex-direction: column !important;
+    gap: 24px !important;
+  }
+
+  /* Step arrows — hide on mobile */
+  div[style*="fontSize:20"][style*="color:'#cbd5e1'"] {
+    display: none !important;
+  }
+
+  /* Feature section padding */
+  section[style*="padding:'96px 48px'"] {
+    padding: 48px 16px !important;
+  }
+
+  /* How it works section */
+  section[style*="padding:'96px 48px'"][style*="background:'#fff'"] {
+    padding: 48px 16px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SCROLLBAR — thinner on mobile
+═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SAFE AREA — iPhone notch / home bar
+═══════════════════════════════════════════════════════════════════════════════ */
+@supports (padding: max(0px)) {
+  nav:first-of-type {
+    padding-top: max(10px, env(safe-area-inset-top)) !important;
+  }
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

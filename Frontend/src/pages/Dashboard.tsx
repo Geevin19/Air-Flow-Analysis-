@@ -59,17 +59,30 @@ export default function Dashboard() {
         .sim-card:hover{transform:translateY(-3px);box-shadow:0 8px 28px rgba(0,0,0,.1)!important;}
         .del-btn:hover{background:#fef2f2!important;border-color:#fca5a5!important;color:#dc2626!important;}
         .nav-tab:hover{color:#1d4ed8!important;}
+        @media(max-width:767px){
+          .dash-nav{padding:10px 14px!important;}
+          .dash-nav-tabs{display:none!important;}
+          .dash-main{padding:14px!important;}
+          .dash-header{flex-direction:column!important;gap:10px!important;align-items:flex-start!important;margin-bottom:16px!important;}
+          .dash-title{font-size:22px!important;}
+          .dash-stats{grid-template-columns:1fr!important;gap:10px!important;}
+          .dash-quick{grid-template-columns:1fr!important;}
+          .dash-grid{grid-template-columns:1fr!important;}
+          .dash-logout{display:none!important;}
+          .dash-profile-drop{min-width:calc(100vw - 32px)!important;right:-8px!important;}
+          .dash-header-btns{flex-wrap:wrap!important;gap:8px!important;}
+        }
       `}</style>
 
       {/* NAV */}
-      <nav style={s.nav}>
+      <nav style={s.nav} className="dash-nav">
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           <img src="/logo.png" alt="" style={{ width:32, height:32, objectFit:'contain', borderRadius:8 }} />
           <span style={s.logo}>SmartTracker</span>
         </div>
 
         {/* Centre nav tabs */}
-        <div style={s.navTabs}>
+        <div style={s.navTabs} className="dash-nav-tabs">
           <button className="nav-tab" onClick={() => setActiveNav('simulation')}
             style={{ ...s.navTab, ...(activeNav === 'simulation' ? s.navTabActive : {}) }}>
             Simulation
@@ -122,18 +135,18 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-          <button style={s.logoutBtn} onClick={handleLogout}>Logout</button>
+          <button style={s.logoutBtn} onClick={handleLogout} className="dash-logout">Logout</button>
         </div>
       </nav>
 
-      <main style={s.main}>
+      <main style={s.main} className="dash-main">
         {/* Header */}
-        <div style={s.header}>
+        <div style={s.header} className="dash-header">
           <div>
-            <h2 style={s.title}>Dashboard</h2>
+            <h2 style={s.title} className="dash-title">Dashboard</h2>
             <p style={{ fontSize:14, color:'#64748b', marginTop:4 }}>Welcome back, {user?.username}</p>
           </div>
-          <div style={{ display:'flex', gap:10 }}>
+          <div style={{ display:'flex', gap:10 }} className="dash-header-btns">
             <button style={s.iotBtn} onClick={() => navigate('/iot-live')}>
               Live IoT
             </button>
@@ -144,7 +157,7 @@ export default function Dashboard() {
         </div>
 
         {/* Stats */}
-        <div style={s.statsRow}>
+        <div style={s.statsRow} className="dash-stats">
           {[
             { val: simulations.length,                          label:'Total Simulations', color:'#3b82f6' },
             { val: simulations.filter(s => s.results).length,  label:'Completed',          color:'#10b981' },
@@ -158,7 +171,7 @@ export default function Dashboard() {
         </div>
 
         {/* Quick actions */}
-        <div style={s.quickRow}>
+        <div style={s.quickRow} className="dash-quick">
           <div style={s.quickCard} onClick={() => navigate('/simulation')}>
             <div style={{ fontSize:12, fontWeight:700, color:'#3b82f6', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:8 }}>CFD Simulation</div>
             <div style={{ fontSize:15, fontWeight:700, color:'#0f172a', marginBottom:4 }}>3D Pipe Flow Simulation</div>
@@ -189,7 +202,7 @@ export default function Dashboard() {
               </button>
             </div>
           ) : (
-            <div style={s.grid}>
+            <div style={s.grid} className="dash-grid">
               {simulations.map(sim => (
                 <div key={sim.id} className="sim-card" style={s.simCard}
                   onClick={() => navigate(`/simulation?id=${sim.id}`)}>
@@ -234,7 +247,7 @@ const s: Record<string, React.CSSProperties> = {
   header:{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:28 },
   title: { fontSize:30, fontWeight:800, color:'#0f172a', letterSpacing:'-0.02em' },
   newBtn:{ padding:'10px 22px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:10, fontSize:13, fontWeight:700, cursor:'pointer', boxShadow:'0 2px 10px rgba(37,99,235,.25)' },
-  iotBtn:{ padding:'10px 22px', background:'#fff', color:'#6366f1', border:'1.5px solid #c7d2fe', borderRadius:10, fontSize:13, fontWeight:700, cursor:'pointer' },
+  iotBtn:{ padding:'10px 22px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:10, fontSize:13, fontWeight:700, cursor:'pointer', boxShadow:'0 2px 10px rgba(37,99,235,.25)' },
   statsRow: { display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16, marginBottom:24 },
   statCard: { background:'#fff', borderRadius:16, padding:'24px', border:'1px solid #e2e8f0', textAlign:'center', boxShadow:'0 1px 4px rgba(0,0,0,.04)' },
   quickRow: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:8 },
