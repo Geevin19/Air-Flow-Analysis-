@@ -774,7 +774,7 @@ export default function Simulation() {
 
   // ── theme ──
   const [theme, setTheme] = useState<'dark'|'light'>(() =>
-    (localStorage.getItem('sim-theme') as 'dark'|'light') || 'dark'
+    (localStorage.getItem('sim-theme') as 'dark'|'light') || 'light'
   );
   const isDark = theme === 'dark';
   const toggleTheme = () => setTheme(t => {

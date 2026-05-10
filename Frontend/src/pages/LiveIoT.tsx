@@ -426,25 +426,26 @@ export default function LiveIoT() {
           {status === 'connected' && (
             <>
               <button onClick={() => setShowWifiChange(v => !v)}
-                style={{ ...s.backBtn, background: showWifiChange ? '#7c3aed' : '#0f172a' }}>
+                style={{ ...s.backBtn, background: showWifiChange ? '#7c3aed' : '#f1f5f9', color: showWifiChange ? '#fff' : '#374151', border: showWifiChange ? 'none' : '1px solid #e2e8f0' }}>
                 📶 WiFi
               </button>
               <button onClick={() => setShowPipeEdit(v => !v)}
-                style={{ ...s.backBtn, background: showPipeEdit ? '#0369a1' : '#0f172a' }}>
+                style={{ ...s.backBtn, background: showPipeEdit ? '#2563eb' : '#f1f5f9', color: showPipeEdit ? '#fff' : '#374151', border: showPipeEdit ? 'none' : '1px solid #e2e8f0' }}>
                 Pipes
               </button>
-              <button onClick={() => setShowLimits(v => !v)} style={{ ...s.backBtn, background: showLimits ? '#dc2626' : '#0f172a' }}>
+              <button onClick={() => setShowLimits(v => !v)}
+                style={{ ...s.backBtn, background: showLimits ? '#dc2626' : '#f1f5f9', color: showLimits ? '#fff' : '#374151', border: showLimits ? 'none' : '1px solid #e2e8f0' }}>
                 Limits
               </button>
               {history.length > 0 && (
                 <button onClick={() => downloadExcel(history, deviceId)}
-                  style={{ ...s.backBtn, background:'#065f46', border:'1px solid #34d399' }}>
+                  style={{ ...s.backBtn, background:'#dcfce7', color:'#16a34a', border:'1px solid #bbf7d0' }}>
                   ↓ Excel
                 </button>
               )}
             </>
           )}
-          <button onClick={() => navigate('/dashboard')} style={s.backBtn}>← Dashboard</button>
+          <button onClick={() => navigate('/dashboard')} style={{ ...s.backBtn, background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0' }}>← Dashboard</button>
         </div>
       </nav>
 

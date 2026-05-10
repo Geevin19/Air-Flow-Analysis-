@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI, simulationAPI } from '../services/api';
 
@@ -8,6 +8,8 @@ export default function Dashboard() {
   const [simulations, setSimulations] = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [activeNav, setActiveNav]   = useState<'simulation'|'iot'>('simulation');
+  const [showProfile, setShowProfile] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -19,6 +21,17 @@ export default function Dashboard() {
       finally { setLoading(false); }
     })();
   }, [navigate]);
+
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setShowProfile(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const handleLogout = () => { localStorage.removeItem('token'); navigate('/login'); };
 
@@ -68,9 +81,46 @@ export default function Dashboard() {
         </div>
 
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <div style={s.userChip}>
-            <div style={s.avatar}>{user?.username?.[0]?.toUpperCase()}</div>
-            <span style={{ fontSize:13, fontWeight:600, color:'#374151' }}>{user?.username}</span>
+          <div ref={profileRef} style={{ position:'relative' }}>
+            <div style={s.userChip} onClick={() => setShowProfile(v => !v)}>
+              <div style={s.avatar}>{user?.username?.[0]?.toUpperCase()}</div>
+              <span style={{ fontSize:13, fontWeight:600, color:'#374151' }}>{user?.username}</span>
+              <span style={{ fontSize:10, color:'#94a3b8' }}>▾</span>
+            </div>
+            {showProfile && (
+              <div style={{ position:'absolute', right:0, top:'calc(100% + 8px)', background:'#fff', border:'1px solid #e2e8f0', borderRadius:14, boxShadow:'0 8px 32px rgba(0,0,0,.12)', padding:'8px', minWidth:240, zIndex:100, animation:'fadeUp .15s ease' }}>
+                {/* Header */}
+                <div style={{ padding:'12px 14px 10px', borderBottom:'1px solid #f1f5f9', marginBottom:6 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <div style={{ ...s.avatar, width:40, height:40, fontSize:17 }}>{user?.username?.[0]?.toUpperCase()}</div>
+                    <div>
+                      <div style={{ fontSize:14, fontWeight:700, color:'#0f172a' }}>{user?.username}</div>
+                      <div style={{ fontSize:12, color:'#64748b' }}>{user?.email}</div>
+                    </div>
+                  </div>
+                </div>
+                {/* Details */}
+                <div style={{ padding:'4px 6px' }}>
+                  {[
+                    { label:'Role',    value: user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : '—' },
+                    { label:'Purpose', value: user?.purpose || '—' },
+                    { label:'Member since', value: user?.created_at ? new Date(user.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : '—' },
+                    { label:'Verified', value: user?.is_verified ? '✓ Yes' : '✗ No' },
+                  ].map(row => (
+                    <div key={row.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 8px', borderRadius:8 }}>
+                      <span style={{ fontSize:12, color:'#94a3b8', fontWeight:500 }}>{row.label}</span>
+                      <span style={{ fontSize:12, fontWeight:600, color:'#374151' }}>{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ borderTop:'1px solid #f1f5f9', marginTop:6, paddingTop:6 }}>
+                  <button onClick={handleLogout}
+                    style={{ width:'100%', padding:'9px 14px', background:'#fef2f2', border:'none', borderRadius:9, color:'#dc2626', fontSize:13, fontWeight:600, cursor:'pointer', textAlign:'left' as const }}>
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <button style={s.logoutBtn} onClick={handleLogout}>Logout</button>
         </div>
