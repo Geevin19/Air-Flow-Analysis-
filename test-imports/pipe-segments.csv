@@ -1,0 +1,8 @@
+name,shape,length_m,inner_diameter_m,material,flow_rate_m3s
+Inlet Run,straight,4,0.1,Steel,0.3
+90 Degree Elbow,l-shaped,2,0.1,Steel,0.3
+Horizontal Run,straight,8,0.1,Steel,0.3
+Double Bend,s-curve,3,0.08,Copper,0.3
+U-Return,u-bend,2,0.08,Copper,0.3
+Outlet Run,straight,5,0.08,Copper,0.3
+
