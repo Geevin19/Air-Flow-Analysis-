@@ -19,140 +19,121 @@ function downloadReport(params: any, computed: any, name: string, segments: Pipe
   if (!win) return;
   const now = new Date().toLocaleString();
 
-  // Shape icons and colors for the network diagram
-  const shapeIcon: Record<PipeShape, string> = {
+  const shapeIcon: Record<string, string> = {
     'straight': '━', 'l-shaped': '┗', 's-curve': '∫', 'u-bend': '∪', 'helix': '⌀',
   };
-  const shapeColor: Record<PipeShape, string> = {
+  const shapeColor: Record<string, string> = {
     'straight': '#3b82f6', 'l-shaped': '#8b5cf6', 's-curve': '#f59e0b', 'u-bend': '#10b981', 'helix': '#ef4444',
   };
-  const shapeLabel: Record<PipeShape, string> = {
+  const shapeLabel: Record<string, string> = {
     'straight': 'Straight', 'l-shaped': 'L-Shaped', 's-curve': 'S-Curve', 'u-bend': 'U-Bend', 'helix': 'Helix',
   };
 
-  // Build network diagram HTML
-  const networkDiagram = networkShapes.map((shape, i) => `
-    <div style="display:inline-flex;flex-direction:column;align-items:center;gap:4px;">
-      <div style="width:56px;height:56px;border-radius:12px;background:${shapeColor[shape]}18;border:2px solid ${shapeColor[shape]}60;display:flex;align-items:center;justify-content:center;font-size:22px;">${shapeIcon[shape]}</div>
-      <div style="font-size:10px;font-weight:700;color:${shapeColor[shape]};text-align:center;">${shapeLabel[shape]}</div>
-      <div style="font-size:9px;color:#9ca3af;">#${i+1}</div>
-    </div>
-    ${i < networkShapes.length - 1 ? '<div style="display:inline-flex;align-items:center;padding:0 4px;font-size:18px;color:#cbd5e1;margin-top:-16px;">→</div>' : ''}
-  `).join('');
+  // Pre-build all HTML strings to avoid nested template literals
+  const networkCount = networkShapes.length;
+  const networkTitle = 'Pipe Network — ' + networkCount + ' Segment' + (networkCount !== 1 ? 's' : '');
+  const networkSequence = networkShapes.map((s, i) => (i + 1) + '. ' + (shapeLabel[s] || s)).join(' → ');
 
-  const segRows = segments.map(s => {
-    const area = Math.PI * (s.innerD / 2) ** 2;
-    const v = area > 0 ? s.flowRate / area : 0;
-    const rho = params.air.density_kg_m3;
-    const mu = params.air.dynamic_viscosity_Pa_s;
-    const Re = mu > 0 ? (rho * v * s.innerD) / mu : 0;
-    const regime = Re < 2300 ? 'Laminar' : Re < 4000 ? 'Transition' : 'Turbulent';
-    const regimeClass = regime.toLowerCase();
-    return `<tr>
-      <td>${s.name}</td>
-      <td><span style="display:inline-flex;align-items:center;gap:5px;"><span style="font-size:14px;">${shapeIcon[s.shape as PipeShape] ?? s.shape}</span> ${shapeLabel[s.shape as PipeShape] ?? s.shape}</span></td>
-      <td>${s.length} m</td>
-      <td>${(s.innerD * 1000).toFixed(1)} mm</td>
-      <td>${s.material}</td>
-      <td>${v.toFixed(3)} m/s</td>
-      <td>${Re.toFixed(0)}</td>
-      <td><span class="badge ${regimeClass}">${regime}</span></td>
-    </tr>`;
+  const networkDiagram = networkShapes.map((shape, i) => {
+    const color = shapeColor[shape] || '#3b82f6';
+    const icon = shapeIcon[shape] || shape;
+    const label = shapeLabel[shape] || shape;
+    const arrow = i < networkShapes.length - 1
+      ? '<div style="display:inline-flex;align-items:center;padding:0 6px;font-size:20px;color:#cbd5e1;">→</div>'
+      : '';
+    return '<div style="display:inline-flex;flex-direction:column;align-items:center;gap:4px;">'
+      + '<div style="width:56px;height:56px;border-radius:12px;background:' + color + '18;border:2px solid ' + color + '60;display:flex;align-items:center;justify-content:center;font-size:22px;">' + icon + '</div>'
+      + '<div style="font-size:10px;font-weight:700;color:' + color + ';text-align:center;">' + label + '</div>'
+      + '<div style="font-size:9px;color:#9ca3af;">#' + (i + 1) + '</div>'
+      + '</div>' + arrow;
   }).join('');
 
-  win.document.write(`<!DOCTYPE html><html><head>
-    <title>Simulation Report — ${name}</title>
-    <style>
-      body{font-family:'Segoe UI',Arial,sans-serif;margin:40px;color:#111;background:#fff;max-width:900px;}
-      h1{color:#1d4ed8;font-size:22px;margin-bottom:4px;}
-      .sub{color:#6b7280;font-size:13px;margin-bottom:28px;}
-      .section{margin-bottom:28px;}
-      .section h2{font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:14px;text-transform:uppercase;letter-spacing:.08em;}
-      .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
-      .metric{background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:12px;}
-      .metric .label{font-size:10px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
-      .metric .value{font-size:18px;font-weight:700;color:#111;margin-top:4px;}
-      .metric .unit{font-size:11px;color:#9ca3af;}
-      table{width:100%;border-collapse:collapse;font-size:12px;}
-      th{background:#1d4ed8;color:#fff;padding:8px 10px;text-align:left;font-size:11px;}
-      td{padding:7px 10px;border-bottom:1px solid #e5e7eb;vertical-align:middle;}
-      tr:nth-child(even) td{background:#f8fafc;}
-      .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;}
-      .laminar{background:#dbeafe;color:#1d4ed8;}
-      .turbulent{background:#fee2e2;color:#dc2626;}
-      .transition{background:#fef9c3;color:#a16207;}
-      .network-wrap{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:16px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:8px;}
-      .network-summary{font-size:12px;color:#64748b;margin-top:8px;}
-      @media print{body{margin:20px;}}
-    </style>
-  </head><body>
-    <h1>📊 Airflow Simulation Report</h1>
-    <div class="sub">Simulation: <b>${name || 'Untitled'}</b> &nbsp;·&nbsp; Generated: ${now}</div>
+  const baseShape = params.pipe.shape as string;
+  const baseShapeDisplay = (shapeIcon[baseShape] || '') + ' ' + (shapeLabel[baseShape] || baseShape);
 
-    <div class="section">
-      <h2>Pipe Network — ${networkShapes.length} Segment${networkShapes.length !== 1 ? 's' : ''}</h2>
-      <div class="network-wrap">${networkDiagram}</div>
-      <div class="network-summary">
-        Network sequence: <b>${networkShapes.map((s, i) => `${i+1}. ${shapeLabel[s]}`).join(' → ')}</b>
-      </div>
-    </div>
+  const segmentRows = segments.map((s, i) => {
+    const area = Math.PI * (s.innerD / 2) ** 2;
+    const v = area > 0 ? s.flowRate / area : 0;
+    const rho = params.air.density_kg_m3 as number;
+    const mu = params.air.dynamic_viscosity_Pa_s as number;
+    const Re = mu > 0 ? (rho * v * s.innerD) / mu : 0;
+    const regime = Re < 2300 ? 'Laminar' : Re < 4000 ? 'Transition' : 'Turbulent';
+    const sIcon = shapeIcon[s.shape] || s.shape;
+    const sLabel = shapeLabel[s.shape] || s.shape;
+    return '<tr>'
+      + '<td>' + (i + 1) + '</td>'
+      + '<td>' + s.name + '</td>'
+      + '<td>' + sIcon + ' ' + sLabel + '</td>'
+      + '<td>' + s.length + ' m</td>'
+      + '<td>' + (s.innerD * 1000).toFixed(1) + ' mm</td>'
+      + '<td>' + s.material + '</td>'
+      + '<td>' + v.toFixed(3) + ' m/s</td>'
+      + '<td>' + Re.toFixed(0) + '</td>'
+      + '<td><span class="badge ' + regime.toLowerCase() + '">' + regime + '</span></td>'
+      + '</tr>';
+  }).join('');
 
-    <div class="section">
-      <h2>Pipe Configuration</h2>
-      <div class="grid">
-        <div class="metric"><div class="label">Base Shape</div><div class="value">${shapeIcon[params.pipe.shape as PipeShape] ?? ''} ${shapeLabel[params.pipe.shape as PipeShape] ?? params.pipe.shape}</div></div>
-        <div class="metric"><div class="label">Length</div><div class="value">${params.pipe.length_m}<span class="unit"> m</span></div></div>
-        <div class="metric"><div class="label">Inner Diameter</div><div class="value">${(params.pipe.inner_diameter_m*1000).toFixed(1)}<span class="unit"> mm</span></div></div>
-        <div class="metric"><div class="label">Material</div><div class="value">${params.pipe.material}</div></div>
-        <div class="metric"><div class="label">Roughness ε</div><div class="value">${params.pipe.absolute_roughness_m}<span class="unit"> m</span></div></div>
-        <div class="metric"><div class="label">Temperature</div><div class="value">${params.air.temperature_C}<span class="unit"> °C</span></div></div>
-      </div>
-    </div>
+  const segmentsSection = segments.length > 0
+    ? '<div class="section"><h2>Connected Pipe Segments (' + segments.length + ')</h2>'
+      + '<table><thead><tr><th>#</th><th>Name</th><th>Shape</th><th>Length</th><th>Diameter</th><th>Material</th><th>Velocity</th><th>Reynolds</th><th>Regime</th></tr></thead>'
+      + '<tbody>' + segmentRows + '</tbody></table></div>'
+    : '';
 
-    <div class="section">
-      <h2>Flow Results</h2>
-      <div class="grid">
-        <div class="metric"><div class="label">Avg Velocity</div><div class="value">${computed.velocity.toFixed(4)}<span class="unit"> m/s</span></div></div>
-        <div class="metric"><div class="label">Reynolds Number</div><div class="value">${computed.reynolds.toFixed(0)}</div></div>
-        <div class="metric"><div class="label">Flow Regime</div><div class="value"><span class="badge ${computed.flowRegime}">${computed.flowRegime}</span></div></div>
-        <div class="metric"><div class="label">Total Pressure Drop</div><div class="value">${(computed.pressureDrop/1000).toFixed(4)}<span class="unit"> kPa</span></div></div>
-        <div class="metric"><div class="label">Friction Factor f</div><div class="value">${computed.frictionFactor.toFixed(6)}</div></div>
-        <div class="metric"><div class="label">Mass Flow Rate</div><div class="value">${computed.massFlow.toFixed(4)}<span class="unit"> kg/s</span></div></div>
-        <div class="metric"><div class="label">Air Density</div><div class="value">${computed.density.toFixed(4)}<span class="unit"> kg/m³</span></div></div>
-        <div class="metric"><div class="label">Wall Shear Stress</div><div class="value">${computed.wallShear.toFixed(4)}<span class="unit"> Pa</span></div></div>
-        <div class="metric"><div class="label">Minor Loss Δp</div><div class="value">${(computed.minorDrop/1000).toFixed(4)}<span class="unit"> kPa</span></div></div>
-      </div>
-    </div>
+  const html = '<!DOCTYPE html><html><head>'
+    + '<title>Simulation Report</title>'
+    + '<style>'
+    + 'body{font-family:Segoe UI,Arial,sans-serif;margin:40px;color:#111;background:#fff;max-width:900px;}'
+    + 'h1{color:#1d4ed8;font-size:22px;margin-bottom:4px;}'
+    + '.sub{color:#6b7280;font-size:13px;margin-bottom:28px;}'
+    + '.section{margin-bottom:28px;}'
+    + '.section h2{font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:14px;text-transform:uppercase;letter-spacing:.08em;}'
+    + '.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}'
+    + '.metric{background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:12px;}'
+    + '.metric .label{font-size:10px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}'
+    + '.metric .value{font-size:18px;font-weight:700;color:#111;margin-top:4px;}'
+    + '.metric .unit{font-size:11px;color:#9ca3af;}'
+    + 'table{width:100%;border-collapse:collapse;font-size:12px;}'
+    + 'th{background:#1d4ed8;color:#fff;padding:8px 10px;text-align:left;font-size:11px;}'
+    + 'td{padding:7px 10px;border-bottom:1px solid #e5e7eb;vertical-align:middle;}'
+    + 'tr:nth-child(even) td{background:#f8fafc;}'
+    + '.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;}'
+    + '.laminar{background:#dbeafe;color:#1d4ed8;}'
+    + '.turbulent{background:#fee2e2;color:#dc2626;}'
+    + '.transition{background:#fef9c3;color:#a16207;}'
+    + '.network-wrap{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:16px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:8px;}'
+    + '.network-summary{font-size:12px;color:#64748b;margin-top:8px;}'
+    + '@media print{body{margin:20px;}}'
+    + '</style></head><body>'
+    + '<h1>&#128202; Airflow Simulation Report</h1>'
+    + '<div class="sub">Simulation: <b>' + (name || 'Untitled') + '</b> &nbsp;&middot;&nbsp; Generated: ' + now + '</div>'
+    + '<div class="section"><h2>' + networkTitle + '</h2>'
+    + '<div class="network-wrap">' + networkDiagram + '</div>'
+    + '<div class="network-summary">Network sequence: <b>' + networkSequence + '</b></div></div>'
+    + '<div class="section"><h2>Pipe Configuration</h2><div class="grid">'
+    + '<div class="metric"><div class="label">Base Shape</div><div class="value">' + baseShapeDisplay + '</div></div>'
+    + '<div class="metric"><div class="label">Length</div><div class="value">' + params.pipe.length_m + '<span class="unit"> m</span></div></div>'
+    + '<div class="metric"><div class="label">Inner Diameter</div><div class="value">' + (params.pipe.inner_diameter_m * 1000).toFixed(1) + '<span class="unit"> mm</span></div></div>'
+    + '<div class="metric"><div class="label">Material</div><div class="value">' + params.pipe.material + '</div></div>'
+    + '<div class="metric"><div class="label">Roughness</div><div class="value">' + params.pipe.absolute_roughness_m + '<span class="unit"> m</span></div></div>'
+    + '<div class="metric"><div class="label">Temperature</div><div class="value">' + params.air.temperature_C + '<span class="unit"> °C</span></div></div>'
+    + '</div></div>'
+    + '<div class="section"><h2>Flow Results</h2><div class="grid">'
+    + '<div class="metric"><div class="label">Avg Velocity</div><div class="value">' + computed.velocity.toFixed(4) + '<span class="unit"> m/s</span></div></div>'
+    + '<div class="metric"><div class="label">Reynolds Number</div><div class="value">' + computed.reynolds.toFixed(0) + '</div></div>'
+    + '<div class="metric"><div class="label">Flow Regime</div><div class="value"><span class="badge ' + computed.flowRegime + '">' + computed.flowRegime + '</span></div></div>'
+    + '<div class="metric"><div class="label">Total Pressure Drop</div><div class="value">' + (computed.pressureDrop / 1000).toFixed(4) + '<span class="unit"> kPa</span></div></div>'
+    + '<div class="metric"><div class="label">Friction Factor f</div><div class="value">' + computed.frictionFactor.toFixed(6) + '</div></div>'
+    + '<div class="metric"><div class="label">Mass Flow Rate</div><div class="value">' + computed.massFlow.toFixed(4) + '<span class="unit"> kg/s</span></div></div>'
+    + '<div class="metric"><div class="label">Air Density</div><div class="value">' + computed.density.toFixed(4) + '<span class="unit"> kg/m³</span></div></div>'
+    + '<div class="metric"><div class="label">Wall Shear Stress</div><div class="value">' + computed.wallShear.toFixed(4) + '<span class="unit"> Pa</span></div></div>'
+    + '<div class="metric"><div class="label">Minor Loss Δp</div><div class="value">' + (computed.minorDrop / 1000).toFixed(4) + '<span class="unit"> kPa</span></div></div>'
+    + '</div></div>'
+    + segmentsSection
+    + '<div style="margin-top:40px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;">SmartTracker — Airflow Analysis Platform &nbsp;&middot;&nbsp; ' + now + '</div>'
+    + '<script>window.onload=function(){window.print();}<\/script>'
+    + '</body></html>';
 
-    ${segments.length > 0 ? `
-    <div class="section">
-      <h2>Connected Pipe Segments (${segments.length})</h2>
-      <table>
-        <thead><tr><th>#</th><th>Name</th><th>Shape</th><th>Length</th><th>Diameter</th><th>Material</th><th>Velocity</th><th>Reynolds</th><th>Regime</th></tr></thead>
-        <tbody>${segments.map((s, i) => {
-          const area = Math.PI * (s.innerD / 2) ** 2;
-          const v = area > 0 ? s.flowRate / area : 0;
-          const rho = params.air.density_kg_m3;
-          const mu = params.air.dynamic_viscosity_Pa_s;
-          const Re = mu > 0 ? (rho * v * s.innerD) / mu : 0;
-          const regime = Re < 2300 ? 'Laminar' : Re < 4000 ? 'Transition' : 'Turbulent';
-          return `<tr>
-            <td>${i+1}</td>
-            <td>${s.name}</td>
-            <td><span style="font-size:14px;">${shapeIcon[s.shape as PipeShape] ?? ''}</span> ${shapeLabel[s.shape as PipeShape] ?? s.shape}</td>
-            <td>${s.length} m</td><td>${(s.innerD*1000).toFixed(1)} mm</td><td>${s.material}</td>
-            <td>${v.toFixed(3)} m/s</td><td>${Re.toFixed(0)}</td>
-            <td><span class="badge ${regime.toLowerCase()}">${regime}</span></td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>
-    </div>` : ''}
-
-    <div style="margin-top:40px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;">
-      SmartTracker — Airflow Analysis Platform &nbsp;·&nbsp; ${now}
-    </div>
-    <script>window.onload=()=>window.print();</script>
-  </body></html>`);
+  win.document.write(html);
   win.document.close();
 }
 
@@ -1118,7 +1099,8 @@ export default function Simulation() {
         @media(max-width:480px){
           .sim-viewport{height:240px!important;min-height:240px!important;}
           .sim-card-grid{grid-template-columns:1fr!important;}
-        }</style>
+        }
+      `}</style>
       <div style={{ ...C.bg, ...(isDark ? {} : { background: 'radial-gradient(ellipse 80% 60% at 50% -10%,rgba(200,220,255,0.4) 0%,transparent 70%)' }) }}/>
       <div style={{ ...C.gridBg, ...(isDark ? {} : { backgroundImage: 'linear-gradient(rgba(36,99,235,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(36,99,235,0.06) 1px,transparent 1px)' }) }}/>
 
@@ -1136,7 +1118,7 @@ export default function Simulation() {
           {loadingExisting && <span style={{ fontSize:'11px', fontFamily:'"IBM Plex Mono"', color:'rgba(160,200,255,0.5)', animation:'pulse 1.5s infinite' }}>Loading…</span>}
           {/* Theme toggle */}
           <button onClick={toggleTheme} title="Toggle theme"
-            style={{ width:'34px', height:'34px', borderRadius:'50%', border:`1px solid ${isDark?'rgba(80,120,200,0.3)':'#d1d5db'}`, background: isDark?'rgba(80,120,200,0.1)':'#f3f4f6', cursor:'pointer', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s' }}>
+            style={{ width:'34px', height:'34px', borderRadius:'50%', border: isDark ? '1px solid rgba(80,120,200,0.3)' : '1px solid #d1d5db', background: isDark?'rgba(80,120,200,0.1)':'#f3f4f6', cursor:'pointer', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s' }}>
             {isDark ? '☀️' : '🌙'}
           </button>
           <div style={{ ...C.regimeBadge, borderColor: reColor+'60', color: reColor }}>
@@ -1265,7 +1247,7 @@ export default function Simulation() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
               {(['pressure','velocity','friction','material'] as const).map(m => (
                 <button key={m} onClick={()=>setColorMode(m)}
-                  style={{ padding:'9px 6px', borderRadius:'9px', border:`1px solid ${colorMode===m?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: colorMode===m?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: colorMode===m?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                  style={{ padding:'9px 6px', borderRadius:'9px', border: colorMode===m ? (isDark?'1px solid rgba(100,160,255,0.6)':'1px solid #2463eb') : (isDark?'1px solid rgba(80,120,200,0.2)':'1px solid #e5e7eb'), background: colorMode===m?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: colorMode===m?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' as const }}>
                   {m}
                 </button>
               ))}
@@ -1281,7 +1263,7 @@ export default function Simulation() {
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                   {(['rainbow','blue','fire','cyan','purple'] as const).map(scheme => (
                     <button key={scheme} onClick={()=>setParticleColorScheme(scheme)}
-                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleColorScheme===scheme?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: particleColorScheme===scheme?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleColorScheme===scheme?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                      style={{ padding:'7px 6px', borderRadius:'8px', border: particleColorScheme===scheme ? (isDark?'1px solid rgba(100,160,255,0.6)':'1px solid #2463eb') : (isDark?'1px solid rgba(80,120,200,0.2)':'1px solid #e5e7eb'), background: particleColorScheme===scheme?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleColorScheme===scheme?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' as const }}>
                       {scheme}
                     </button>
                   ))}
@@ -1292,7 +1274,7 @@ export default function Simulation() {
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'6px' }}>
                   {(['small','medium','large'] as const).map(size => (
                     <button key={size} onClick={()=>setParticleSize(size)}
-                      style={{ padding:'7px 6px', borderRadius:'8px', border:`1px solid ${particleSize===size?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: particleSize===size?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleSize===size?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' }}>
+                      style={{ padding:'7px 6px', borderRadius:'8px', border: particleSize===size ? (isDark?'1px solid rgba(100,160,255,0.6)':'1px solid #2463eb') : (isDark?'1px solid rgba(80,120,200,0.2)':'1px solid #e5e7eb'), background: particleSize===size?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: particleSize===size?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer', transition:'all 0.2s', textTransform:'capitalize' as const }}>
                       {size}
                     </button>
                   ))}
