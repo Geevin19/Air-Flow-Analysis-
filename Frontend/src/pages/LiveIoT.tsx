@@ -464,26 +464,26 @@ export default function LiveIoT() {
           {status === 'connected' && (
             <>
               <button onClick={() => setShowWifiChange(v => !v)}
-                style={{ ...s.navBtn, background: showWifiChange ? 'linear-gradient(135deg,#7c3aed,#6d28d9)' : s.navBtn.background }}>
-                WiFi
+                style={{ ...s.navBtn, background: showWifiChange ? 'linear-gradient(135deg,#7c3aed,#6d28d9)' : '#f1f5f9', color: showWifiChange ? '#fff' : '#374151', boxShadow: showWifiChange ? '0 2px 8px rgba(124,58,237,.3)' : 'none', border: showWifiChange ? 'none' : '1px solid #e2e8f0' }}>
+                📶 WiFi
               </button>
               <button onClick={() => setShowPipeEdit(v => !v)}
-                style={{ ...s.navBtn, background: showPipeEdit ? 'linear-gradient(135deg,#2563eb,#1d4ed8)' : s.navBtn.background }}>
+                style={{ ...s.navBtn, background: showPipeEdit ? 'linear-gradient(135deg,#2563eb,#1d4ed8)' : '#f1f5f9', color: showPipeEdit ? '#fff' : '#374151', boxShadow: showPipeEdit ? '0 2px 8px rgba(37,99,235,.3)' : 'none', border: showPipeEdit ? 'none' : '1px solid #e2e8f0' }}>
                 Pipes
               </button>
               <button onClick={() => setShowLimits(v => !v)}
-                style={{ ...s.navBtn, background: showLimits ? 'linear-gradient(135deg,#dc2626,#b91c1c)' : s.navBtn.background }}>
+                style={{ ...s.navBtn, background: showLimits ? 'linear-gradient(135deg,#dc2626,#b91c1c)' : '#f1f5f9', color: showLimits ? '#fff' : '#374151', boxShadow: showLimits ? '0 2px 8px rgba(220,38,38,.3)' : 'none', border: showLimits ? 'none' : '1px solid #e2e8f0' }}>
                 Limits
               </button>
               {history.length > 0 && (
                 <button onClick={() => downloadExcel(history, deviceId)}
-                  style={{ ...s.navBtn, background:'linear-gradient(135deg,#059669,#047857)' }}>
-                  Download Excel
+                  style={{ ...s.navBtn, background:'#dcfce7', color:'#16a34a', boxShadow:'none', border:'1px solid #bbf7d0' }}>
+                  ↓ Excel
                 </button>
               )}
             </>
           )}
-          <button onClick={() => navigate('/dashboard')} style={s.navBtn}>Dashboard</button>
+          <button onClick={() => navigate('/dashboard')} style={{ ...s.navBtn, background:'#f1f5f9', color:'#374151', boxShadow:'none', border:'1px solid #e2e8f0' }}>← Dashboard</button>
         </div>
       </nav>
 
@@ -496,7 +496,7 @@ export default function LiveIoT() {
             <h2 style={s.idleTitle}>Connect to Arduino</h2>
             <p style={s.idleSub}>Enter your Device ID and the WiFi network your Arduino is connected to.</p>
 
-            <div style={{ width:'100%', maxWidth:400, textAlign:'left', marginBottom:20 }}>
+            <div style={{ width:'100%', maxWidth:400, textAlign:'left', marginBottom:20, margin:'0 auto 20px' }}>
               <div style={{ marginBottom:14 }}>
                 <label style={idleLabel}>
                   Device ID <span style={{ color:'#ef4444', fontWeight:700 }}>*</span>
@@ -524,10 +524,12 @@ export default function LiveIoT() {
             <button style={s.connectBtn} onClick={connect}>Connect</button>
 
             {!isFirstTime && (
-              <button onClick={() => { localStorage.removeItem('arduino_device_id'); localStorage.removeItem('arduino_wifi_ssid'); window.location.reload(); }}
-                style={{ marginTop:12, background:'none', border:'none', color:'#94a3b8', fontSize:12, cursor:'pointer', fontFamily:'"Inter",sans-serif' }}>
-                Reset saved device
-              </button>
+              <div style={{ marginTop:16 }}>
+                <button onClick={() => { localStorage.removeItem('arduino_device_id'); localStorage.removeItem('arduino_wifi_ssid'); window.location.reload(); }}
+                  style={{ background:'none', border:'1px solid #e2e8f0', color:'#64748b', fontSize:12, cursor:'pointer', fontFamily:'"Inter",sans-serif', padding:'7px 18px', borderRadius:8, fontWeight:500 }}>
+                  Change Device ID
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -580,9 +582,9 @@ export default function LiveIoT() {
                 <p style={{ fontSize:13, color:'#7f1d1d', lineHeight:1.6 }}>{errorMsg || 'Connection closed unexpectedly. Please retry.'}</p>
               )}
             </div>
-            <button style={s.connectBtn} onClick={connect}>Retry</button>
+            <button style={{ ...s.connectBtn, marginTop:20 }} onClick={connect}>Retry</button>
             <button onClick={() => { setStatus('idle'); setErrorMsg(''); }}
-              style={{ marginTop:10, background:'none', border:'none', color:'#94a3b8', fontSize:13, cursor:'pointer' }}>
+              style={{ marginTop:12, background:'none', border:'1px solid #e2e8f0', color:'#64748b', fontSize:13, cursor:'pointer', padding:'8px 20px', borderRadius:8, fontWeight:500, fontFamily:'"Inter",sans-serif' }}>
               Change Device ID
             </button>
           </div>
@@ -1022,14 +1024,14 @@ const s: Record<string, React.CSSProperties> = {
   nav:      { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 32px', background:'#fff', borderBottom:'1px solid #e2e8f0', position:'sticky', top:0, zIndex:50 },
   logo:     { fontSize:17, fontWeight:800, color:'#0f172a' },
   navBadge: { fontSize:11, padding:'3px 10px', borderRadius:999, background:'#eff6ff', color:'#3b82f6', fontWeight:700, border:'1px solid #bfdbfe' },
-  backBtn:  { padding:'8px 18px', background:'#0f172a', color:'#fff', border:'none', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:600 },
-  navBtn:   { padding:'8px 18px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:600, boxShadow:'0 2px 8px rgba(37,99,235,.2)' } as React.CSSProperties,
+  backBtn:  { padding:'8px 18px', background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:600 },
+  navBtn:   { padding:'8px 16px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:600, boxShadow:'0 2px 8px rgba(37,99,235,.2)', whiteSpace:'nowrap' } as React.CSSProperties,
   main:     { maxWidth:1100, margin:'0 auto', padding:'32px 24px' },
 
-  centerWrap: { maxWidth:460, margin:'80px auto 0', textAlign:'center' },
-  idleTitle:  { fontSize:22, fontWeight:800, color:'#0f172a', margin:'0 0 10px' },
+  centerWrap: { maxWidth:460, margin:'80px auto 0', textAlign:'center', padding:'0 20px' },
+  idleTitle:  { fontSize:24, fontWeight:800, color:'#0f172a', margin:'0 0 10px' },
   idleSub:    { fontSize:14, color:'#64748b', lineHeight:1.7, margin:'0 0 28px' },
-  connectBtn: { display:'inline-flex', alignItems:'center', gap:10, padding:'13px 32px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:12, cursor:'pointer', fontSize:15, fontWeight:700, boxShadow:'0 4px 16px rgba(37,99,235,.3)' },
+  connectBtn: { display:'inline-flex', alignItems:'center', gap:10, padding:'13px 36px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:12, cursor:'pointer', fontSize:15, fontWeight:700, boxShadow:'0 4px 16px rgba(37,99,235,.3)' },
 
   statusBar:    { display:'flex', alignItems:'center', gap:12, background:'#fff', padding:'12px 20px', borderRadius:12, marginBottom:20, border:'1px solid #e2e8f0', flexWrap:'wrap' },
   statusTxt:    { fontSize:13, fontWeight:600, color:'#1e293b' },
