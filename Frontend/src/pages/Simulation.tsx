@@ -164,6 +164,84 @@ const PIPE_SHAPES: Record<PipeShape, { label: string; icon: string; description:
   'helix':    { label: 'Helix',     icon: '⌀', description: 'Spiral coil' },
 };
 
+// ─── Build a segment's local path points, starting at origin going +X ─────────
+// Returns points in local space; caller translates/rotates to connect them.
+function segmentPoints(shape: PipeShape, s: number): { pts: [number,number,number][], exitDir: [number,number,number] } {
+  switch (shape) {
+    case 'straight':
+      return {
+        pts: [[0,0,0],[s,0,0],[2*s,0,0],[3*s,0,0]],
+        exitDir: [1,0,0],
+      };
+    case 'l-shaped':
+      return {
+        pts: [[0,0,0],[s,0,0],[2*s,0,0],[2*s,s,0],[2*s,2*s,0],[2*s,3*s,0]],
+        exitDir: [0,1,0],
+      };
+    case 's-curve':
+      return {
+        pts: [[0,0,0],[s,0,0],[1.5*s,0.5*s,0],[2*s,0,0],[2.5*s,-0.5*s,0],[3*s,0,0],[4*s,0,0]],
+        exitDir: [1,0,0],
+      };
+    case 'u-bend':
+      return {
+        pts: [[0,0,0],[s,0,0],[1.5*s,-0.3*s,0],[1.5*s,-s,0],[1.5*s,-1.5*s,0],[s,-1.5*s,0],[0,-1.5*s,0],[-s,-1.5*s,0]],
+        exitDir: [-1,0,0],
+      };
+    case 'helix': {
+      const helixPts: [number,number,number][] = [];
+      for (let i = 0; i <= 16; i++) {
+        const a = (i / 16) * Math.PI * 2.5;
+        helixPts.push([Math.cos(a)*s, i*s*0.3, Math.sin(a)*s]);
+      }
+      return { pts: helixPts, exitDir: [0,1,0] };
+    }
+  }
+}
+
+// ─── Build a connected multi-segment path ─────────────────────────────────────
+function buildNetworkPath(shapes: PipeShape[], THREE: any): any[] {
+  if (shapes.length === 0) shapes = ['straight'];
+  const scale = 0.4;
+  const allPoints: any[] = [];
+  let cursor = new THREE.Vector3(0, 0, 0);
+  // direction the next segment should start going (unit vector)
+  let dir = new THREE.Vector3(1, 0, 0);
+
+  for (let si = 0; si < shapes.length; si++) {
+    const { pts, exitDir } = segmentPoints(shapes[si], scale);
+
+    // Build a quaternion that rotates local +X to current dir
+    const localX = new THREE.Vector3(1, 0, 0);
+    const q = new THREE.Quaternion().setFromUnitVectors(localX, dir);
+
+    const segStart = si === 0 ? 0 : 1; // skip first point on subsequent segments (avoid duplicate)
+    for (let i = segStart; i < pts.length; i++) {
+      const local = new THREE.Vector3(pts[i][0], pts[i][1], pts[i][2]);
+      local.applyQuaternion(q);
+      local.add(cursor);
+      allPoints.push(local);
+    }
+
+    // Update cursor to last point
+    const lastLocal = new THREE.Vector3(pts[pts.length-1][0], pts[pts.length-1][1], pts[pts.length-1][2]);
+    lastLocal.applyQuaternion(q);
+    cursor = cursor.clone().add(lastLocal);
+
+    // Update direction for next segment
+    const nextDir = new THREE.Vector3(exitDir[0], exitDir[1], exitDir[2]);
+    nextDir.applyQuaternion(q);
+    dir = nextDir.normalize();
+  }
+
+  // Centre the whole path
+  const box = new THREE.Box3();
+  allPoints.forEach(p => box.expandByPoint(p));
+  const centre = new THREE.Vector3();
+  box.getCenter(centre);
+  return allPoints.map(p => p.clone().sub(centre));
+}
+
 // ─── CFD heatmap colour (blue→cyan→green→yellow→red) ─────────────────────────
 
 function heatmapColor(t: number): [number, number, number] {
@@ -224,8 +302,9 @@ function getParticleColor(t: number, scheme: 'rainbow' | 'blue' | 'fire' | 'cyan
 
 interface SceneProps {
   pipeShape: PipeShape;
-  pipeRadius: number;       // inner radius in metres (scaled for display)
-  pipeLength: number;       // pipe length in metres
+  networkShapes: PipeShape[];   // connected multi-segment network
+  pipeRadius: number;
+  pipeLength: number;
   material: string;
   velocity: number;
   pressureDrop: number;
@@ -325,71 +404,13 @@ function ThreePipeScene(props: SceneProps) {
     scene.add(rimLight);
 
     /* ── Build pipe path ── */
-    const { pipeShape, pipeRadius, pipeLength, material, colorMode, particleColorScheme, particleSize } = props;
-    const displayR = Math.max(0.08, Math.min(0.25, pipeRadius * 1.5)); // Smaller pipe
+    const { pipeRadius, pipeLength, material, colorMode, particleColorScheme, particleSize } = props;
+    const displayR = Math.max(0.06, Math.min(0.22, pipeRadius * 1.5));
     const mat = MATERIALS[material] || MATERIALS['Steel'];
 
-    // Generate path points - SCALED DOWN and CENTERED
-    // Use pipeLength to scale the path
-    let pathPoints: any[] = [];
-    const lengthScale = Math.max(0.2, Math.min(1.5, pipeLength / 20)); // Scale based on length (10m = 0.5x, 20m = 1x, 40m = 2x)
-    const scale = 0.35 * lengthScale; // Adjust scale based on length
-    
-    switch (pipeShape) {
-      case 'straight':
-        pathPoints = [
-          new THREE.Vector3(-2.5*scale, 0, 0),
-          new THREE.Vector3(-1.2*scale, 0, 0),
-          new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(1.2*scale, 0, 0),
-          new THREE.Vector3(2.5*scale, 0, 0),
-        ];
-        break;
-      case 'l-shaped':
-        pathPoints = [
-          new THREE.Vector3(-1.5*scale, -0.3*scale, 0),
-          new THREE.Vector3(-0.8*scale, -0.3*scale, 0),
-          new THREE.Vector3(0, -0.3*scale, 0),
-          new THREE.Vector3(0, 0.2*scale, 0),
-          new THREE.Vector3(0, 0.8*scale, 0),
-          new THREE.Vector3(0, 1.2*scale, 0),
-        ];
-        break;
-      case 's-curve':
-        pathPoints = [
-          new THREE.Vector3(-2*scale, 0, 0),
-          new THREE.Vector3(-1.2*scale, 0, 0),
-          new THREE.Vector3(-0.4*scale, 0, 0.6*scale),
-          new THREE.Vector3(0.4*scale, 0, -0.6*scale),
-          new THREE.Vector3(1.2*scale, 0, 0),
-          new THREE.Vector3(2*scale, 0, 0),
-        ];
-        break;
-      case 'u-bend':
-        // Centered U-bend
-        pathPoints = [
-          new THREE.Vector3(-1.5*scale, 0.2*scale, 0),
-          new THREE.Vector3(-1*scale, 0.2*scale, 0),
-          new THREE.Vector3(-0.6*scale, 0.2*scale, 0),
-          new THREE.Vector3(-0.3*scale, 0, 0),
-          new THREE.Vector3(0, -0.15*scale, 0),
-          new THREE.Vector3(0.3*scale, 0, 0),
-          new THREE.Vector3(0.6*scale, 0.2*scale, 0),
-          new THREE.Vector3(1*scale, 0.2*scale, 0),
-          new THREE.Vector3(1.5*scale, 0.2*scale, 0),
-        ];
-        break;
-      case 'helix':
-        for (let i = 0; i <= 20; i++) {
-          const a = (i / 20) * Math.PI * 3;
-          pathPoints.push(new THREE.Vector3(
-            Math.cos(a) * 1*scale, 
-            i * 0.1*scale - 1*scale, 
-            Math.sin(a) * 1*scale
-          ));
-        }
-        break;
-    }
+    // Build connected network path from all shapes
+    const shapes = props.networkShapes.length > 0 ? props.networkShapes : [props.pipeShape];
+    const pathPoints = buildNetworkPath(shapes, THREE);
 
     const curve = new THREE.CatmullRomCurve3(pathPoints, false, 'catmullrom', 0.3);
     const tubeSegments = 100;
@@ -689,7 +710,7 @@ function ThreePipeScene(props: SceneProps) {
     };
 
     return () => { sceneRef.current?.dispose(); sceneRef.current = null; };
-  }, [threeReady, props.pipeShape, props.pipeRadius, props.pipeLength, props.material,
+  }, [threeReady, props.pipeShape, props.networkShapes, props.pipeRadius, props.pipeLength, props.material,
       props.velocity, props.pressureDrop, props.reynolds,
       props.flowRegime, props.colorMode, props.particleColorScheme, props.particleSize, props.isDark]);
 
@@ -800,6 +821,7 @@ export default function Simulation() {
 
   // ── new 3D UI state ──
   const [pipeShape,   setPipeShape]   = useState<PipeShape>('straight');
+  const [networkShapes, setNetworkShapes] = useState<PipeShape[]>(['straight']);
   const [colorMode,   setColorMode]   = useState<'pressure'|'friction'|'velocity'|'material'>('material');
   const [particleColorScheme, setParticleColorScheme] = useState<'rainbow'|'blue'|'fire'|'cyan'|'purple'>('purple');
   const [particleSize, setParticleSize] = useState<'small'|'medium'|'large'>('small');
@@ -1003,7 +1025,7 @@ export default function Simulation() {
   const isViewing = !!simulationId;
 
   const sceneProps: SceneProps = {
-    pipeShape, pipeRadius: pipeInnerDiameterM / 2, pipeLength: pipeLengthM,
+    pipeShape, networkShapes, pipeRadius: pipeInnerDiameterM / 2, pipeLength: pipeLengthM,
     material: pipeMaterial, velocity: computed.velocity,
     pressureDrop: computed.pressureDrop, reynolds: computed.reynolds,
     flowRegime: computed.flowRegime, colorMode, particleColorScheme, particleSize,
@@ -1092,19 +1114,80 @@ export default function Simulation() {
         {/* ──── LEFT: inputs ──── */}
         <div style={{ ...C.left, ...(isDark ? {} : LT.left) }}>
 
-          {/* Pipe Shape selector */}
+          {/* Pipe Network Builder */}
           <div style={{ ...C.card, ...(isDark ? {} : LT.card) }}>
-            <SecHdr icon="🔷" title="Pipe Shape" isDark={isDark}/>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+            <SecHdr icon="🔗" title="Pipe Network" isDark={isDark}/>
+            <p style={{ fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace', color: isDark?'rgba(150,170,210,0.5)':'#9ca3af', margin:'0 0 10px' }}>
+              Add segments in order — they connect end-to-end automatically
+            </p>
+
+            {/* Current network sequence */}
+            <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:10 }}>
+              {networkShapes.map((shape, idx) => (
+                <div key={idx} style={{ display:'flex', alignItems:'center', gap:6, background: isDark?'rgba(4,12,30,0.6)':'#f9fafb', border: isDark?'1px solid rgba(80,120,200,0.15)':'1px solid #e5e7eb', borderRadius:8, padding:'6px 8px' }}>
+                  <span style={{ fontSize:16 }}>{PIPE_SHAPES[shape].icon}</span>
+                  <span style={{ flex:1, fontSize:11, fontFamily:'"IBM Plex Mono",monospace', fontWeight:700, color: isDark?'#e8f0ff':'#111827' }}>
+                    {idx + 1}. {PIPE_SHAPES[shape].label}
+                  </span>
+                  {/* Move up */}
+                  {idx > 0 && (
+                    <button onClick={() => {
+                      const n = [...networkShapes];
+                      [n[idx-1], n[idx]] = [n[idx], n[idx-1]];
+                      setNetworkShapes(n);
+                    }} style={{ background:'none', border:'none', cursor:'pointer', color: isDark?'rgba(160,200,255,0.5)':'#6b7280', fontSize:12, padding:'0 2px' }}>↑</button>
+                  )}
+                  {/* Move down */}
+                  {idx < networkShapes.length - 1 && (
+                    <button onClick={() => {
+                      const n = [...networkShapes];
+                      [n[idx], n[idx+1]] = [n[idx+1], n[idx]];
+                      setNetworkShapes(n);
+                    }} style={{ background:'none', border:'none', cursor:'pointer', color: isDark?'rgba(160,200,255,0.5)':'#6b7280', fontSize:12, padding:'0 2px' }}>↓</button>
+                  )}
+                  {/* Remove */}
+                  <button onClick={() => setNetworkShapes(prev => prev.filter((_, i) => i !== idx))}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'#f87171', fontSize:13, padding:'0 2px' }}>✕</button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add shape buttons */}
+            <div style={{ fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color: isDark?'rgba(150,170,210,0.5)':'#9ca3af', marginBottom:6 }}>Add segment</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
               {(Object.entries(PIPE_SHAPES) as [PipeShape, typeof PIPE_SHAPES[PipeShape]][]).map(([key, sh]) => (
-                <button key={key} onClick={()=>setPipeShape(key)} disabled={isViewing}
-                  style={{ padding:'10px 8px', borderRadius:'10px', border:`1px solid ${pipeShape===key?(isDark?'rgba(100,160,255,0.6)':'#2463eb'):(isDark?'rgba(80,120,200,0.2)':'#e5e7eb')}`, background: pipeShape===key?(isDark?'rgba(80,140,255,0.15)':'#dbeafe'):(isDark?'rgba(10,20,40,0.4)':'#f9fafb'), color: pipeShape===key?(isDark?'#a0c4ff':'#1d4ed8'):(isDark?'rgba(160,180,220,0.6)':'#6b7280'), fontSize:'11px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:isViewing?'not-allowed':'pointer', transition:'all 0.2s', display:'flex', flexDirection:'column', alignItems:'center', gap:'4px' }}>
-                  <span style={{ fontSize:'18px' }}>{sh.icon}</span>
+                <button key={key} onClick={() => { setNetworkShapes(prev => [...prev, key]); setPipeShape(key); }} disabled={isViewing}
+                  style={{ padding:'8px 6px', borderRadius:9, border: isDark?'1px solid rgba(80,120,200,0.2)':'1px solid #e5e7eb', background: isDark?'rgba(10,20,40,0.4)':'#f9fafb', color: isDark?'rgba(160,180,220,0.7)':'#374151', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:isViewing?'not-allowed':'pointer', transition:'all 0.15s', display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
+                  <span style={{ fontSize:16 }}>{sh.icon}</span>
                   <span>{sh.label}</span>
-                  <span style={{ fontSize:'9px', opacity:0.6 }}>{sh.description}</span>
                 </button>
               ))}
             </div>
+
+            {/* Quick presets */}
+            <div style={{ fontSize:'9px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color: isDark?'rgba(150,170,210,0.5)':'#9ca3af', margin:'10px 0 6px' }}>Presets</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+              {[
+                { label:'Simple L-run',    shapes: ['straight','l-shaped','straight'] as PipeShape[] },
+                { label:'S-bend run',      shapes: ['straight','s-curve','straight'] as PipeShape[] },
+                { label:'U-return',        shapes: ['straight','u-bend','straight'] as PipeShape[] },
+                { label:'Full circuit',    shapes: ['straight','l-shaped','straight','l-shaped','straight','u-bend'] as PipeShape[] },
+                { label:'Helix + exit',    shapes: ['straight','helix','straight'] as PipeShape[] },
+              ].map(p => (
+                <button key={p.label} onClick={() => setNetworkShapes(p.shapes)} disabled={isViewing}
+                  style={{ padding:'7px 10px', borderRadius:8, border: isDark?'1px solid rgba(99,102,241,0.25)':'1px solid #e5e7eb', background: isDark?'rgba(99,102,241,0.08)':'#f5f3ff', color: isDark?'#a5b4fc':'#6d28d9', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:isViewing?'not-allowed':'pointer', textAlign:'left' as const }}>
+                  {p.label} <span style={{ opacity:.5, fontWeight:400 }}>({p.shapes.length} seg)</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Clear */}
+            {networkShapes.length > 1 && (
+              <button onClick={() => setNetworkShapes(['straight'])} disabled={isViewing}
+                style={{ marginTop:8, width:'100%', padding:'6px', borderRadius:7, border: isDark?'1px solid rgba(248,113,113,0.3)':'1px solid #fecaca', background:'transparent', color:'#f87171', fontSize:'10px', fontFamily:'"IBM Plex Mono",monospace', fontWeight:'700', cursor:'pointer' }}>
+                Reset to single pipe
+              </button>
+            )}
           </div>
 
           {/* Colour mode */}
