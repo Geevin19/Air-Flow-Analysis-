@@ -1118,7 +1118,7 @@ export default function Simulation() {
         @media(max-width:480px){
           .sim-viewport{height:240px!important;min-height:240px!important;}
           .sim-card-grid{grid-template-columns:1fr!important;}
-        }</style>
+        }`}</style>
       <div style={{ ...C.bg, ...(isDark ? {} : { background: 'radial-gradient(ellipse 80% 60% at 50% -10%,rgba(200,220,255,0.4) 0%,transparent 70%)' }) }}/>
       <div style={{ ...C.gridBg, ...(isDark ? {} : { backgroundImage: 'linear-gradient(rgba(36,99,235,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(36,99,235,0.06) 1px,transparent 1px)' }) }}/>
 
