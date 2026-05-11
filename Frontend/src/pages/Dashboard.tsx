@@ -145,7 +145,7 @@ export default function Dashboard() {
             {showProfile && (
               <div style={{ position:'absolute', right:0, top:'calc(100% + 8px)', background:'#fff', border:'1px solid #e2e8f0', borderRadius:14, boxShadow:'0 8px 32px rgba(0,0,0,.12)', padding:'8px', minWidth:240, zIndex:100, animation:'fadeUp .15s ease' }}>
                 {/* Header */}
-                <div style={{ padding:'12px 14px 10px', marginBottom:6 }}>
+                <div style={{ padding:'12px 14px 10px', borderBottom:'1px solid #f1f5f9', marginBottom:6 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                     <div style={{ ...s.avatar, width:40, height:40, fontSize:17 }}>{user?.username?.[0]?.toUpperCase()}</div>
                     <div>
@@ -154,7 +154,14 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </div>
-                <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:6 }}>
+                {/* Purpose */}
+                <div style={{ padding:'4px 6px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 8px', borderRadius:8 }}>
+                    <span style={{ fontSize:12, color:'#94a3b8', fontWeight:500 }}>Purpose</span>
+                    <span style={{ fontSize:12, fontWeight:600, color:'#374151' }}>{user?.purpose || '—'}</span>
+                  </div>
+                </div>
+                <div style={{ borderTop:'1px solid #f1f5f9', marginTop:6, paddingTop:6 }}>
                   <button onClick={handleLogout}
                     style={{ width:'100%', padding:'9px 14px', background:'#fef2f2', border:'none', borderRadius:9, color:'#dc2626', fontSize:13, fontWeight:600, cursor:'pointer', textAlign:'left' as const }}>
                     Sign out
