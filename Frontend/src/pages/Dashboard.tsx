@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authAPI, simulationAPI } from '../services/api';
+import { authAPI, simulationAPI, iotAPI } from '../services/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser]             = useState<any>(null);
   const [simulations, setSimulations] = useState<any[]>([]);
+  const [iotSessions, setIotSessions] = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [activeNav, setActiveNav]   = useState<'simulation'|'iot'>('simulation');
   const [showProfile, setShowProfile] = useState(false);
@@ -17,6 +18,40 @@ export default function Dashboard() {
         const [u, s] = await Promise.all([authAPI.getCurrentUser(), simulationAPI.getSimulations()]);
         setUser(u.data);
         setSimulations(s.data);
+        
+        // Fetch IoT history to create sessions
+        try {
+          const iotData = await iotAPI.getHistory(100);
+          if (iotData.data && Array.isArray(iotData.data)) {
+            // Group IoT readings by date to create "sessions"
+            const sessionMap = new Map<string, any>();
+            iotData.data.forEach((reading: any) => {
+              const date = new Date(reading.recorded_at);
+              const sessionKey = date.toISOString().split('T')[0]; // Group by date
+              
+              if (!sessionMap.has(sessionKey)) {
+                sessionMap.set(sessionKey, {
+                  id: sessionKey,
+                  name: `IoT Session - ${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`,
+                  created_at: reading.recorded_at,
+                  count: 0,
+                  readings: []
+                });
+              }
+              
+              const session = sessionMap.get(sessionKey);
+              session.count++;
+              session.readings.push(reading);
+            });
+            
+            setIotSessions(Array.from(sessionMap.values()).sort((a, b) => 
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            ));
+          }
+        } catch (iotErr) {
+          // IoT data not available, keep empty array
+          console.log('IoT data not available');
+        }
       } catch { navigate('/login'); }
       finally { setLoading(false); }
     })();
@@ -40,6 +75,13 @@ export default function Dashboard() {
     if (!confirm('Delete this simulation?')) return;
     try { await simulationAPI.deleteSimulation(id); setSimulations(p => p.filter(s => s.id !== id)); }
     catch { alert('Failed to delete'); }
+  };
+
+  const handleDeleteIot = async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Delete this IoT session?')) return;
+    // Frontend-only deletion - remove from state
+    setIotSessions(p => p.filter(s => s.id !== sessionId));
   };
 
   if (loading) return (
@@ -159,9 +201,8 @@ export default function Dashboard() {
         {/* Stats */}
         <div style={s.statsRow} className="dash-stats">
           {[
-            { val: simulations.length,                          label:'Total Simulations', color:'#3b82f6' },
-            { val: simulations.filter(s => s.results).length,  label:'Completed',          color:'#10b981' },
-            { val: simulations.filter(s => !s.results).length, label:'Pending',            color:'#f59e0b' },
+            { val: simulations.length,     label:'Total Simulations',     color:'#3b82f6' },
+            { val: iotSessions.length,     label:'Total IoT Simulations', color:'#6366f1' },
           ].map(st => (
             <div key={st.label} style={s.statCard}>
               <div style={{ fontSize:36, fontWeight:800, color: st.color, fontFamily:'"JetBrains Mono",monospace', lineHeight:1 }}>{st.val}</div>
@@ -228,6 +269,49 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+
+        {/* IoT Simulations list */}
+        <div style={{ marginTop:32 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+            <h3 style={{ fontSize:17, fontWeight:700, color:'#0f172a' }}>Saved IoT Simulations</h3>
+            <span style={{ fontSize:12, color:'#94a3b8' }}>{iotSessions.length} total</span>
+          </div>
+
+          {iotSessions.length === 0 ? (
+            <div style={s.empty}>
+              <p style={{ fontSize:16, fontWeight:700, color:'#0f172a', margin:'0 0 6px' }}>No IoT simulations available</p>
+              <p style={{ fontSize:13, color:'#64748b', margin:'0 0 20px' }}>Connect your IoT device to start collecting data</p>
+              <button style={{ ...s.newBtn, padding:'10px 24px', fontSize:13 }} onClick={() => navigate('/iot-live')}>
+                Connect IoT Device
+              </button>
+            </div>
+          ) : (
+            <div style={s.grid} className="dash-grid">
+              {iotSessions.map(session => (
+                <div key={session.id} className="sim-card" style={s.simCard}
+                  onClick={() => navigate('/iot-live')}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>IoT Session</div>
+                    <button className="del-btn" style={s.delBtn} onClick={e => handleDeleteIot(session.id, e)}>✕</button>
+                  </div>
+                  <h4 style={{ fontSize:15, fontWeight:700, color:'#0f172a', margin:'0 0 6px', lineHeight:1.3 }}>{session.name}</h4>
+                  <p style={{ fontSize:12, color:'#94a3b8', margin:'0 0 14px' }}>
+                    {new Date(session.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })}
+                  </p>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:999,
+                      background: '#e0e7ff',
+                      color: '#4f46e5',
+                      border: '1px solid #c7d2fe' }}>
+                      {session.count} readings
+                    </span>
+                    <span style={{ fontSize:12, color:'#6366f1', fontWeight:600 }}>View →</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
@@ -248,7 +332,7 @@ const s: Record<string, React.CSSProperties> = {
   title: { fontSize:30, fontWeight:800, color:'#0f172a', letterSpacing:'-0.02em' },
   newBtn:{ padding:'10px 22px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:10, fontSize:13, fontWeight:700, cursor:'pointer', boxShadow:'0 2px 10px rgba(37,99,235,.25)' },
   iotBtn:{ padding:'10px 22px', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', borderRadius:10, fontSize:13, fontWeight:700, cursor:'pointer', boxShadow:'0 2px 10px rgba(37,99,235,.25)' },
-  statsRow: { display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16, marginBottom:24 },
+  statsRow: { display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:16, marginBottom:24 },
   statCard: { background:'#fff', borderRadius:16, padding:'24px', border:'1px solid #e2e8f0', textAlign:'center', boxShadow:'0 1px 4px rgba(0,0,0,.04)' },
   quickRow: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:8 },
   quickCard:{ background:'#fff', borderRadius:16, padding:'24px', border:'1px solid #e2e8f0', cursor:'pointer', transition:'all .2s', boxShadow:'0 1px 4px rgba(0,0,0,.04)' },
